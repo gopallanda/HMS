@@ -34,11 +34,13 @@ export type ProvisionResult = {
  * after `npm run db:push && npm run db:types` (CLAUDE.md 9 step 4).
  */
 export async function provisionHospital(supabase: Client): Promise<ProvisionResult> {
-  const rpc = supabase.rpc as unknown as (
-    fn: 'provision_hospital',
-  ) => Promise<ProvisionResult>;
+  // Cast the client, not the method: `rpc` reads `this.rest` internally, so
+  // pulling it into a local strips its receiver and it throws on `undefined`.
+  const client = supabase as unknown as {
+    rpc: (fn: 'provision_hospital') => Promise<ProvisionResult>;
+  };
 
-  return rpc('provision_hospital');
+  return client.rpc('provision_hospital');
 }
 
 export type AttachStaffLoginResult =
@@ -63,10 +65,12 @@ export async function attachStaffLogin(
   supabase: Client,
   args: AttachStaffLoginArgs,
 ): Promise<{ data: AttachStaffLoginResult | null; error: PostgrestError | null }> {
-  const rpc = supabase.rpc as unknown as (
-    fn: 'attach_staff_login',
-    args: AttachStaffLoginArgs,
-  ) => Promise<{ data: AttachStaffLoginResult | null; error: PostgrestError | null }>;
+  const client = supabase as unknown as {
+    rpc: (
+      fn: 'attach_staff_login',
+      args: AttachStaffLoginArgs,
+    ) => Promise<{ data: AttachStaffLoginResult | null; error: PostgrestError | null }>;
+  };
 
-  return rpc('attach_staff_login', args);
+  return client.rpc('attach_staff_login', args);
 }
