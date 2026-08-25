@@ -98,7 +98,7 @@ export function DepartmentsTable({ departments }: { departments: DepartmentRow[]
         <span className="text-xs text-muted-foreground">
           {filtered.length} of {departments.length} &middot; {activeCount} active
         </span>
-        <span className="ml-auto hidden text-[11px] text-muted-foreground sm:block">
+        <span className="ml-auto hidden text-xs text-muted-foreground sm:block">
           <kbd className="rounded border px-1">/</kbd> search
           <span className="mx-1">&middot;</span>
           <kbd className="rounded border px-1">N</kbd> new

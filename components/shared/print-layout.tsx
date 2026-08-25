@@ -137,7 +137,7 @@ export function PrintLayout({
 
       <div className="print-sheet shadow-sm print:shadow-none">{children}</div>
 
-      <p className="print-hide max-w-[210mm] px-3 text-center text-[11px] text-muted-foreground">
+      <p className="print-hide max-w-[210mm] px-3 text-center text-xs text-muted-foreground">
         {format === 'thermal'
           ? 'Set the printer to 80mm roll with no scaling. Turn off headers and footers in the browser print dialog.'
           : 'A4 with 12mm margins. Turn off headers and footers in the browser print dialog.'}

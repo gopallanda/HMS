@@ -4,6 +4,7 @@ import { cache } from 'react';
 import { redirect } from 'next/navigation';
 
 import { createClient } from '@/lib/supabase/server';
+import { lifecycleState, type HospitalLifecycleState } from '@/lib/hospital-lifecycle';
 import type { AppRole } from '@/lib/roles';
 import type { Database } from '@/types/database';
 
@@ -49,6 +50,17 @@ export type SessionContext = {
    * staff list and a super_admin on her token.
    */
   staffRole: AppRole | null;
+  /**
+   * Whether the tenant may still write (20260825140000).
+   *
+   * Deliberately NOT a reason to refuse the session. A suspended hospital is
+   * read-only, not locked out: the database refuses new rows and leaves
+   * selects alone, so the app does the same. Staff keep reaching patient
+   * records, histories and past invoices -- which in hospital software is not
+   * a courtesy, it is the difference between a commercial dispute and a
+   * clinical one. requireSessionForAction() below is where writes stop.
+   */
+  lifecycle: HospitalLifecycleState;
 };
 
 /** Why a request has no usable session. Each one needs a different message. */
@@ -148,6 +160,7 @@ export const getSession = cache(async (): Promise<SessionResult> => {
       staffName: staffResult.data?.full_name ?? null,
       staffId: staffResult.data?.id ?? null,
       staffRole: staffResult.data?.role ?? null,
+      lifecycle: lifecycleState(hospitalResult.data),
     },
   };
 });
@@ -182,5 +195,24 @@ export async function requireSessionForAction(): Promise<SessionContext> {
         : 'This account has no active hospital membership.',
     );
   }
+
+  // Every Server Action already funnels through here, which makes this the one
+  // place a suspended tenant's writes can be stopped with a sentence a person
+  // can act on. The database stops them too, a layer down, and would say so in
+  // its own words at the end of a form the user has already filled in.
+  //
+  // Reads do not pass through this function, and that is the point: the block
+  // is on writing, not on looking.
+  if (result.session.lifecycle !== 'active') {
+    throw new Error(LIFECYCLE_MESSAGE[result.session.lifecycle]);
+  }
+
   return result.session;
 }
+
+const LIFECYCLE_MESSAGE: Record<Exclude<HospitalLifecycleState, 'active'>, string> = {
+  suspended:
+    'This hospital is suspended, so nothing new can be saved. Existing records can still be opened and printed.',
+  trial_expired:
+    'The trial for this hospital has ended, so nothing new can be saved. Existing records can still be opened and printed.',
+};

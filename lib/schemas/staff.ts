@@ -43,3 +43,28 @@ export const staffSchema = z
   });
 
 export type StaffInput = z.infer<typeof staffSchema>;
+
+/**
+ * Issuing a login to an existing staff record.
+ *
+ * The role here is the MEMBERSHIP role -- what the person's JWT will carry and
+ * what RLS will enforce -- which is deliberately not the same field as the
+ * staff role above. The staff role is their job; this is their access. The
+ * seeded owner is a doctor on the staff list and a super_admin on her token,
+ * and saveStaff goes out of its way never to conflate the two (CLAUDE.md 5).
+ *
+ * super_admin is absent from the options on purpose: it is meant for whoever
+ * runs the platform, and no hospital administrator may grant it. The RPC
+ * refuses it too -- this list only decides what the form offers.
+ */
+export const INVITABLE_ROLES = APP_ROLES.filter((role) => role !== 'super_admin');
+
+export const staffInviteSchema = z.object({
+  staff_id: z.uuid('Invalid staff record.'),
+  email: z.email('Enter a valid email address.').trim().toLowerCase(),
+  role: z.enum(INVITABLE_ROLES as [typeof INVITABLE_ROLES[number], ...typeof INVITABLE_ROLES], {
+    error: 'Choose what this login may do.',
+  }),
+});
+
+export type StaffInviteInput = z.infer<typeof staffInviteSchema>;

@@ -1,4 +1,5 @@
 import { HospitalIcon } from 'lucide-react';
+import Link from 'next/link';
 import type { Metadata } from 'next';
 
 import { LoginForm } from './login-form';
@@ -18,6 +19,15 @@ const REASON_MESSAGE: Record<string, string> = {
     'You are signed in, but no hospital is attached to your account. Ask an administrator to add you.',
   hospital_missing:
     'Your account points at a hospital this login cannot read. Ask an administrator to check your membership.',
+  // Set by the signup action when the project requires email confirmation, so
+  // there was no session to create the hospital with. It is created on the
+  // first sign-in instead -- nothing is lost, and the wording says so.
+  check_email:
+    'Check your email and confirm your address, then sign in here. Your hospital is set up on your first sign-in.',
+  // /auth/confirm could not redeem the token: expired, already used, or edited.
+  // All three need the same thing -- a fresh link -- so they share a sentence.
+  link_invalid:
+    'That link has expired or has already been used. Ask for a new invitation, or sign in below.',
 };
 
 export default async function LoginPage({
@@ -49,6 +59,13 @@ export default async function LoginPage({
         ) : null}
 
         <LoginForm next={next} />
+
+        <p className="text-xs text-muted-foreground">
+          New here?{' '}
+          <Link href="/signup" className="underline underline-offset-2">
+            Create a hospital
+          </Link>
+        </p>
       </CardContent>
     </Card>
   );

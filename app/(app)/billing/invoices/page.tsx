@@ -103,12 +103,12 @@ export default async function InvoicesPage({
           does the navigation. Nothing here needs JavaScript. */}
       <form className="flex flex-wrap items-end gap-2 rounded-lg border p-2">
         <label className="grid gap-1">
-          <span className="text-[11px] text-muted-foreground">Day</span>
+          <span className="text-xs text-muted-foreground">Day</span>
           <Input type="date" name="day" defaultValue={selectedDay} className="h-8 w-40" />
         </label>
 
         <label className="grid gap-1">
-          <span className="text-[11px] text-muted-foreground">Status</span>
+          <span className="text-xs text-muted-foreground">Status</span>
           <select
             name="status"
             defaultValue={isStatus(status) ? status : ''}
@@ -124,7 +124,7 @@ export default async function InvoicesPage({
         </label>
 
         <label className="grid gap-1">
-          <span className="text-[11px] text-muted-foreground">
+          <span className="text-xs text-muted-foreground">
             Invoice no, patient, MRN or visit - searches every day
           </span>
           <Input

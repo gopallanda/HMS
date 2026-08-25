@@ -23,7 +23,7 @@ function isCurrent(pathname: string, href: string): boolean {
 function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
   const Icon = item.icon;
   const base =
-    'flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs transition-colors md:px-2.5';
+    'flex items-center gap-2 rounded-lg px-2 py-2 text-sm transition-colors md:px-2.5';
 
   if (item.status === 'planned') {
     return (
@@ -33,7 +33,7 @@ function NavRow({ item, pathname }: { item: NavItem; pathname: string }) {
       >
         <Icon className="size-4 shrink-0" />
         <span className="hidden flex-1 truncate md:block">{item.label}</span>
-        <span className="hidden rounded bg-muted px-1 text-[10px] font-medium text-muted-foreground md:block">
+        <span className="hidden rounded bg-muted px-1 text-xs font-medium text-muted-foreground md:block">
           P{item.phase}
         </span>
       </span>
@@ -80,7 +80,7 @@ export function AppSidebar({
       <div className="flex items-center gap-2 px-2 py-2.5 md:px-3">
         <HospitalMark name={hospitalName} logoUrl={logoUrl} size={28} />
         <span className="hidden min-w-0 flex-1 md:block">
-          <span className="block truncate text-xs font-semibold" title={hospitalName}>
+          <span className="block truncate text-sm font-semibold" title={hospitalName}>
             {hospitalName}
           </span>
         </span>
@@ -89,7 +89,7 @@ export function AppSidebar({
       <nav className="flex-1 overflow-y-auto px-1.5 pb-2 md:px-2">
         {sections.map((section) => (
           <div key={section.label} className="mb-2">
-            <p className="hidden px-2.5 py-1 text-[10px] font-medium tracking-wide text-muted-foreground uppercase md:block">
+            <p className="hidden px-2.5 py-1 text-xs font-medium text-muted-foreground md:block">
               {section.label}
             </p>
             <div className="grid gap-0.5">

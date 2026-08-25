@@ -5,6 +5,7 @@ import { redirect } from 'next/navigation';
 import { failure, invalid, type ActionState } from '@/lib/action-state';
 import { landingFor } from '@/lib/nav';
 import type { AppRole } from '@/lib/roles';
+import { provisionHospital } from '@/lib/rpc/onboarding';
 import { loginSchema } from '@/lib/schemas/auth';
 import { createClient } from '@/lib/supabase/server';
 
@@ -18,6 +19,7 @@ function safeNext(value: FormDataEntryValue | null): string | null {
   if (!value.startsWith('/')) return null;
   if (value.startsWith('//')) return null;
   if (value === '/login') return null;
+  if (value === '/signup') return null;
   return value;
 }
 
@@ -53,6 +55,35 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
   const role = typeof appMetadata.role === 'string' ? (appMetadata.role as AppRole) : null;
 
   if (!hospitalId || !role) {
+    // Before treating this as a failure: a signup whose email needed confirming
+    // had no session at the moment it was created, so its hospital could not be
+    // provisioned then. The details were parked on the auth.users row, and this
+    // is the first moment there is an authenticated caller to act on them.
+    //
+    // provision_hospital returns null for anyone not in that situation, which
+    // leaves the diagnosis below exactly as it was. It is idempotent, so a
+    // repeated sign-in cannot mint a second hospital.
+    const { data: provisionedId, error: provisionError } = await provisionHospital(supabase);
+
+    if (provisionError) {
+      await supabase.auth.signOut({ scope: 'local' });
+      return failure(`Your hospital could not be set up: ${provisionError.message}`);
+    }
+
+    if (provisionedId) {
+      // Same reason as in the signup action: the token in hand was issued
+      // before the membership existed and still says hospital_id null.
+      const { error: refreshError } = await supabase.auth.refreshSession();
+      if (refreshError) {
+        await supabase.auth.signOut({ scope: 'local' });
+        return failure(
+          `Your hospital was set up, but this session did not pick it up: ${refreshError.message} Sign in again.`,
+        );
+      }
+      // A founder's first sign-in. The overview carries the setup checklist.
+      redirect(safeNext(formData.get('next')) ?? '/');
+    }
+
     // Two very different causes, and the fix for one is useless for the other,
     // so tell them apart by looking at what the user actually has. The
     // memberships_select_self policy makes this readable without any claim.

@@ -1,6 +1,7 @@
 'use client';
 
-import { ChevronDownIcon, LogOutIcon } from 'lucide-react';
+import { ChevronDownIcon, LogOutIcon, MonitorIcon, MoonIcon, SunIcon } from 'lucide-react';
+import { useTheme } from 'next-themes';
 import { useRef } from 'react';
 
 import {
@@ -8,6 +9,8 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -43,12 +46,12 @@ export function UserMenu({
 
       <DropdownMenu>
         <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-[11px] font-semibold text-sidebar-accent-foreground">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">
             {label.slice(0, 2).toUpperCase()}
           </span>
           <span className="hidden min-w-0 flex-1 md:block">
             <span className="block truncate text-xs font-medium">{label}</span>
-            <span className="block truncate text-[11px] text-muted-foreground">
+            <span className="block truncate text-xs text-muted-foreground">
               {roleLabel(role)}
             </span>
           </span>
@@ -59,14 +62,18 @@ export function UserMenu({
           <DropdownMenuLabel className="grid gap-0.5">
             <span className="truncate text-xs font-medium">{label}</span>
             {email ? (
-              <span className="truncate text-[11px] font-normal text-muted-foreground">
+              <span className="truncate text-xs font-normal text-muted-foreground">
                 {email}
               </span>
             ) : null}
-            <span className="text-[11px] font-normal text-muted-foreground">
+            <span className="text-xs font-normal text-muted-foreground">
               Signed in as {roleLabel(role)}
             </span>
           </DropdownMenuLabel>
+
+          <DropdownMenuSeparator />
+
+          <ThemeChoice />
 
           <DropdownMenuSeparator />
 
@@ -77,5 +84,41 @@ export function UserMenu({
         </DropdownMenuContent>
       </DropdownMenu>
     </>
+  );
+}
+
+const THEMES = [
+  { value: 'light', label: 'Light', icon: SunIcon },
+  { value: 'dark', label: 'Dark', icon: MoonIcon },
+  { value: 'system', label: 'System', icon: MonitorIcon },
+] as const;
+
+/**
+ * Light / dark / system.
+ *
+ * It lives in this menu rather than in hospital settings because it is a
+ * preference of the PERSON, not of the hospital -- the night shift on the same
+ * front-desk machine wants a different answer from the day shift, and neither
+ * should be writing to the hospitals row to get it.
+ *
+ * `theme` is undefined until next-themes has read localStorage, which happens
+ * on mount. That is not a hydration risk here: Radix only mounts this menu's
+ * content when it is opened, which is always after hydration.
+ */
+function ThemeChoice() {
+  const { theme, setTheme } = useTheme();
+
+  return (
+    <DropdownMenuRadioGroup value={theme ?? 'system'} onValueChange={setTheme}>
+      <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+        Appearance
+      </DropdownMenuLabel>
+      {THEMES.map((option) => (
+        <DropdownMenuRadioItem key={option.value} value={option.value}>
+          <option.icon data-icon="inline-start" />
+          {option.label}
+        </DropdownMenuRadioItem>
+      ))}
+    </DropdownMenuRadioGroup>
   );
 }

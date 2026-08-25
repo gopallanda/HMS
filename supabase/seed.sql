@@ -22,16 +22,31 @@
 -- -----------------------------------------------------------------------------
 -- The hospital
 -- -----------------------------------------------------------------------------
-insert into public.hospitals (id, name, address, phone, gstin, settings)
+-- plan and status are spelled out rather than left to their defaults: the
+-- column default is 'trial', and a demo hospital that quietly expires after
+-- fourteen days would look like a bug in the seed rather than the feature
+-- working (20260825140000).
+insert into public.hospitals (id, name, address, phone, gstin, settings, plan, status)
 values (
   '00000000-0000-4000-8000-000000000001',
   'Sunrise Multispeciality Hospital',
   '14 MG Road, Indiranagar, Bengaluru 560038',
   '+91 80 4123 5566',
   '29ABCDE1234F1Z5',
-  jsonb_build_object('receipt_default', 'thermal_80mm')
+  jsonb_build_object('receipt_default', 'thermal_80mm'),
+  'standard',
+  'active'
 )
 on conflict (id) do nothing;
+
+-- Reactivate on every run. This is the one thing the seed deliberately DOES
+-- overwrite: a demo hospital left suspended from testing the block would make
+-- every later run of this file fail on the insert trigger, with an error about
+-- suspension rather than about anything the seed did.
+update public.hospitals
+   set plan = 'standard', status = 'active'
+ where id = '00000000-0000-4000-8000-000000000001'
+   and (plan <> 'standard' or status <> 'active');
 
 -- -----------------------------------------------------------------------------
 -- Departments. Three clinical departments -- front desk and billing staff sit
@@ -565,3 +580,36 @@ begin
   raise notice 'seed: % consultation(s) written for %', v_count, public.ist_date(now());
 end;
 $$;
+
+-- =============================================================================
+-- Exercising the tenant lifecycle (20260825140000)
+--
+-- Nothing below runs. Suspending the demo hospital as part of the seed would
+-- leave the demo unusable, so these are the statements to paste when you want
+-- to see the block, and the one that undoes it.
+--
+--   -- suspend: the app redirects to /suspended and quotes this reason.
+--   update public.hospitals
+--      set status = 'suspended',
+--          suspension_reason = 'Subscription payment overdue since 1 August.'
+--    where id = '00000000-0000-4000-8000-000000000001';
+--
+--   -- expire a trial instead: same block, different screen, different fix.
+--   update public.hospitals
+--      set plan = 'trial', trial_ends_at = now() - interval '1 day'
+--    where id = '00000000-0000-4000-8000-000000000001';
+--
+--   -- the trial banner rather than the block: put the end date a few days out.
+--   update public.hospitals
+--      set plan = 'trial', trial_ends_at = now() + interval '3 days'
+--    where id = '00000000-0000-4000-8000-000000000001';
+--
+--   -- back to normal (also what a re-run of this seed does).
+--   update public.hospitals
+--      set plan = 'standard', status = 'active'
+--    where id = '00000000-0000-4000-8000-000000000001';
+--
+-- suspended_at is never set by hand in any of these: hospitals_stamp_suspension
+-- stamps it on the way in, and clears it along with the reason when the
+-- hospital goes active again.
+-- =============================================================================

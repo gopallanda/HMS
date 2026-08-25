@@ -9,6 +9,13 @@
  * 20260820120000_consultations.sql and checked the same way, against the live
  * schema after that migration was pushed.
  *
+ * The hospitals lifecycle columns (plan, status, trial_ends_at, suspended_at,
+ * suspension_reason) and their two enums come from
+ * 20260825140000_hospital_lifecycle.sql. They are written here from the
+ * migration, NOT verified against the live schema -- that migration is applied
+ * by hand in the SQL editor, because db:push cannot reach the hosted project
+ * from a network without IPv6.
+ *
  * It is still not generated output, so replace it with the real thing as soon
  * as a personal access token is available (CLAUDE.md 9, step 4):
  *
@@ -72,6 +79,10 @@ export type InvoiceStatus = 'unpaid' | 'partial' | 'paid' | 'void';
 
 export type PaymentMode = 'cash' | 'upi' | 'card' | 'other';
 
+export type HospitalPlan = 'trial' | 'standard';
+
+export type HospitalStatus = 'active' | 'suspended';
+
 export type Database = {
   public: {
     Tables: {
@@ -85,6 +96,11 @@ export type Database = {
           gstin: string | null;
           settings: Json;
           created_at: string;
+          plan: HospitalPlan;
+          status: HospitalStatus;
+          trial_ends_at: string | null;
+          suspended_at: string | null;
+          suspension_reason: string | null;
         };
         Insert: {
           id?: string;
@@ -95,6 +111,11 @@ export type Database = {
           gstin?: string | null;
           settings?: Json;
           created_at?: string;
+          plan?: HospitalPlan;
+          status?: HospitalStatus;
+          trial_ends_at?: string | null;
+          suspended_at?: string | null;
+          suspension_reason?: string | null;
         };
         Update: {
           id?: string;
@@ -105,6 +126,11 @@ export type Database = {
           gstin?: string | null;
           settings?: Json;
           created_at?: string;
+          plan?: HospitalPlan;
+          status?: HospitalStatus;
+          trial_ends_at?: string | null;
+          suspended_at?: string | null;
+          suspension_reason?: string | null;
         };
         Relationships: [];
       };
@@ -559,6 +585,17 @@ export type Database = {
       app_hospital_id: {
         Args: Record<PropertyKey, never>;
         Returns: string | null;
+      };
+      // Returns text, not an enum, so `string` is what generation will produce.
+      // The narrow union lives in lib/hospital-lifecycle.ts, where it survives
+      // this file being replaced by real generated output.
+      hospital_lifecycle_state: {
+        Args: { p_hospital_id: string };
+        Returns: string;
+      };
+      hospital_is_active: {
+        Args: { p_hospital_id: string };
+        Returns: boolean;
       };
       app_role: {
         Args: Record<PropertyKey, never>;

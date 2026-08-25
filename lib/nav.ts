@@ -5,10 +5,11 @@
  * The sidebar renders it; the login flow reads it to decide where to drop a
  * user after sign-in. Adding a module is an edit here, not a new component.
  *
- * Phase 1-3 modules are listed but marked `planned` (CLAUDE.md 1). They render
- * greyed out with their phase number instead of being hidden, so a cashier can
- * see that billing is coming and nobody clicks through to a 404. Delete the
- * `planned` flag when the module lands.
+ * Unbuilt modules may be listed with status `planned` (CLAUDE.md 1): they render
+ * greyed out with their phase number instead of being hidden, so staff can see a
+ * module is coming and nobody clicks through to a 404. Nothing is planned right
+ * now -- IPD (Phase 3) is the next candidate. Lab and pharmacy were removed
+ * rather than shown as Phase 2; they go back in here when they are built.
  */
 
 import {
@@ -16,9 +17,7 @@ import {
   Building2Icon,
   CalendarClockIcon,
   CreditCardIcon,
-  FlaskConicalIcon,
   LayoutDashboardIcon,
-  PillIcon,
   ReceiptIcon,
   SlidersHorizontalIcon,
   StethoscopeIcon,
@@ -27,7 +26,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import type { AppRole } from '@/lib/roles';
+import { isAdminRole, type AppRole } from '@/lib/roles';
 
 export type NavItem = {
   href: string;
@@ -125,22 +124,6 @@ export const NAV: readonly NavSection[] = [
         status: 'ready',
         phase: 1,
       },
-      {
-        href: '/lab/orders',
-        label: 'Lab orders',
-        icon: FlaskConicalIcon,
-        roles: ['super_admin', 'admin', 'lab_tech', 'doctor'],
-        status: 'planned',
-        phase: 2,
-      },
-      {
-        href: '/pharmacy/dispense',
-        label: 'Pharmacy',
-        icon: PillIcon,
-        roles: ['super_admin', 'admin', 'pharmacist'],
-        status: 'planned',
-        phase: 2,
-      },
     ],
   },
   {
@@ -190,8 +173,16 @@ export function navFor(role: AppRole | null): NavSection[] {
 /**
  * Where to send someone after they sign in: their first module that actually
  * exists. Everyone can see the overview, so this always resolves.
+ *
+ * Administrators are the exception and land on the overview itself. It carries
+ * the setup checklist, which is the only useful screen in a hospital that has
+ * just been created and has no departments, doctors or patients yet -- and for
+ * an established admin the overview is still the right home, because
+ * /front-desk/register is a receptionist's screen, not theirs.
  */
 export function landingFor(role: AppRole | null): string {
+  if (role !== null && isAdminRole(role)) return '/';
+
   for (const section of navFor(role)) {
     const ready = section.items.find((item) => item.status === 'ready' && item.href !== '/');
     if (ready) return ready.href;

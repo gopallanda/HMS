@@ -128,7 +128,7 @@ export function QueueBoard({
           </span>
         ))}
 
-        <span className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
           <span
             className={cn(
               'size-1.5 rounded-full',
@@ -178,7 +178,7 @@ export function QueueBoard({
                   <TableCell>
                     <div className="flex min-w-0 flex-col">
                       <span className="truncate font-medium">{entry.patient_name}</span>
-                      <span className="font-mono text-[11px] text-muted-foreground">
+                      <span className="font-mono text-xs text-muted-foreground">
                         {entry.patient_mrn}
                         {entry.patient_phone ? ` - ${entry.patient_phone}` : ''}
                       </span>
@@ -217,7 +217,7 @@ export function QueueBoard({
         </Table>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Tokens restart at 1 every day. Visit numbers do not - they run for the financial year.
       </p>
     </>

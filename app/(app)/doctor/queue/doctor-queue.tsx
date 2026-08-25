@@ -198,7 +198,7 @@ export function DoctorQueue({
           <span className="text-muted-foreground">seen today</span>
         </span>
 
-        <span className="ml-auto flex items-center gap-1.5 text-[11px] text-muted-foreground">
+        <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
           <span
             className={cn(
               'size-1.5 rounded-full',
@@ -253,7 +253,7 @@ export function DoctorQueue({
                   <TableCell>
                     <div className="flex min-w-0 flex-col">
                       <span className="truncate font-medium">{entry.patient_name}</span>
-                      <span className="font-mono text-[11px] text-muted-foreground">
+                      <span className="font-mono text-xs text-muted-foreground">
                         {entry.patient_mrn}
                         {entry.patient_phone ? ` - ${entry.patient_phone}` : ''}
                       </span>
@@ -316,10 +316,10 @@ export function DoctorQueue({
                   <span className="min-w-0 flex-1 truncate font-medium">
                     {entry.patient_name}
                   </span>
-                  <span className="font-mono text-[11px] text-muted-foreground">
+                  <span className="font-mono text-xs text-muted-foreground">
                     {entry.patient_mrn}
                   </span>
-                  <span className="w-20 text-right text-[11px] text-muted-foreground tabular-nums">
+                  <span className="w-20 text-right text-xs text-muted-foreground tabular-nums">
                     {entry.seen_at ? formatTime(entry.seen_at) : ''}
                   </span>
                   <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
@@ -337,7 +337,7 @@ export function DoctorQueue({
         </section>
       ) : null}
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         <kbd className="rounded border px-1">↑</kbd> <kbd className="rounded border px-1">↓</kbd>{' '}
         to move, <kbd className="rounded border px-1">Enter</kbd> to open. The queue updates
         itself as the front desk registers patients.

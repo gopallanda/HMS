@@ -1,5 +1,6 @@
 import { AppSidebar } from '@/components/shell/app-sidebar';
 import { QueryProvider } from '@/components/shell/query-provider';
+import { LifecycleBanner } from '@/components/shell/lifecycle-banner';
 import { requireSession } from '@/lib/auth/session';
 
 /**
@@ -26,7 +27,14 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           userName={session.staffName}
           userEmail={session.email}
         />
-        <main className="min-w-0 flex-1 px-4 py-4 md:px-6">{children}</main>
+        <main className="min-w-0 flex-1 px-4 py-4 md:px-6">
+          <LifecycleBanner
+            hospital={session.hospital}
+            lifecycle={session.lifecycle}
+            role={session.role}
+          />
+          {children}
+        </main>
       </div>
     </QueryProvider>
   );

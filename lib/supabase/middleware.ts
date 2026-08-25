@@ -17,7 +17,7 @@ import type { Database } from '@/types/database';
  */
 
 /** Paths reachable without a session. Everything else requires one. */
-const PUBLIC_PATHS = ['/login', '/auth'];
+const PUBLIC_PATHS = ['/login', '/signup', '/auth'];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some(

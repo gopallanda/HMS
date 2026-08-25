@@ -12,6 +12,7 @@
  * (CLAUDE.md 1).
  */
 
+import type { BadgeVariant } from '@/components/ui/badge';
 import type { Database } from '@/types/database';
 
 export type VisitType = Database['public']['Enums']['visit_type'];
@@ -43,17 +44,22 @@ export const VISIT_STATUS_LABEL: Record<VisitStatus, string> = {
 };
 
 /**
- * Badge variant per status. Waiting is the loud one on purpose: it is the only
- * state that needs somebody to do something.
+ * Badge colour per status, in the order a visit moves through them.
+ *
+ * Waiting is the loud one on purpose: it is the only state that needs somebody
+ * to do something, so it gets the amber. In-consultation is informational --
+ * work is happening and nobody at the desk need act. Completed is green.
+ *
+ * Cancelled is deliberately NOT red. A cancelled visit is a normal outcome
+ * somebody chose, not a failure, and colouring it like an error trains staff to
+ * ignore red -- which matters because red does mean money owed on the invoice
+ * table two screens away.
  */
-export const VISIT_STATUS_VARIANT: Record<
-  VisitStatus,
-  'default' | 'secondary' | 'outline' | 'destructive'
-> = {
-  waiting: 'default',
-  in_consultation: 'secondary',
-  completed: 'outline',
-  cancelled: 'destructive',
+export const VISIT_STATUS_VARIANT: Record<VisitStatus, BadgeVariant> = {
+  waiting: 'warning',
+  in_consultation: 'info',
+  completed: 'success',
+  cancelled: 'outline',
 };
 
 /** Statuses that still count as being in today's queue. */

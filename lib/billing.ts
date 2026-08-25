@@ -10,6 +10,7 @@
  * below rather than a blank cell on a day-close sheet.
  */
 
+import type { BadgeVariant } from '@/components/ui/badge';
 import type { Database } from '@/types/database';
 
 export type InvoiceStatus = Database['public']['Enums']['invoice_status'];
@@ -62,17 +63,20 @@ export const INVOICE_STATUS_LABEL: Record<InvoiceStatus, string> = {
 };
 
 /**
- * Badge variant per status. Unpaid is the loud one: it is the only state where
- * the hospital is owed money by somebody who has already walked out.
+ * Badge colour per status.
+ *
+ * Unpaid is the loud one, and the only status in the app that stays red: it is
+ * the one state where the hospital is owed money by somebody who has already
+ * walked out. Part paid is amber -- outstanding, but somebody has engaged.
+ *
+ * Void is muted rather than red. The invoice number is still consumed and the
+ * row is still history (CLAUDE.md 3.2); it is a closed matter, not an alarm.
  */
-export const INVOICE_STATUS_VARIANT: Record<
-  InvoiceStatus,
-  'default' | 'secondary' | 'outline' | 'destructive'
-> = {
+export const INVOICE_STATUS_VARIANT: Record<InvoiceStatus, BadgeVariant> = {
   unpaid: 'destructive',
-  partial: 'default',
-  paid: 'outline',
-  void: 'secondary',
+  partial: 'warning',
+  paid: 'success',
+  void: 'outline',
 };
 
 /** Statuses where money is still outstanding. */

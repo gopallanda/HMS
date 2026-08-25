@@ -151,7 +151,7 @@ export function ConsultationScreen({
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <p className="truncate font-medium">{visit.patient_name}</p>
-                <p className="font-mono text-[11px] text-muted-foreground">
+                <p className="font-mono text-xs text-muted-foreground">
                   {visit.patient_mrn}
                 </p>
               </div>
@@ -242,7 +242,7 @@ export function ConsultationScreen({
           <CardContent className="grid gap-3">
             <div className="flex items-baseline justify-between gap-2">
               <h2 className="text-sm font-semibold">Vitals</h2>
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 Leave a box empty if it was not taken.
               </p>
             </div>
@@ -281,7 +281,7 @@ export function ConsultationScreen({
             <div className="flex items-baseline justify-between gap-2">
               <h2 className="text-sm font-semibold">Consultation notes</h2>
               {consultation ? (
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   Last saved {formatTime(consultation.updated_at)}
                 </p>
               ) : null}
@@ -333,7 +333,7 @@ export function ConsultationScreen({
               </SubmitButton>
             )}
 
-            <p className="ml-auto hidden text-[11px] text-muted-foreground sm:block">
+            <p className="ml-auto hidden text-xs text-muted-foreground sm:block">
               <kbd className="rounded border px-1">Ctrl</kbd>+
               <kbd className="rounded border px-1">S</kbd> saves,{' '}
               <kbd className="rounded border px-1">Esc</kbd> returns to the queue.
@@ -342,7 +342,7 @@ export function ConsultationScreen({
         )}
 
         {consultation ? (
-          <p className="text-[11px] text-muted-foreground">
+          <p className="text-xs text-muted-foreground">
             Record created {formatDateTime(consultation.created_at)}. Edits are kept in the audit
             log; nothing here is deleted.
           </p>

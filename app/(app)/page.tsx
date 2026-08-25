@@ -75,12 +75,12 @@ export default async function OverviewPage() {
         {stats.map((stat) => (
           <Card key={stat.label} size="sm">
             <CardContent className="grid gap-0.5">
-              <span className="text-[11px] tracking-wide text-muted-foreground uppercase">
+              <span className="text-xs text-muted-foreground">
                 {stat.label}
               </span>
               <span className="text-xl font-semibold tabular-nums">{stat.value}</span>
               {stat.note ? (
-                <span className="text-[11px] text-muted-foreground">{stat.note}</span>
+                <span className="text-xs text-muted-foreground">{stat.note}</span>
               ) : null}
             </CardContent>
           </Card>
@@ -124,7 +124,7 @@ export default async function OverviewPage() {
             <CardHeader>
               <CardTitle className="text-sm">
                 Setup
-                <Badge variant={remaining.length === 0 ? 'secondary' : 'outline'} className="ml-2">
+                <Badge variant={remaining.length === 0 ? 'success' : 'warning'} className="ml-2">
                   {setup.length - remaining.length}/{setup.length}
                 </Badge>
               </CardTitle>
@@ -136,11 +136,11 @@ export default async function OverviewPage() {
                     {step.label}
                   </span>
                   {step.done ? (
-                    <span className="text-[11px] text-muted-foreground">done</span>
+                    <span className="text-xs text-muted-foreground">done</span>
                   ) : (
                     <Link
                       href={step.href}
-                      className="text-[11px] underline underline-offset-2"
+                      className="text-xs underline underline-offset-2"
                     >
                       open
                     </Link>

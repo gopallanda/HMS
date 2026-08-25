@@ -97,7 +97,7 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
                     {invoice.invoice_no}
                     {invoice.void_reason ? (
                       <span
-                        className="block truncate font-sans text-[11px] text-muted-foreground"
+                        className="block truncate font-sans text-xs text-muted-foreground"
                         title={invoice.void_reason}
                       >
                         {invoice.void_reason}
@@ -112,7 +112,7 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
                       <span className="truncate font-medium">
                         {invoice.patient_name_snapshot}
                       </span>
-                      <span className="font-mono text-[11px] text-muted-foreground">
+                      <span className="font-mono text-xs text-muted-foreground">
                         {invoice.patient_mrn} &middot; {invoice.visit_no} &middot; token{' '}
                         {invoice.token_no}
                       </span>
@@ -121,7 +121,7 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
                   <TableCell className="truncate text-xs">
                     {invoice.doctor_name ?? '-'}
                     {invoice.department_name ? (
-                      <span className="block text-[11px] text-muted-foreground">
+                      <span className="block text-xs text-muted-foreground">
                         {invoice.department_name}
                       </span>
                     ) : null}
@@ -132,7 +132,7 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
                   <TableCell className="text-right tabular-nums">
                     {formatAmount(invoice.paid_total)}
                     {invoice.payment_modes && invoice.payment_modes.length > 0 ? (
-                      <span className="block text-[11px] text-muted-foreground">
+                      <span className="block text-xs text-muted-foreground">
                         {invoice.payment_modes
                           .map((mode) => PAYMENT_MODE_LABEL[mode])
                           .join(', ')}
@@ -181,7 +181,7 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
         </Table>
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         Invoices are never deleted. Voiding keeps the number, records the reason, returns the
         charges to the visit so it can be billed again, and reverses any payment against it.
       </p>
@@ -267,7 +267,7 @@ function VoidDialog({
           </Field>
 
           <DialogFooter className="items-center">
-            <span className="mr-auto hidden text-[11px] text-muted-foreground sm:block">
+            <span className="mr-auto hidden text-xs text-muted-foreground sm:block">
               The number {invoice.invoice_no} stays used. Nothing is deleted.
             </span>
             <Button type="button" variant="outline" size="sm" onClick={onClose}>

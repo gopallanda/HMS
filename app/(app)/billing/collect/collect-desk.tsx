@@ -437,7 +437,7 @@ export function CollectDesk({
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate font-medium">{visit.patient_name}</span>
-                  <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                  <span className="block truncate font-mono text-xs text-muted-foreground">
                     {visit.patient_mrn}
                   </span>
                 </span>
@@ -455,7 +455,7 @@ export function CollectDesk({
           )}
         </div>
 
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           <kbd className="rounded border px-1">/</kbd> find
           <span className="mx-1">&middot;</span>
           <kbd className="rounded border px-1">&uarr;</kbd>
@@ -500,7 +500,7 @@ export function CollectDesk({
             {selected.visit_type !== 'opd' ? (
               <Badge variant="destructive">{VISIT_TYPE_LABEL[selected.visit_type]}</Badge>
             ) : null}
-            <span className="ml-auto text-[11px] text-muted-foreground">
+            <span className="ml-auto text-xs text-muted-foreground">
               {selected.visit_no} &middot; {formatDate(selected.visited_at)}{' '}
               {formatTime(selected.visited_at)}
               {selected.doctor_name ? ` · ${selected.doctor_name}` : ''}
@@ -532,7 +532,7 @@ export function CollectDesk({
           <div className="overflow-x-auto rounded-lg border">
             <table className="w-full text-sm">
               <thead>
-                <tr className="border-b text-[11px] text-muted-foreground">
+                <tr className="border-b text-xs text-muted-foreground">
                   <th className="w-8 py-1.5" />
                   <th className="px-2 py-1.5 text-left font-medium">Charge</th>
                   <th className="w-20 px-2 py-1.5 text-right font-medium">Qty</th>
@@ -581,7 +581,7 @@ export function CollectDesk({
                       </td>
                       <td className="px-2 py-1.5">
                         <span className="block truncate">{charge.description}</span>
-                        <span className="text-[11px] text-muted-foreground">
+                        <span className="text-xs text-muted-foreground">
                           raised by {charge.source_module.replace('_', ' ')}
                         </span>
                       </td>
@@ -720,7 +720,7 @@ export function CollectDesk({
                 })}
               </SelectContent>
             </Select>
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               <kbd className="rounded border px-1">Alt</kbd>+
               <kbd className="rounded border px-1">S</kbd> add &middot; the rate pre-fills and
               stays editable
@@ -740,7 +740,7 @@ export function CollectDesk({
                 <dt className="text-muted-foreground">
                   GST
                   {totals.taxTotal === 0 ? (
-                    <span className="ml-1 text-[11px]">(services are exempt)</span>
+                    <span className="ml-1 text-xs">(services are exempt)</span>
                   ) : null}
                 </dt>
                 <dd className="tabular-nums">{formatMoney(totals.taxTotal)}</dd>
@@ -779,7 +779,7 @@ export function CollectDesk({
                       onClick={() => setMode(option)}
                     >
                       {PAYMENT_MODE_LABEL[option]}
-                      <span className="ml-1.5 text-[10px] opacity-60">Alt+{index + 1}</span>
+                      <span className="ml-1.5 text-xs opacity-60">Alt+{index + 1}</span>
                     </Button>
                   ))}
                 </div>
@@ -827,7 +827,7 @@ export function CollectDesk({
           </div>
 
           <footer className="flex flex-wrap items-center gap-2 border-t pt-2">
-            <span className="text-[11px] text-muted-foreground">
+            <span className="text-xs text-muted-foreground">
               <kbd className="rounded border px-1">Alt</kbd>+
               <kbd className="rounded border px-1">A</kbd> amount
               <span className="mx-1">&middot;</span>

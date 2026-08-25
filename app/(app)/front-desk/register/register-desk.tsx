@@ -262,7 +262,7 @@ export function RegisterDesk({
               : `${results.length} match${results.length === 1 ? '' : 'es'}`}
         </span>
 
-        <span className="ml-auto hidden text-[11px] text-muted-foreground lg:block">
+        <span className="ml-auto hidden text-xs text-muted-foreground lg:block">
           <kbd className="rounded border px-1">&uarr;</kbd>
           <kbd className="ml-0.5 rounded border px-1">&darr;</kbd> move
           <span className="mx-1">&middot;</span>
@@ -499,10 +499,10 @@ function RegisterDialog({
                   <span className="text-xs text-muted-foreground">
                     {ageGender(match.dob, match.gender)}
                   </span>
-                  <span className="text-[11px] underline underline-offset-2">use this one</span>
+                  <span className="text-xs underline underline-offset-2">use this one</span>
                 </button>
               ))}
-              <p className="text-[11px] text-muted-foreground">
+              <p className="text-xs text-muted-foreground">
                 A family sharing one mobile is normal. If this really is a different person,
                 register anyway.
               </p>
@@ -608,7 +608,7 @@ function RegisterDialog({
           </Field>
 
           <DialogFooter className="items-center">
-            <span className="mr-auto hidden text-[11px] text-muted-foreground sm:block">
+            <span className="mr-auto hidden text-xs text-muted-foreground sm:block">
               <kbd className="rounded border px-1">Ctrl</kbd>+
               <kbd className="rounded border px-1">Enter</kbd> save
               <span className="mx-1">&middot;</span>
@@ -791,7 +791,7 @@ function VisitDialog({
           </p>
 
           <DialogFooter className="items-center">
-            <span className="mr-auto hidden text-[11px] text-muted-foreground sm:block">
+            <span className="mr-auto hidden text-xs text-muted-foreground sm:block">
               <kbd className="rounded border px-1">Ctrl</kbd>+
               <kbd className="rounded border px-1">Enter</kbd> start visit
               <span className="mx-1">&middot;</span>

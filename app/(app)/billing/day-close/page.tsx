@@ -91,7 +91,7 @@ export default async function DayClosePage({
 
       <form className="flex flex-wrap items-end gap-2 rounded-lg border p-2">
         <label className="grid gap-1">
-          <span className="text-[11px] text-muted-foreground">Day (IST)</span>
+          <span className="text-xs text-muted-foreground">Day (IST)</span>
           <Input type="date" name="day" defaultValue={selectedDay} max={today} className="h-8 w-40" />
         </label>
         <Button type="submit" size="sm">
@@ -159,7 +159,7 @@ export default async function DayClosePage({
         />
       </div>
 
-      <p className="text-[11px] text-muted-foreground">
+      <p className="text-xs text-muted-foreground">
         The day is the IST calendar day, not the server&apos;s. Reversed payments are excluded
         everywhere on this page, so a bill voided after it was paid leaves no money behind in
         these totals.
@@ -191,7 +191,7 @@ function Summary({
       >
         {formatMoney(value)}
       </p>
-      <p className="text-[11px] text-muted-foreground">{note}</p>
+      <p className="text-xs text-muted-foreground">{note}</p>
     </div>
   );
 }
@@ -213,7 +213,7 @@ function Section({
     <section className="grid content-start gap-1.5">
       <div>
         <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="text-[11px] text-muted-foreground">{caption}</p>
+        <p className="text-xs text-muted-foreground">{caption}</p>
       </div>
 
       <div className="rounded-lg border">

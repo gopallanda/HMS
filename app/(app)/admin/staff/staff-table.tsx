@@ -1,10 +1,10 @@
 'use client';
 
-import { KeyRoundIcon, PencilIcon, PlusIcon } from 'lucide-react';
+import { KeyRoundIcon, MailPlusIcon, PencilIcon, PlusIcon } from 'lucide-react';
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { saveStaff, setStaffActive } from './actions';
+import { inviteStaff, saveStaff, setStaffActive } from './actions';
 import { Field } from '@/components/shared/field';
 import { FormMessage } from '@/components/shared/form-message';
 import { MoneyInput } from '@/components/shared/money-input';
@@ -38,6 +38,7 @@ import {
 } from '@/components/ui/table';
 import { fieldError, IDLE, type ActionState } from '@/lib/action-state';
 import { APP_ROLES, chargesConsultationFee, ROLE_LABEL, type AppRole } from '@/lib/roles';
+import { INVITABLE_ROLES } from '@/lib/schemas/staff';
 import { formatAmount } from '@/lib/utils/money';
 
 export type StaffRow = {
@@ -81,6 +82,7 @@ export function StaffTable({
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<StaffRow | null>(null);
   const [deactivating, setDeactivating] = useState<StaffRow | null>(null);
+  const [inviting, setInviting] = useState<StaffRow | null>(null);
   const searchInput = useRef<HTMLInputElement>(null);
 
   const departmentName = useMemo(() => {
@@ -137,7 +139,7 @@ export function StaffTable({
         <span className="text-xs text-muted-foreground">
           {filtered.length} of {staff.length} &middot; {doctorCount} doctors
         </span>
-        <span className="ml-auto hidden text-[11px] text-muted-foreground sm:block">
+        <span className="ml-auto hidden text-xs text-muted-foreground sm:block">
           <kbd className="rounded border px-1">/</kbd> search
           <span className="mx-1">&middot;</span>
           <kbd className="rounded border px-1">N</kbd> new
@@ -205,6 +207,12 @@ export function StaffTable({
                         <PencilIcon data-icon="inline-start" />
                         Edit
                       </Button>
+                      {!person.user_id && person.is_active ? (
+                        <Button size="xs" variant="ghost" onClick={() => setInviting(person)}>
+                          <MailPlusIcon data-icon="inline-start" />
+                          Invite
+                        </Button>
+                      ) : null}
                       {person.is_active ? (
                         <Button
                           size="xs"
@@ -234,6 +242,10 @@ export function StaffTable({
           departments={departments}
           onClose={() => setEditing(null)}
         />
+      ) : null}
+
+      {inviting ? (
+        <InviteDialog key={inviting.id} person={inviting} onClose={() => setInviting(null)} />
       ) : null}
 
       {deactivating ? (
@@ -518,4 +530,92 @@ function useToastOnResult(state: ActionState) {
     if (state.status === 'success') toast.success(state.message);
     if (state.status === 'error') toast.error(state.message);
   }, [state]);
+}
+
+/**
+ * Issue a login to someone who already has a staff record.
+ *
+ * The role selector defaults to the person's job but is a separate decision --
+ * it sets what their sign-in may DO, which is not the same question as what
+ * they are called (CLAUDE.md 5). The wording says so, because getting these two
+ * confused is how a nurse ends up able to void invoices.
+ */
+function InviteDialog({ person, onClose }: { person: StaffRow; onClose: () => void }) {
+  const [state, action] = useActionState(inviteStaff, IDLE);
+  const [role, setRole] = useState<AppRole>(
+    person.role === 'super_admin' ? 'admin' : person.role,
+  );
+
+  useEffect(() => {
+    if (state.status === 'success') {
+      toast.success(state.message);
+      onClose();
+    }
+  }, [state, onClose]);
+
+  return (
+    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Invite {person.full_name}</DialogTitle>
+          <DialogDescription>
+            They get an email inviting them to set a password. If this address already has
+            an account, it is added to this hospital instead and no email is sent.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form action={action} className="grid gap-3">
+          <input type="hidden" name="staff_id" value={person.id} />
+          <input type="hidden" name="full_name" value={person.full_name} />
+
+          <FormMessage state={state} />
+
+          <Field label="Email" htmlFor="invite-email" error={fieldError(state, 'email')} required>
+            <Input
+              id="invite-email"
+              name="email"
+              type="email"
+              inputMode="email"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder="doctor@hospital.in"
+              aria-invalid={fieldError(state, 'email') !== undefined}
+              required
+              autoFocus
+            />
+          </Field>
+
+          <Field
+            label="This login may act as"
+            htmlFor="invite-role"
+            error={fieldError(state, 'role')}
+            hint="Their access, not their job title. Change it later by editing their membership."
+            required
+          >
+            <Select value={role} onValueChange={(value) => setRole(value as AppRole)}>
+              <SelectTrigger id="invite-role">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {INVITABLE_ROLES.map((option) => (
+                  <SelectItem key={option} value={option}>
+                    {ROLE_LABEL[option]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <input type="hidden" name="role" value={role} />
+          </Field>
+
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <SubmitButton pendingLabel="Inviting...">Send invitation</SubmitButton>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
 }
