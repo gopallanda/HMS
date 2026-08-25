@@ -1,3 +1,5 @@
+import { CircleAlertIcon } from 'lucide-react';
+
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/cn';
 
@@ -8,6 +10,10 @@ import { cn } from '@/lib/cn';
  * list at the top, so a form with four problems takes one glance instead of
  * four. `error` also drives aria-invalid on the control via the `data-invalid`
  * attribute the caller spreads.
+ *
+ * The label is foreground weight, not muted: it is the thing a clerk scans down
+ * a column of fields to find, and a muted label on a muted hint below it gives
+ * the eye nothing to catch.
  */
 export function Field({
   label,
@@ -28,13 +34,17 @@ export function Field({
 }) {
   return (
     <div className={cn('grid gap-1.5', className)}>
-      <Label htmlFor={htmlFor} className="text-xs font-medium text-muted-foreground">
+      <Label htmlFor={htmlFor} className="text-sm font-medium text-foreground">
         {label}
-        {required ? <span className="text-destructive">*</span> : null}
+        {required ? <span className="ml-0.5 text-destructive">*</span> : null}
       </Label>
       {children}
       {error ? (
-        <p id={`${htmlFor}-error`} className="text-xs text-destructive">
+        <p
+          id={`${htmlFor}-error`}
+          className="flex items-center gap-1.5 text-xs font-medium text-destructive"
+        >
+          <CircleAlertIcon className="size-3.5 shrink-0" aria-hidden />
           {error}
         </p>
       ) : hint ? (

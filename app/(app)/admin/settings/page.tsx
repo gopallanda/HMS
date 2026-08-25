@@ -10,7 +10,7 @@ export default async function HospitalSettingsPage() {
   const session = await requireSession();
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-6">
       <PageHeader
         title="Hospital settings"
         description="Branding and statutory details used on every printed document."

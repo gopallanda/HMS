@@ -1,7 +1,12 @@
 'use client';
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { SearchIcon, TicketIcon, UserRoundPlusIcon } from 'lucide-react';
+import {
+  SearchIcon,
+  TicketIcon,
+  UserRoundPlusIcon,
+  UserRoundSearchIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -12,8 +17,10 @@ import {
   type RegisterPatientState,
   type StartVisitState,
 } from './actions';
+import { EmptyState } from '@/components/shared/empty-state';
 import { Field } from '@/components/shared/field';
-import { FormMessage } from '@/components/shared/form-message';
+import { FormMessage, Notice } from '@/components/shared/form-message';
+import { Kbd, KbdHint } from '@/components/shared/kbd';
 import { SubmitButton } from '@/components/shared/submit-button';
 import { Button } from '@/components/ui/button';
 import {
@@ -236,59 +243,79 @@ export function RegisterDesk({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
-        <div className="relative">
-          <SearchIcon className="pointer-events-none absolute inset-y-0 left-2.5 my-auto size-3.5 text-muted-foreground" />
-          <Input
-            ref={searchInput}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={onSearchKeyDown}
-            placeholder="Phone, name or MRN"
-            className="h-8 w-80 pl-8"
-            aria-label="Search patients"
-            aria-controls="patient-results"
-            autoComplete="off"
-            spellCheck={false}
-            autoFocus
-          />
+      {/* The command bar. This one control is the whole screen: the day starts
+          with a phone number typed into it, and everything else on the page is
+          a consequence of what it returns (CLAUDE.md 3.3). It is sized and
+          weighted to say so, rather than sitting in a toolbar as one more
+          control among several. */}
+      <div className="grid gap-3">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="relative min-w-0 flex-1">
+            <SearchIcon className="pointer-events-none absolute inset-y-0 left-4 my-auto size-4.5 text-muted-foreground" />
+            <Input
+              ref={searchInput}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={onSearchKeyDown}
+              placeholder="Phone, name or MRN"
+              className="h-12 rounded-xl border-transparent bg-muted/60 pr-12 pl-12 text-base shadow-none transition-all focus-visible:border-primary focus-visible:bg-background focus-visible:shadow-md md:h-12 md:text-base"
+              aria-label="Search patients"
+              aria-controls="patient-results"
+              autoComplete="off"
+              spellCheck={false}
+              autoFocus
+            />
+            <span className="pointer-events-none absolute inset-y-0 right-3 hidden items-center lg:flex">
+              <Kbd always>/</Kbd>
+            </span>
+          </div>
+
+          <Button
+            variant="outline"
+            onClick={openRegister}
+            className="h-12 shrink-0 rounded-xl md:h-12"
+          >
+            <UserRoundPlusIcon data-icon="inline-start" />
+            Register new patient
+            <Kbd className="ml-1.5">F2</Kbd>
+          </Button>
         </div>
 
-        <span className="text-xs text-muted-foreground" role="status" aria-live="polite">
-          {!active
-            ? `Type ${MIN_QUERY} characters or more`
-            : isFetching
-              ? 'Searching...'
-              : `${results.length} match${results.length === 1 ? '' : 'es'}`}
-        </span>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <span className="text-xs text-muted-foreground" role="status" aria-live="polite">
+            {!active
+              ? `Type ${MIN_QUERY} characters or more`
+              : isFetching
+                ? 'Searching...'
+                : `${results.length} match${results.length === 1 ? '' : 'es'}`}
+          </span>
 
-        <span className="ml-auto hidden text-xs text-muted-foreground lg:block">
-          <kbd className="rounded border px-1">&uarr;</kbd>
-          <kbd className="ml-0.5 rounded border px-1">&darr;</kbd> move
-          <span className="mx-1">&middot;</span>
-          <kbd className="rounded border px-1">Enter</kbd> new visit
-          <span className="mx-1">&middot;</span>
-          <kbd className="rounded border px-1">F2</kbd> register
-          <span className="mx-1">&middot;</span>
-          <kbd className="rounded border px-1">Esc</kbd> clear
-        </span>
-
-        <Button variant="outline" size="sm" onClick={openRegister}>
-          <UserRoundPlusIcon data-icon="inline-start" />
-          Register new patient
-        </Button>
+          <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1.5">
+            <KbdHint keys={['\u2191', '\u2193']}>move</KbdHint>
+            <KbdHint keys="Enter">new visit</KbdHint>
+            <KbdHint keys="F2">register</KbdHint>
+            <KbdHint keys="Esc">clear</KbdHint>
+          </span>
+        </div>
       </div>
 
       {lastVisit ? (
-        <div className="flex flex-wrap items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2 text-sm text-emerald-700 dark:text-emerald-400">
-          <TicketIcon className="size-4" />
-          <span>
-            <strong className="font-semibold">Token {lastVisit.token_no}</strong> &middot;{' '}
-            {lastVisit.visit_no} &middot; {lastVisit.patient}
+        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-success/10 px-4 py-3 text-sm text-success dark:bg-success/15">
+          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-success text-base font-bold text-background tabular-nums">
+            {lastVisit.token_no}
+          </span>
+          <span className="min-w-0">
+            <span className="flex items-center gap-1.5 font-semibold">
+              <TicketIcon className="size-4" />
+              Token {lastVisit.token_no} issued
+            </span>
+            <span className="block truncate text-xs opacity-90">
+              {lastVisit.visit_no} &middot; {lastVisit.patient}
+            </span>
           </span>
           <Link
             href="/front-desk/queue"
-            className="ml-auto text-xs underline underline-offset-2"
+            className="ml-auto shrink-0 text-xs font-medium underline underline-offset-4 hover:no-underline"
           >
             Open the queue
           </Link>
@@ -296,7 +323,7 @@ export function RegisterDesk({
       ) : null}
 
       {error ? (
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           Search failed: {error.message}
         </p>
       ) : null}
@@ -306,17 +333,19 @@ export function RegisterDesk({
         id="patient-results"
         role="listbox"
         aria-label="Matching patients"
-        className="max-h-[28rem] overflow-y-auto rounded-lg border"
+        className="custom-scrollbar max-h-[28rem] overflow-y-auto rounded-xl border border-border/60 bg-card shadow-sm"
       >
         {!active ? (
-          <EmptyPanel
-            title="Search before you register"
-            body="Phone number, name or MRN. Registering a patient who is already on file splits their history in two."
+          <EmptyState
+            icon={UserRoundSearchIcon}
+            title="Search for a patient, or press F2 to register"
+            description="Phone number, name or MRN. Registering a patient who is already on file splits their history in two."
           />
         ) : results.length === 0 && !isFetching ? (
-          <EmptyPanel
-            title={`Nobody matches "${query.trim()}"`}
-            body="Press Enter or F2 to register a new patient. What you typed is carried over."
+          <EmptyState
+            icon={UserRoundPlusIcon}
+            title={`Nobody matches \u201c${query.trim()}\u201d`}
+            description="Press Enter or F2 to register a new patient. What you typed is carried over."
           />
         ) : (
           results.map((patient, index) => (
@@ -366,15 +395,6 @@ export function RegisterDesk({
   );
 }
 
-function EmptyPanel({ title, body }: { title: string; body: string }) {
-  return (
-    <div className="grid gap-1 px-3 py-10 text-center">
-      <p className="text-sm font-medium">{title}</p>
-      <p className="mx-auto max-w-md text-xs text-muted-foreground">{body}</p>
-    </div>
-  );
-}
-
 function PatientRow({
   patient,
   index,
@@ -397,19 +417,34 @@ function PatientRow({
       onMouseMove={onHover}
       onClick={onPick}
       className={cn(
-        'flex cursor-pointer items-center gap-3 border-b px-3 py-2 text-sm last:border-0',
-        selected && 'bg-muted',
+        'flex cursor-pointer items-center gap-3 border-b border-border/60 px-3 py-2.5 text-sm transition-colors last:border-0 sm:px-4',
+        selected ? 'bg-primary/10' : 'hover:bg-muted/60',
       )}
     >
-      <span className="w-40 shrink-0 font-mono text-xs text-muted-foreground">{patient.mrn}</span>
-      <span className="min-w-0 flex-1 truncate font-medium">{patient.full_name}</span>
-      <span className="w-20 shrink-0 text-xs text-muted-foreground tabular-nums">
-        {ageGender(patient.dob, patient.gender)}
+      <span className="min-w-0 flex-1">
+        <span className="flex items-baseline gap-2">
+          <span className="truncate font-medium">{patient.full_name}</span>
+          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
+            {ageGender(patient.dob, patient.gender)}
+          </span>
+        </span>
+        {/* Below `sm` the columns collapse into one line of metadata under the
+            name: a 360px screen has room for who this is, not for a table. */}
+        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground sm:hidden">
+          <span className="font-mono">{patient.mrn}</span>
+          {patient.phone ? <span className="font-mono">{patient.phone}</span> : null}
+        </span>
       </span>
-      <span className="w-36 shrink-0 font-mono text-xs">{patient.phone ?? '-'}</span>
-      <span className="w-44 shrink-0 text-right text-xs text-muted-foreground">
+
+      <span className="hidden w-40 shrink-0 font-mono text-xs text-muted-foreground sm:block">
+        {patient.mrn}
+      </span>
+      <span className="hidden w-36 shrink-0 font-mono text-xs sm:block">
+        {patient.phone ?? '-'}
+      </span>
+      <span className="hidden w-44 shrink-0 text-right text-xs text-muted-foreground lg:block">
         {patient.last_visit_at
-          ? `${patient.visit_count} visit${patient.visit_count === 1 ? '' : 's'} - last ${formatDate(patient.last_visit_at)}`
+          ? `${patient.visit_count} visit${patient.visit_count === 1 ? '' : 's'} \u00b7 last ${formatDate(patient.last_visit_at)}`
           : 'No visits yet'}
       </span>
     </div>
@@ -477,7 +512,7 @@ function RegisterDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form ref={formRef} action={action} onKeyDown={onFormKeyDown} className="grid gap-3">
+        <form ref={formRef} action={action} onKeyDown={onFormKeyDown} className="grid gap-4">
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="gender" value={gender} />
           <input type="hidden" name="force_create" value={force ? 'true' : ''} />
@@ -485,49 +520,77 @@ function RegisterDialog({
           <FormMessage state={state} />
 
           {state.duplicate ? (
-            <div className="grid gap-1.5 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2">
-              <p className="text-xs font-medium">Already registered on this number</p>
-              {(duplicates.data ?? []).map((match) => (
-                <button
-                  key={match.id}
-                  type="button"
-                  onClick={() => onUseExisting(fromSearch(match))}
-                  className="flex items-center gap-2 rounded-md px-1.5 py-1 text-left text-sm hover:bg-muted"
-                >
-                  <span className="font-mono text-xs text-muted-foreground">{match.mrn}</span>
-                  <span className="flex-1 truncate">{match.full_name}</span>
-                  <span className="text-xs text-muted-foreground">
-                    {ageGender(match.dob, match.gender)}
-                  </span>
-                  <span className="text-xs underline underline-offset-2">use this one</span>
-                </button>
-              ))}
-              <p className="text-xs text-muted-foreground">
+            <Notice>
+              <p className="font-medium">Already registered on this number</p>
+              <div className="mt-1.5 grid gap-0.5">
+                {(duplicates.data ?? []).map((match) => (
+                  <button
+                    key={match.id}
+                    type="button"
+                    onClick={() => onUseExisting(fromSearch(match))}
+                    className="flex items-center gap-2 rounded-md bg-background/60 px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-background"
+                  >
+                    <span className="font-mono text-xs text-muted-foreground">{match.mrn}</span>
+                    <span className="min-w-0 flex-1 truncate">{match.full_name}</span>
+                    <span className="hidden text-xs text-muted-foreground sm:block">
+                      {ageGender(match.dob, match.gender)}
+                    </span>
+                    <span className="shrink-0 text-xs font-medium text-primary underline-offset-4 hover:underline">
+                      use this one
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1.5 text-xs opacity-80">
                 A family sharing one mobile is normal. If this really is a different person,
                 register anyway.
               </p>
-            </div>
+            </Notice>
           ) : null}
 
-          <Field
-            label="Patient name"
-            htmlFor="patient-name"
-            error={fieldError(state, 'full_name')}
-            required
-          >
-            <Input
-              id="patient-name"
-              name="full_name"
-              defaultValue={prefill.full_name}
-              maxLength={120}
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field
+              label="Patient name"
+              htmlFor="patient-name"
+              error={fieldError(state, 'full_name')}
               required
-              autoFocus
-              autoComplete="off"
-              aria-invalid={fieldError(state, 'full_name') !== undefined}
-            />
-          </Field>
+            >
+              <Input
+                id="patient-name"
+                name="full_name"
+                defaultValue={prefill.full_name}
+                maxLength={120}
+                required
+                autoFocus
+                autoComplete="off"
+                aria-invalid={fieldError(state, 'full_name') !== undefined}
+              />
+            </Field>
 
-          <div className="grid gap-3 sm:grid-cols-3">
+            <Field
+              label="Phone"
+              htmlFor="patient-phone"
+              error={fieldError(state, 'phone')}
+              hint="How this patient is found next time. Worth asking for."
+            >
+              <Input
+                id="patient-phone"
+                name="phone"
+                type="tel"
+                inputMode="tel"
+                value={phone}
+                onChange={(event) => {
+                  setPhone(event.target.value);
+                  setForce(false);
+                }}
+                placeholder="+91 98450 11223"
+                autoComplete="off"
+                aria-invalid={fieldError(state, 'phone') !== undefined}
+              />
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-3">
             <Field
               label="Date of birth"
               htmlFor="patient-dob"
@@ -575,28 +638,6 @@ function RegisterDialog({
             </Field>
           </div>
 
-          <Field
-            label="Phone"
-            htmlFor="patient-phone"
-            error={fieldError(state, 'phone')}
-            hint="How this patient is found next time. Worth asking for."
-          >
-            <Input
-              id="patient-phone"
-              name="phone"
-              type="tel"
-              inputMode="tel"
-              value={phone}
-              onChange={(event) => {
-                setPhone(event.target.value);
-                setForce(false);
-              }}
-              placeholder="+91 98450 11223"
-              autoComplete="off"
-              aria-invalid={fieldError(state, 'phone') !== undefined}
-            />
-          </Field>
-
           <Field label="Address" htmlFor="patient-address" error={fieldError(state, 'address')}>
             <Textarea
               id="patient-address"
@@ -608,11 +649,13 @@ function RegisterDialog({
           </Field>
 
           <DialogFooter className="items-center">
-            <span className="mr-auto hidden text-xs text-muted-foreground sm:block">
-              <kbd className="rounded border px-1">Ctrl</kbd>+
-              <kbd className="rounded border px-1">Enter</kbd> save
-              <span className="mx-1">&middot;</span>
-              <kbd className="rounded border px-1">Esc</kbd> close
+            <span className="mr-auto hidden items-center gap-4 sm:flex">
+              <KbdHint keys={['Ctrl', 'Enter']} always>
+                save
+              </KbdHint>
+              <KbdHint keys="Esc" always>
+                close
+              </KbdHint>
             </span>
             <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Cancel
@@ -689,12 +732,12 @@ function VisitDialog({
         <DialogHeader>
           <DialogTitle>New visit</DialogTitle>
           <DialogDescription asChild>
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-mono text-xs text-muted-foreground">{patient.mrn}</span>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-muted/60 px-3 py-2.5 text-sm">
               <span className="font-medium text-foreground">{patient.full_name}</span>
               <span className="text-xs text-muted-foreground">
                 {ageGender(patient.dob, patient.gender)}
               </span>
+              <span className="font-mono text-xs text-muted-foreground">{patient.mrn}</span>
               {patient.phone ? (
                 <span className="font-mono text-xs text-muted-foreground">{patient.phone}</span>
               ) : null}
@@ -702,7 +745,7 @@ function VisitDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form ref={formRef} action={action} onKeyDown={onFormKeyDown} className="grid gap-3">
+        <form ref={formRef} action={action} onKeyDown={onFormKeyDown} className="grid gap-4">
           <input type="hidden" name="id" value={id} />
           <input type="hidden" name="patient_id" value={patient.id} />
           <input type="hidden" name="doctor_id" value={doctorId} />
@@ -730,7 +773,7 @@ function VisitDialog({
             </Select>
           </Field>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label="Department"
               htmlFor="visit-department"
@@ -756,24 +799,31 @@ function VisitDialog({
             </Field>
 
             <Field label="Visit type" htmlFor="visit-type" error={fieldError(state, 'visit_type')}>
-              <div id="visit-type" className="flex gap-1">
+              <div
+                id="visit-type"
+                className="flex h-10 items-center gap-1 rounded-lg bg-muted p-1 md:h-8"
+              >
                 {VISIT_TYPES_AT_DESK.map((option) => (
-                  <Button
+                  <button
                     key={option}
                     type="button"
-                    size="sm"
-                    variant={visitType === option ? 'default' : 'outline'}
                     aria-pressed={visitType === option}
                     onClick={() => setVisitType(option)}
+                    className={cn(
+                      'flex-1 rounded-md px-3 py-1 text-sm transition-all focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
+                      visitType === option
+                        ? 'bg-background font-medium text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
                   >
                     {VISIT_TYPE_LABEL[option]}
-                  </Button>
+                  </button>
                 ))}
               </div>
             </Field>
           </div>
 
-          <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+          <p className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground">
             {doctor && doctor.consultation_fee > 0 ? (
               <>
                 A pending consultation charge of{' '}
@@ -791,11 +841,13 @@ function VisitDialog({
           </p>
 
           <DialogFooter className="items-center">
-            <span className="mr-auto hidden text-xs text-muted-foreground sm:block">
-              <kbd className="rounded border px-1">Ctrl</kbd>+
-              <kbd className="rounded border px-1">Enter</kbd> start visit
-              <span className="mx-1">&middot;</span>
-              <kbd className="rounded border px-1">Esc</kbd> close
+            <span className="mr-auto hidden items-center gap-4 sm:flex">
+              <KbdHint keys={['Ctrl', 'Enter']} always>
+                start visit
+              </KbdHint>
+              <KbdHint keys="Esc" always>
+                close
+              </KbdHint>
             </span>
             <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Cancel

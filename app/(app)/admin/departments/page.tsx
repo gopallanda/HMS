@@ -20,9 +20,9 @@ export default async function DepartmentsPage() {
 
   if (error) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <PageHeader title="Departments" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           Departments could not be loaded: {error.message}
         </p>
       </div>
@@ -32,7 +32,7 @@ export default async function DepartmentsPage() {
   const departments: DepartmentRow[] = data ?? [];
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-5">
       <PageHeader
         title="Departments"
         description="Used by staff records now, and by visits and charges in Phase 1."

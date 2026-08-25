@@ -13,7 +13,7 @@ export function SignupForm() {
   const [state, formAction] = useActionState(signUp, IDLE);
 
   return (
-    <form action={formAction} className="grid gap-3">
+    <form action={formAction} className="grid gap-4">
       <FormMessage state={state} />
 
       <Field
@@ -82,7 +82,7 @@ export function SignupForm() {
         />
       </Field>
 
-      <SubmitButton className="mt-1 w-full" size="lg" pendingLabel="Creating...">
+      <SubmitButton className="mt-2 w-full" size="lg" pendingLabel="Creating...">
         Create hospital
       </SubmitButton>
     </form>

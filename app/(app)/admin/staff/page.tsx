@@ -26,9 +26,9 @@ export default async function StaffPage() {
   const failed = staffResult.error ?? departmentResult.error;
   if (failed) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <PageHeader title="Staff" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           Staff could not be loaded: {failed.message}
         </p>
       </div>
@@ -39,7 +39,7 @@ export default async function StaffPage() {
   const departments: DepartmentOption[] = departmentResult.data ?? [];
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-5">
       <PageHeader
         title="Staff"
         description="People who work here. A staff record is not a login."

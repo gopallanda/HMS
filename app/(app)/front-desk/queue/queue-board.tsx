@@ -3,6 +3,9 @@
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import { CalendarClockIcon } from 'lucide-react';
+
+import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -120,7 +123,7 @@ export function QueueBoard({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         {VISIT_STATUSES.map((status) => (
           <span key={status} className="flex items-center gap-1.5 text-xs">
             <Badge variant={VISIT_STATUS_VARIANT[status]}>{counts.get(status) ?? 0}</Badge>
@@ -128,24 +131,91 @@ export function QueueBoard({
           </span>
         ))}
 
-        <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span
-            className={cn(
-              'size-1.5 rounded-full',
-              live ? 'bg-emerald-500' : 'bg-muted-foreground/40',
-            )}
-            aria-hidden
-          />
+        <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+          {/* The dot pulses only while the channel is actually subscribed. A
+              board that animates whether or not it is connected is a board
+              nobody checks -- and this one is read from across the room. */}
+          <span className="relative grid size-2 place-items-center" aria-hidden>
+            {live ? (
+              <span className="absolute size-2 animate-ping rounded-full bg-success/60" />
+            ) : null}
+            <span
+              className={cn(
+                'size-2 rounded-full',
+                live ? 'bg-success' : 'bg-muted-foreground/40',
+              )}
+            />
+          </span>
           {live ? 'Live' : 'Connecting...'}
           {updatedAt ? <span>&middot; updated {formatTime(updatedAt)}</span> : null}
         </span>
       </div>
 
-      <div className="rounded-lg border">
+      {/* Below `md` a nine-column table is a horizontal scroll nobody performs
+          at a counter, so the same rows render as cards. One source of data,
+          two shapes -- not two lists that can disagree. */}
+      {entries.length === 0 ? (
+        <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+          <EmptyState
+            icon={CalendarClockIcon}
+            title="Nobody has been registered today yet"
+            description="Tokens appear here the moment the front desk starts a visit."
+          />
+        </div>
+      ) : (
+        <div className="grid gap-2 md:hidden">
+          {entries.map((entry) => (
+            <div
+              key={entry.id}
+              className={cn(
+                'flex items-start gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm',
+                entry.status === 'cancelled' && 'opacity-60',
+              )}
+            >
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-base font-bold text-primary-foreground tabular-nums">
+                {entry.token_no}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="flex items-start justify-between gap-2">
+                  <span className="min-w-0 truncate font-medium">{entry.patient_name}</span>
+                  <Badge variant={VISIT_STATUS_VARIANT[entry.status]} className="shrink-0">
+                    {VISIT_STATUS_LABEL[entry.status]}
+                  </Badge>
+                </div>
+                <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                  {ageGender(entry.patient_dob, entry.patient_gender)} &middot;{' '}
+                  <span className="font-mono">{entry.patient_mrn}</span>
+                </p>
+                <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                  <span className="text-muted-foreground">
+                    {entry.doctor_name ?? 'No doctor'}
+                  </span>
+                  {entry.visit_type === 'opd' ? null : (
+                    <Badge variant="destructive">{VISIT_TYPE_LABEL[entry.visit_type]}</Badge>
+                  )}
+                  <span className="ml-auto text-muted-foreground tabular-nums">
+                    {formatTime(entry.visited_at)}
+                  </span>
+                  <span className="font-medium tabular-nums">
+                    &#8377;{formatAmount(entry.charge_total)}
+                  </span>
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <div
+        className={cn(
+          'rounded-xl border border-border/60 bg-card shadow-sm',
+          entries.length === 0 ? 'hidden' : 'hidden md:block',
+        )}
+      >
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-16 text-right">Token</TableHead>
+              <TableHead className="w-16">Token</TableHead>
               <TableHead className="w-20">Time</TableHead>
               <TableHead>Patient</TableHead>
               <TableHead className="w-20">Age / sex</TableHead>
@@ -157,68 +227,63 @@ export function QueueBoard({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {entries.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="py-10 text-center text-xs text-muted-foreground">
-                  Nobody has been registered today yet.
+            {entries.map((entry) => (
+              <TableRow
+                key={entry.id}
+                className={entry.status === 'cancelled' ? 'opacity-60' : undefined}
+              >
+                <TableCell>
+                  <span className="grid size-8 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground tabular-nums">
+                    {entry.token_no}
+                  </span>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground tabular-nums">
+                  {formatTime(entry.visited_at)}
+                </TableCell>
+                <TableCell>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate font-medium">{entry.patient_name}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {entry.patient_mrn}
+                      {entry.patient_phone ? ` - ${entry.patient_phone}` : ''}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-xs tabular-nums">
+                  {ageGender(entry.patient_dob, entry.patient_gender)}
+                </TableCell>
+                <TableCell className="truncate text-xs">{entry.doctor_name ?? '-'}</TableCell>
+                <TableCell className="truncate text-xs">
+                  {entry.department_name ?? '-'}
+                </TableCell>
+                <TableCell className="text-xs">
+                  {entry.visit_type === 'opd' ? (
+                    <span className="text-muted-foreground">
+                      {VISIT_TYPE_LABEL[entry.visit_type]}
+                    </span>
+                  ) : (
+                    // Emergency is the one that has to catch an eye across
+                    // the counter.
+                    <Badge variant="destructive">{VISIT_TYPE_LABEL[entry.visit_type]}</Badge>
+                  )}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatAmount(entry.charge_total)}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
+                    {VISIT_STATUS_LABEL[entry.status]}
+                  </Badge>
                 </TableCell>
               </TableRow>
-            ) : (
-              entries.map((entry) => (
-                <TableRow
-                  key={entry.id}
-                  className={entry.status === 'cancelled' ? 'opacity-60' : undefined}
-                >
-                  <TableCell className="text-right text-base font-semibold tabular-nums">
-                    {entry.token_no}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {formatTime(entry.visited_at)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium">{entry.patient_name}</span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {entry.patient_mrn}
-                        {entry.patient_phone ? ` - ${entry.patient_phone}` : ''}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums">
-                    {ageGender(entry.patient_dob, entry.patient_gender)}
-                  </TableCell>
-                  <TableCell className="truncate text-xs">{entry.doctor_name ?? '-'}</TableCell>
-                  <TableCell className="truncate text-xs">
-                    {entry.department_name ?? '-'}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {entry.visit_type === 'opd' ? (
-                      <span className="text-muted-foreground">
-                        {VISIT_TYPE_LABEL[entry.visit_type]}
-                      </span>
-                    ) : (
-                      // Emergency is the one that has to catch an eye across
-                      // the counter.
-                      <Badge variant="destructive">{VISIT_TYPE_LABEL[entry.visit_type]}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatAmount(entry.charge_total)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
-                      {VISIT_STATUS_LABEL[entry.status]}
-                    </Badge>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
+            ))}
           </TableBody>
         </Table>
       </div>
 
       <p className="text-xs text-muted-foreground">
-        Tokens restart at 1 every day. Visit numbers do not - they run for the financial year.
+        Tokens restart at 1 every day. Visit numbers do not &mdash; they run for the financial
+        year.
       </p>
     </>
   );

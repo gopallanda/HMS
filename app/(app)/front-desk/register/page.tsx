@@ -35,9 +35,9 @@ export default async function RegisterPage() {
   const failed = doctorResult.error ?? departmentResult.error;
   if (failed) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <PageHeader title="Register patient" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           The desk could not be loaded: {failed.message}
         </p>
       </div>
@@ -48,12 +48,12 @@ export default async function RegisterPage() {
   const departments: DepartmentOption[] = departmentResult.data ?? [];
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-5">
       <PageHeader
         title="Register patient"
         description="Search first. Register only when nobody matches."
         actions={
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline">
             <Link href="/front-desk/queue">Today&apos;s queue</Link>
           </Button>
         }
@@ -62,10 +62,10 @@ export default async function RegisterPage() {
       {doctors.length === 0 ? (
         // A visit needs a doctor, and the consultation charge comes from that
         // doctor's fee. Saying so here beats an empty dropdown three clicks in.
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           No active doctors yet, so a visit cannot be started.{' '}
           {isAdminRole(session.role) ? (
-            <Link href="/admin/staff" className="underline underline-offset-2">
+            <Link href="/admin/staff" className="font-medium underline underline-offset-4">
               Add a doctor and their consultation fee
             </Link>
           ) : (

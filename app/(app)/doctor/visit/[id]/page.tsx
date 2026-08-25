@@ -39,9 +39,9 @@ export default async function ConsultationPage({
 
   if (error) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <PageHeader title="Consultation" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           This visit could not be loaded: {error.message}
         </p>
       </div>
@@ -86,13 +86,13 @@ export default async function ConsultationPage({
    */
   if (consultation.error) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <PageHeader title={visit.patient_name} description={visit.visit_no} />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           The notes already on this visit could not be read, so the form is not being opened --
           saving now could overwrite them. {consultation.error.message}
         </p>
-        <Button asChild variant="outline" size="sm" className="justify-self-start">
+        <Button asChild variant="outline" className="justify-self-start">
           <Link href="/doctor/queue">
             <ArrowLeftIcon data-icon="inline-start" />
             My queue
@@ -103,14 +103,14 @@ export default async function ConsultationPage({
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-5">
       <PageHeader
         title={visit.patient_name}
         description={`${visit.visit_no} · Token ${visit.token_no} · ${formatDate(
           visit.visited_at,
         )} ${formatTime(visit.visited_at)}`}
         actions={
-          <Button asChild variant="outline" size="sm">
+          <Button asChild variant="outline">
             <Link href="/doctor/queue">
               <ArrowLeftIcon data-icon="inline-start" />
               My queue

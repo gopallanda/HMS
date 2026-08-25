@@ -13,7 +13,7 @@ export function LoginForm({ next }: { next?: string }) {
   const [state, formAction] = useActionState(signIn, IDLE);
 
   return (
-    <form action={formAction} className="grid gap-3">
+    <form action={formAction} className="grid gap-4">
       {next ? <input type="hidden" name="next" value={next} /> : null}
 
       <FormMessage state={state} />
@@ -47,7 +47,7 @@ export function LoginForm({ next }: { next?: string }) {
         />
       </Field>
 
-      <SubmitButton className="mt-1 w-full" size="lg" pendingLabel="Signing in...">
+      <SubmitButton className="mt-2 w-full" size="lg" pendingLabel="Signing in...">
         Sign in
       </SubmitButton>
     </form>

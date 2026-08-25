@@ -45,6 +45,12 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-info: var(--info);
+  /* The amber highlight. Deliberately NOT --accent: shadcn spends that token on
+     hover and active surfaces (dropdown items, calendar cells, command rows),
+     so colouring it amber would repaint every hover in the app. This is a
+     separate token, used only where a highlight is wanted. */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -67,74 +73,85 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  /* Paper, not a lightbox. A hair of warmth off pure white, so that white cards
+     lift off the page without needing a hard border to prove they are there. */
+  --background: oklch(0.985 0.0025 106);
+  --foreground: oklch(0.16 0.004 106);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  --card-foreground: oklch(0.16 0.004 106);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  /* The one brand hue. A desaturated clinical blue -- chroma is kept low on
-     purpose: this colour appears on every primary button and the active nav
-     row, and a saturated accent on a screen full of data is fatigue, not
-     identity. Everything else in this file stays neutral. */
-  --primary: oklch(0.52 0.108 227);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
+  --popover-foreground: oklch(0.16 0.004 106);
+  /* The one brand hue: a clinical teal. Chroma is kept low on purpose -- this
+     colour appears on every primary button and the active nav row, and a
+     saturated accent on a screen full of data is fatigue, not identity.
+     Lightness is pinned at 0.50 so white text on it clears 5:1; the prettier
+     0.60 teal would put the label on every primary button under 4.5:1. */
+  --primary: oklch(0.5 0.098 183);
+  --primary-foreground: oklch(0.99 0.004 180);
+  --secondary: oklch(0.965 0.003 106);
+  --secondary-foreground: oklch(0.22 0.004 106);
+  --muted: oklch(0.965 0.003 106);
   /* Was 0.556 (~4.6:1 on white) -- borderline, and this token carries real data
-     in the tables, not just hints. 0.47 clears 7:1. */
-  --muted-foreground: oklch(0.47 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+     in the tables, not just hints. 0.475 clears 7:1. */
+  --muted-foreground: oklch(0.475 0.006 106);
+  --accent: oklch(0.955 0.008 183);
+  --accent-foreground: oklch(0.22 0.004 106);
+  /* Amber. --brand is the fill (icon tiles, progress bars, dots); text on a
+     tint of it uses --brand-foreground, which has to be far darker to read. */
+  --brand: oklch(0.76 0.155 70);
+  --brand-foreground: oklch(0.48 0.115 62);
   --destructive: oklch(0.52 0.215 27.325);
   /* Status colours. Used as a foreground on a 10% tint of themselves (see the
      badge variants), so each one has to stay dark enough to read as text --
      that is why these are mid-lightness and not the bright greens and ambers a
      palette picker suggests. */
   --success: oklch(0.47 0.125 155);
-  --warning: oklch(0.47 0.115 62);
-  --info: oklch(0.50 0.115 240);
+  --warning: oklch(0.48 0.115 62);
+  --info: oklch(0.5 0.115 240);
   /* --border stays light: it draws card edges and table row rules, which
      should be quiet structure. --input is a different job -- it outlines an
      interactive control, which WCAG 1.4.11 asks to reach 3:1 -- and the stock
-     shadcn value shares --border's lightness, measuring 1.26:1 on a card. */
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.655 0 0);
-  --ring: oklch(0.62 0.098 227);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+     shadcn value shares the border lightness, measuring 1.26:1 on a card. */
+  --border: oklch(0.912 0.003 106);
+  --input: oklch(0.655 0.005 106);
+  --ring: oklch(0.6 0.09 183);
+  --chart-1: oklch(0.5 0.098 183);
+  --chart-2: oklch(0.62 0.09 200);
+  --chart-3: oklch(0.76 0.155 70);
+  --chart-4: oklch(0.47 0.125 155);
+  --chart-5: oklch(0.45 0.02 106);
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.52 0.108 227);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.62 0.098 227);
+  /* Slightly darker than the page, so the nav reads as a rail rather than as a
+     column of the same sheet the work is on. */
+  --sidebar: oklch(0.968 0.003 106);
+  --sidebar-foreground: oklch(0.16 0.004 106);
+  --sidebar-primary: oklch(0.5 0.098 183);
+  --sidebar-primary-foreground: oklch(0.99 0.004 180);
+  --sidebar-accent: oklch(0.928 0.004 106);
+  --sidebar-accent-foreground: oklch(0.2 0.004 106);
+  --sidebar-border: oklch(0.902 0.003 106);
+  --sidebar-ring: oklch(0.6 0.09 183);
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
+  --background: oklch(0.155 0.004 106);
+  --foreground: oklch(0.98 0.002 106);
+  --card: oklch(0.205 0.004 106);
+  --card-foreground: oklch(0.98 0.002 106);
+  --popover: oklch(0.215 0.004 106);
+  --popover-foreground: oklch(0.98 0.002 106);
   /* Lighter than the light-mode brand so it carries on a dark ground, with a
      dark foreground on top. */
-  --primary: oklch(0.72 0.105 227);
-  --primary-foreground: oklch(0.21 0.03 227);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.76 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.74 0.1 181);
+  --primary-foreground: oklch(0.2 0.035 183);
+  --secondary: oklch(0.269 0.004 106);
+  --secondary-foreground: oklch(0.98 0.002 106);
+  --muted: oklch(0.269 0.004 106);
+  --muted-foreground: oklch(0.755 0.005 106);
+  --accent: oklch(0.28 0.012 183);
+  --accent-foreground: oklch(0.98 0.002 106);
+  --brand: oklch(0.8 0.145 72);
+  --brand-foreground: oklch(0.82 0.135 75);
   --destructive: oklch(0.704 0.191 22.216);
   --success: oklch(0.75 0.145 155);
   --warning: oklch(0.79 0.135 72);
@@ -144,22 +161,22 @@
      dense forms and tables, so structure has to be visible: the input boundary
      targets the 3:1 WCAG asks of a UI component, and the border stays quieter
      so tables read as rows rather than as a spreadsheet grid. */
-  --border: oklch(1 0 0 / 20%);
+  --border: oklch(1 0 0 / 14%);
   --input: oklch(1 0 0 / 38%);
-  --ring: oklch(0.62 0.098 227);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.72 0.105 227);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.62 0.09 183);
+  --chart-1: oklch(0.74 0.1 181);
+  --chart-2: oklch(0.7 0.09 210);
+  --chart-3: oklch(0.8 0.145 72);
+  --chart-4: oklch(0.75 0.145 155);
+  --chart-5: oklch(0.72 0.02 106);
+  --sidebar: oklch(0.185 0.004 106);
+  --sidebar-foreground: oklch(0.98 0.002 106);
+  --sidebar-primary: oklch(0.74 0.1 181);
+  --sidebar-primary-foreground: oklch(0.2 0.035 183);
+  --sidebar-accent: oklch(0.275 0.004 106);
+  --sidebar-accent-foreground: oklch(0.98 0.002 106);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.62 0.098 227);
+  --sidebar-ring: oklch(0.62 0.09 183);
 }
 
 @layer base {
@@ -181,6 +198,37 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+@layer components {
+  /* ---------------------------------------------------------------------------
+   * Scrollbars.
+   *
+   * Applied to the sidebar, table wrappers and dialog bodies. The colour is
+   * built with color-mix rather than the usual hsl(var(--token) / 0.2) pattern,
+   * because every token in this file is a complete oklch() colour and not a
+   * bare channel triple -- wrapping one in hsl() yields an invalid colour, and
+   * the thumb silently disappears.
+   * ------------------------------------------------------------------------ */
+  .custom-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 25%, transparent) transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--muted-foreground) 25%, transparent);
+    border-radius: 3px;
+  }
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--muted-foreground) 45%, transparent);
+  }
+}
+
 /* -----------------------------------------------------------------------------
  * Paper is always light.
  *

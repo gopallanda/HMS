@@ -1,14 +1,16 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { PlusIcon, SearchIcon, Trash2Icon } from 'lucide-react';
+import { PlusIcon, ReceiptIcon, SearchIcon, Trash2Icon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { collectPaymentAction, type CollectPaymentState } from './actions';
+import { EmptyState } from '@/components/shared/empty-state';
 import { Field } from '@/components/shared/field';
 import { FormMessage } from '@/components/shared/form-message';
+import { Kbd, KbdHint } from '@/components/shared/kbd';
 import { MoneyInput } from '@/components/shared/money-input';
 import { SubmitButton } from '@/components/shared/submit-button';
 import { Badge } from '@/components/ui/badge';
@@ -380,13 +382,13 @@ export function CollectDesk({
   const balance = totals.grandTotal - amountValue;
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[22rem_minmax(0,1fr)]">
+    <div className="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
       {/* ------------------------------------------------------------------ */}
       {/* Who is at the counter                                              */}
       {/* ------------------------------------------------------------------ */}
-      <section className="grid content-start gap-2">
+      <section className="grid content-start gap-2.5">
         <div className="relative">
-          <SearchIcon className="pointer-events-none absolute inset-y-0 left-2.5 my-auto size-3.5 text-muted-foreground" />
+          <SearchIcon className="pointer-events-none absolute inset-y-0 left-3.5 my-auto size-4 text-muted-foreground" />
           <Input
             ref={searchInput}
             value={query}
@@ -396,26 +398,33 @@ export function CollectDesk({
             }}
             onKeyDown={onSearchKeyDown}
             placeholder="Token, name, MRN or phone"
-            className="h-8 pl-8"
+            className="h-11 rounded-xl border-transparent bg-muted/60 pr-10 pl-10 shadow-none transition-all focus-visible:border-primary focus-visible:bg-background focus-visible:shadow-md md:h-11"
             aria-label="Find a visit to bill"
             autoComplete="off"
             spellCheck={false}
             autoFocus
           />
+          <span className="pointer-events-none absolute inset-y-0 right-3 hidden items-center lg:flex">
+            <Kbd always>/</Kbd>
+          </span>
         </div>
 
         <div
           ref={listRef}
           role="listbox"
           aria-label="Today's visits"
-          className="max-h-[32rem] overflow-y-auto rounded-lg border"
+          className="custom-scrollbar max-h-[32rem] overflow-y-auto rounded-xl border border-border/60 bg-card shadow-sm"
         >
           {filtered.length === 0 ? (
-            <p className="px-3 py-10 text-center text-xs text-muted-foreground">
-              {visits.length === 0
-                ? 'Nobody has been registered today yet.'
-                : `Nothing matches "${query.trim()}".`}
-            </p>
+            <EmptyState
+              compact
+              icon={SearchIcon}
+              title={
+                visits.length === 0
+                  ? 'Nobody has been registered today yet'
+                  : `Nothing matches \u201c${query.trim()}\u201d`
+              }
+            />
           ) : (
             filtered.map((visit, index) => (
               <button
@@ -427,12 +436,22 @@ export function CollectDesk({
                 onMouseMove={() => setHighlight(index)}
                 onClick={() => selectVisit(visit.visit_id)}
                 className={cn(
-                  'flex w-full items-center gap-2 border-b px-2.5 py-2 text-left text-sm last:border-0',
-                  index === highlight && 'bg-muted/60',
-                  visit.visit_id === selectedId && 'bg-muted',
+                  'flex w-full items-center gap-2.5 border-b border-border/60 px-3 py-2.5 text-left text-sm transition-colors last:border-0',
+                  visit.visit_id === selectedId
+                    ? 'bg-primary/10'
+                    : index === highlight
+                      ? 'bg-muted/60'
+                      : 'hover:bg-muted/40',
                 )}
               >
-                <span className="w-7 shrink-0 text-right text-sm font-semibold tabular-nums">
+                <span
+                  className={cn(
+                    'grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold tabular-nums',
+                    visit.visit_id === selectedId
+                      ? 'bg-primary text-primary-foreground'
+                      : 'bg-muted text-foreground',
+                  )}
+                >
                   {visit.token_no}
                 </span>
                 <span className="min-w-0 flex-1">
@@ -455,13 +474,10 @@ export function CollectDesk({
           )}
         </div>
 
-        <p className="text-xs text-muted-foreground">
-          <kbd className="rounded border px-1">/</kbd> find
-          <span className="mx-1">&middot;</span>
-          <kbd className="rounded border px-1">&uarr;</kbd>
-          <kbd className="ml-0.5 rounded border px-1">&darr;</kbd> move
-          <span className="mx-1">&middot;</span>
-          <kbd className="rounded border px-1">Enter</kbd> open bill
+        <p className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          <KbdHint keys="/">find</KbdHint>
+          <KbdHint keys={['\u2191', '\u2193']}>move</KbdHint>
+          <KbdHint keys="Enter">open bill</KbdHint>
         </p>
       </section>
 
@@ -469,27 +485,27 @@ export function CollectDesk({
       {/* The bill                                                           */}
       {/* ------------------------------------------------------------------ */}
       {selected === null ? (
-        <section className="grid place-content-center rounded-lg border px-6 py-16 text-center">
-          <p className="text-sm font-medium">Pick a visit to bill</p>
-          <p className="mt-1 max-w-sm text-xs text-muted-foreground">
-            Type to find the patient, or press <kbd className="rounded border px-1">/</kbd> and
-            use the arrow keys. The pending charges on the visit load with it.
-          </p>
+        <section className="rounded-xl border border-border/60 bg-card shadow-sm">
+          <EmptyState
+            icon={ReceiptIcon}
+            title="Pick a visit to bill"
+            description="Type to find the patient, or press / and use the arrow keys. The pending charges on the visit load with it."
+          />
         </section>
       ) : (
         <form
           ref={formRef}
           action={action}
           onKeyDown={onFormKeyDown}
-          className="grid content-start gap-3 rounded-lg border p-3"
+          className="grid content-start gap-4 rounded-xl border border-border/60 bg-card p-4 shadow-sm md:p-5"
         >
           <input type="hidden" name="invoice_id" value={invoiceId} />
           <input type="hidden" name="visit_id" value={selected.visit_id} />
           <input type="hidden" name="items" value={JSON.stringify(payload)} />
           <input type="hidden" name="mode" value={mode} />
 
-          <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b pb-2">
-            <span className="text-sm font-semibold">{selected.patient_name}</span>
+          <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border/60 pb-3">
+            <span className="text-base font-semibold">{selected.patient_name}</span>
             <span className="font-mono text-xs text-muted-foreground">
               {selected.patient_mrn}
             </span>
@@ -500,7 +516,7 @@ export function CollectDesk({
             {selected.visit_type !== 'opd' ? (
               <Badge variant="destructive">{VISIT_TYPE_LABEL[selected.visit_type]}</Badge>
             ) : null}
-            <span className="ml-auto text-xs text-muted-foreground">
+            <span className="w-full text-xs text-muted-foreground lg:ml-auto lg:w-auto">
               {selected.visit_no} &middot; {formatDate(selected.visited_at)}{' '}
               {formatTime(selected.visited_at)}
               {selected.doctor_name ? ` · ${selected.doctor_name}` : ''}
@@ -511,7 +527,7 @@ export function CollectDesk({
           <FormMessage state={state} />
 
           {state.stale ? (
-            <p className="rounded-lg bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
               Nothing was charged. Reload this visit to see what is actually still pending.{' '}
               <button
                 type="button"
@@ -529,23 +545,23 @@ export function CollectDesk({
           {/* -------------------------------------------------------------- */}
           {/* Lines                                                          */}
           {/* -------------------------------------------------------------- */}
-          <div className="overflow-x-auto rounded-lg border">
-            <table className="w-full text-sm">
+          <div className="custom-scrollbar overflow-x-auto rounded-xl border border-border/60">
+            <table className="w-full min-w-[42rem] text-sm">
               <thead>
-                <tr className="border-b text-xs text-muted-foreground">
-                  <th className="w-8 py-1.5" />
-                  <th className="px-2 py-1.5 text-left font-medium">Charge</th>
-                  <th className="w-20 px-2 py-1.5 text-right font-medium">Qty</th>
-                  <th className="w-32 px-2 py-1.5 text-right font-medium">Rate &#8377;</th>
-                  <th className="w-16 px-2 py-1.5 text-right font-medium">GST %</th>
-                  <th className="w-28 px-2 py-1.5 text-right font-medium">Amount &#8377;</th>
-                  <th className="w-8 py-1.5" />
+                <tr className="border-b border-border/60 bg-muted/40 text-xs tracking-wide text-muted-foreground uppercase">
+                  <th className="w-9 py-2" />
+                  <th className="px-2 py-2 text-left font-semibold">Charge</th>
+                  <th className="w-20 px-2 py-2 text-right font-semibold">Qty</th>
+                  <th className="w-36 px-2 py-2 text-right font-semibold">Rate &#8377;</th>
+                  <th className="w-16 px-2 py-2 text-right font-semibold">GST %</th>
+                  <th className="w-28 px-2 py-2 text-right font-semibold">Amount &#8377;</th>
+                  <th className="w-9 py-2" />
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="[&>tr:nth-child(even)]:bg-muted/25">
                 {charges.isPending ? (
                   <tr>
-                    <td colSpan={7} className="px-2 py-6 text-center text-xs text-muted-foreground">
+                    <td colSpan={7} className="px-2 py-8 text-center text-xs text-muted-foreground">
                       Loading charges...
                     </td>
                   </tr>
@@ -553,7 +569,7 @@ export function CollectDesk({
 
                 {charges.error ? (
                   <tr>
-                    <td colSpan={7} className="px-2 py-6 text-center text-xs text-destructive">
+                    <td colSpan={7} className="px-2 py-8 text-center text-xs text-destructive">
                       The pending charges could not be read: {charges.error.message}
                     </td>
                   </tr>
@@ -564,8 +580,11 @@ export function CollectDesk({
                 {pending.map((charge) => {
                   const included = !dropped.has(charge.id);
                   return (
-                    <tr key={charge.id} className={cn('border-b', !included && 'opacity-45')}>
-                      <td className="py-1.5 text-center">
+                    <tr
+                      key={charge.id}
+                      className={cn('border-b border-border/60', !included && 'opacity-45')}
+                    >
+                      <td className="py-2 text-center">
                         <Checkbox
                           checked={included}
                           aria-label={`Include ${charge.description}`}
@@ -579,20 +598,20 @@ export function CollectDesk({
                           }
                         />
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td className="px-2 py-2">
                         <span className="block truncate">{charge.description}</span>
                         <span className="text-xs text-muted-foreground">
                           raised by {charge.source_module.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums">{charge.qty}</td>
-                      <td className="px-2 py-1.5 text-right tabular-nums">
+                      <td className="px-2 py-2 text-right tabular-nums">{charge.qty}</td>
+                      <td className="px-2 py-2 text-right tabular-nums">
                         {formatAmount(charge.unit_price)}
                       </td>
-                      <td className="px-2 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
+                      <td className="px-2 py-2 text-right text-xs tabular-nums text-muted-foreground">
                         {charge.tax_rate > 0 ? charge.tax_rate : '-'}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums">
+                      <td className="px-2 py-2 text-right tabular-nums">
                         {formatAmount(charge.amount)}
                       </td>
                       <td />
@@ -605,11 +624,11 @@ export function CollectDesk({
                   const qty = parseMoney(line.qty) ?? 0;
                   const price = parseMoney(line.unit_price) ?? 0;
                   return (
-                    <tr key={line.key} className="border-b">
-                      <td className="py-1.5 text-center">
+                    <tr key={line.key} className="border-b border-border/60">
+                      <td className="py-2 text-center">
                         <PlusIcon className="mx-auto size-3 text-muted-foreground" aria-hidden />
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td className="px-2 py-2">
                         <Input
                           value={line.description}
                           onChange={(event) =>
@@ -621,12 +640,12 @@ export function CollectDesk({
                               ),
                             )
                           }
-                          className="h-7"
+                          className="h-8 md:h-8"
                           aria-label="Charge description"
                           maxLength={200}
                         />
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td className="px-2 py-2">
                         <Input
                           value={line.qty}
                           onChange={(event) =>
@@ -637,11 +656,11 @@ export function CollectDesk({
                             )
                           }
                           inputMode="decimal"
-                          className="h-7 text-right tabular-nums"
+                          className="h-8 text-right tabular-nums md:h-8"
                           aria-label="Quantity"
                         />
                       </td>
-                      <td className="px-2 py-1.5">
+                      <td className="px-2 py-2">
                         <MoneyInput
                           value={line.unit_price}
                           onChange={(event) =>
@@ -653,24 +672,24 @@ export function CollectDesk({
                               ),
                             )
                           }
-                          className="h-7"
+                          className="h-8 md:h-8"
                           aria-label="Rate"
                         />
                       </td>
-                      <td className="px-2 py-1.5 text-right text-xs tabular-nums text-muted-foreground">
+                      <td className="px-2 py-2 text-right text-xs tabular-nums text-muted-foreground">
                         {line.tax_rate > 0 ? line.tax_rate : '-'}
                       </td>
-                      <td className="px-2 py-1.5 text-right tabular-nums">
+                      <td className="px-2 py-2 text-right tabular-nums">
                         {formatAmount(lineAmount(qty, price))}
                       </td>
-                      <td className="py-1.5 text-center">
+                      <td className="py-2 text-center">
                         <button
                           type="button"
                           onClick={() =>
                             setAdHoc((current) => current.filter((item) => item.key !== line.key))
                           }
                           aria-label={`Remove ${line.description}`}
-                          className="text-muted-foreground hover:text-destructive"
+                          className="grid size-7 place-items-center rounded-md text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
                         >
                           <Trash2Icon className="size-3.5" />
                         </button>
@@ -681,7 +700,7 @@ export function CollectDesk({
 
                 {!charges.isPending && lines.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-2 py-6 text-center text-xs text-muted-foreground">
+                    <td colSpan={7} className="px-2 py-8 text-center text-xs text-muted-foreground">
                       Nothing pending on this visit. Add a charge below to raise a bill.
                     </td>
                   </tr>
@@ -698,7 +717,11 @@ export function CollectDesk({
                 to its placeholder and the same service can be added twice --
                 two dressings on one bill is an ordinary thing. */}
             <Select key={picker} onValueChange={addService}>
-              <SelectTrigger ref={serviceTrigger} className="h-8 w-72" aria-label="Add a charge">
+              <SelectTrigger
+                ref={serviceTrigger}
+                className="h-10 w-full sm:w-80 md:h-9"
+                aria-label="Add a charge"
+              >
                 <SelectValue placeholder="Add a charge from the service list" />
               </SelectTrigger>
               <SelectContent>
@@ -720,18 +743,18 @@ export function CollectDesk({
                 })}
               </SelectContent>
             </Select>
-            <span className="text-xs text-muted-foreground">
-              <kbd className="rounded border px-1">Alt</kbd>+
-              <kbd className="rounded border px-1">S</kbd> add &middot; the rate pre-fills and
-              stays editable
+            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <KbdHint keys={['Alt', 'S']}>add</KbdHint>
+              <span className="hidden lg:inline">&middot;</span>
+              <span>the rate pre-fills and stays editable</span>
             </span>
           </div>
 
           {/* -------------------------------------------------------------- */}
           {/* Totals and money                                               */}
           {/* -------------------------------------------------------------- */}
-          <div className="grid gap-3 md:grid-cols-2">
-            <dl className="grid content-start gap-1 rounded-lg bg-muted/50 p-3 text-sm">
+          <div className="grid gap-4 md:grid-cols-2">
+            <dl className="grid content-start gap-1.5 rounded-xl bg-muted/50 p-4 text-sm">
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Subtotal</dt>
                 <dd className="tabular-nums">{formatMoney(totals.subtotal)}</dd>
@@ -745,9 +768,11 @@ export function CollectDesk({
                 </dt>
                 <dd className="tabular-nums">{formatMoney(totals.taxTotal)}</dd>
               </div>
-              <div className="mt-1 flex justify-between border-t pt-1.5 text-base font-semibold">
-                <dt>Total</dt>
-                <dd className="tabular-nums">{formatMoney(totals.grandTotal)}</dd>
+              <div className="mt-1 flex items-baseline justify-between border-t border-border/60 pt-2.5">
+                <dt className="text-sm font-medium">Total</dt>
+                <dd className="text-xl font-bold text-primary tabular-nums">
+                  {formatMoney(totals.grandTotal)}
+                </dd>
               </div>
               {Math.abs(balance) >= 0.005 ? (
                 <div className="flex justify-between text-xs">
@@ -766,26 +791,40 @@ export function CollectDesk({
               ) : null}
             </dl>
 
-            <div className="grid content-start gap-3">
+            <div className="grid content-start gap-4">
               <Field label="Payment mode" htmlFor="payment-mode" error={fieldError(state, 'mode')}>
-                <div id="payment-mode" className="flex flex-wrap gap-1">
+                {/* A segmented control rather than four buttons: the mode is one
+                    choice out of four, and four equally weighted outline buttons
+                    read as four separate actions. The Alt number stays printed on
+                    each segment -- this is the shortcut cashiers actually use. */}
+                <div
+                  id="payment-mode"
+                  role="group"
+                  className="flex items-stretch gap-1 rounded-lg bg-muted p-1"
+                >
                   {PAYMENT_MODES.map((option, index) => (
-                    <Button
+                    <button
                       key={option}
                       type="button"
-                      size="sm"
-                      variant={mode === option ? 'default' : 'outline'}
                       aria-pressed={mode === option}
                       onClick={() => setMode(option)}
+                      className={cn(
+                        'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-sm transition-all focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:py-1.5',
+                        mode === option
+                          ? 'bg-background font-medium text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
                     >
                       {PAYMENT_MODE_LABEL[option]}
-                      <span className="ml-1.5 text-xs opacity-60">Alt+{index + 1}</span>
-                    </Button>
+                      <span className="hidden text-[10px] opacity-60 lg:inline">
+                        Alt+{index + 1}
+                      </span>
+                    </button>
                   ))}
                 </div>
               </Field>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <Field
                   label="Amount collected"
                   htmlFor="payment-amount"
@@ -801,7 +840,10 @@ export function CollectDesk({
                       setAmountDraft(event.target.value);
                       setAmountEdited(true);
                     }}
-                    className="h-9 text-base"
+                    // The one number the patient is told out loud. It is the
+                    // largest thing on the screen for the same reason it is the
+                    // last thing typed.
+                    className="h-12 text-2xl font-bold md:h-12 md:text-2xl"
                     aria-invalid={fieldError(state, 'amount') !== undefined}
                   />
                 </Field>
@@ -819,6 +861,7 @@ export function CollectDesk({
                     onChange={(event) => setReference(event.target.value)}
                     maxLength={80}
                     autoComplete="off"
+                    className="h-12 md:h-12"
                     placeholder={expectsReference(mode) ? 'Txn id' : ''}
                   />
                 </Field>
@@ -826,27 +869,21 @@ export function CollectDesk({
             </div>
           </div>
 
-          <footer className="flex flex-wrap items-center gap-2 border-t pt-2">
-            <span className="text-xs text-muted-foreground">
-              <kbd className="rounded border px-1">Alt</kbd>+
-              <kbd className="rounded border px-1">A</kbd> amount
-              <span className="mx-1">&middot;</span>
-              <kbd className="rounded border px-1">Alt</kbd>+
-              <kbd className="rounded border px-1">1-4</kbd> mode
-              <span className="mx-1">&middot;</span>
-              <kbd className="rounded border px-1">Ctrl</kbd>+
-              <kbd className="rounded border px-1">Enter</kbd> take payment
+          <footer className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
+            <span className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+              <KbdHint keys={['Alt', 'A']}>amount</KbdHint>
+              <KbdHint keys={['Alt', '1-4']}>mode</KbdHint>
+              <KbdHint keys={['Ctrl', 'Enter']}>take payment</KbdHint>
             </span>
             <Button
               type="button"
               variant="outline"
-              size="sm"
               className="ml-auto"
               onClick={() => selectVisit(null)}
             >
               Cancel
             </Button>
-            <SubmitButton size="sm" pendingLabel="Taking payment..." disabled={!canSubmit}>
+            <SubmitButton pendingLabel="Taking payment..." disabled={!canSubmit}>
               Paid {formatMoney(amountValue)}
             </SubmitButton>
           </footer>

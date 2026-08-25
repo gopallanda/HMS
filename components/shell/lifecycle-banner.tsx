@@ -6,6 +6,7 @@ import {
   type HospitalLifecycle,
   type HospitalLifecycleState,
 } from '@/lib/hospital-lifecycle';
+import { cn } from '@/lib/cn';
 import { isAdminRole, type AppRole } from '@/lib/roles';
 import { formatDate } from '@/lib/utils/dates';
 
@@ -34,11 +35,11 @@ export function LifecycleBanner({
 }) {
   if (lifecycle === 'suspended') {
     return (
-      <Strip icon={<PauseCircleIcon className="size-4 shrink-0" />}>
+      <Strip tone="stopped" icon={<PauseCircleIcon className="size-4 shrink-0" />}>
         <span className="font-medium">
           This hospital is suspended. Nothing new can be saved.
         </span>
-        <span className="text-muted-foreground">
+        <span className="opacity-85">
           {/* The reason is typed by whoever suspends the tenant, in the same
               spirit as invoices.void_reason: a hospital told only "suspended"
               does not know who to call or what to fix. */}
@@ -52,12 +53,12 @@ export function LifecycleBanner({
 
   if (lifecycle === 'trial_expired') {
     return (
-      <Strip icon={<TimerOffIcon className="size-4 shrink-0" />}>
+      <Strip tone="stopped" icon={<TimerOffIcon className="size-4 shrink-0" />}>
         <span className="font-medium">
           Your trial has ended{hospital.trial_ends_at ? ` (${formatDate(hospital.trial_ends_at)})` : ''}.
           Nothing new can be saved.
         </span>
-        <span className="text-muted-foreground">
+        <span className="opacity-85">
           Nothing has been deleted — everything already recorded can still be opened and printed.
           Choose a plan and the hospital picks up where it left off.
         </span>
@@ -74,11 +75,11 @@ export function LifecycleBanner({
   const days = trialDaysRemaining(hospital) ?? 0;
 
   return (
-    <Strip icon={<TimerIcon className="size-4 shrink-0" />}>
+    <Strip tone="warning" icon={<TimerIcon className="size-4 shrink-0" />}>
       <span className="font-medium">
         {days === 1 ? 'Your trial ends tomorrow.' : `Your trial ends in ${days} days.`}
       </span>
-      <span className="text-muted-foreground">
+      <span className="opacity-85">
         {hospital.trial_ends_at ? `On ${formatDate(hospital.trial_ends_at)} ` : ''}
         new patients, visits and invoices stop being accepted. Everything already recorded stays
         readable.
@@ -88,13 +89,32 @@ export function LifecycleBanner({
 }
 
 /**
- * One tinted strip for all three messages -- the same shape as the warning
- * badge variant, so this reads as part of the status colour family rather than
- * as a fourth design.
+ * One tinted strip, in two tones -- the same shape as the badge variants, so
+ * this reads as part of the status colour family rather than as its own design.
+ *
+ * The tones are not decoration. Amber is "this will happen"; red is "this has
+ * happened, and the database is already refusing writes". A trial with six days
+ * left and a hospital that cannot register a patient right now are different
+ * facts, and staff should not have to read the sentence to tell them apart.
  */
-function Strip({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+function Strip({
+  icon,
+  tone,
+  children,
+}: {
+  icon: React.ReactNode;
+  tone: 'warning' | 'stopped';
+  children: React.ReactNode;
+}) {
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg bg-warning/10 px-3 py-2 text-sm text-warning dark:bg-warning/20">
+    <div
+      className={cn(
+        'mb-4 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-lg border-l-4 px-3 py-2.5 text-sm',
+        tone === 'stopped'
+          ? 'border-l-destructive bg-destructive/10 text-destructive dark:bg-destructive/15'
+          : 'border-l-warning bg-warning/10 text-warning dark:bg-warning/15',
+      )}
+    >
       {icon}
       {children}
     </div>

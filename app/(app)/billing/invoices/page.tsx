@@ -60,9 +60,9 @@ export default async function InvoicesPage({
 
   if (error) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <PageHeader title="Invoices" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           The invoice list could not be loaded: {error.message}
         </p>
       </div>
@@ -79,20 +79,20 @@ export default async function InvoicesPage({
   const collected = invoices.reduce((sum, invoice) => sum + invoice.paid_total, 0);
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-5">
       <PageHeader
         title="Invoices"
         description={
           search === ''
-            ? `${formatDate(selectedDay)} - ${invoices.length} invoice${invoices.length === 1 ? '' : 's'}, ${formatMoney(billed)} billed, ${formatMoney(collected)} collected`
+            ? `${formatDate(selectedDay)} \u00b7 ${invoices.length} invoice${invoices.length === 1 ? '' : 's'}, ${formatMoney(billed)} billed, ${formatMoney(collected)} collected`
             : `${invoices.length} match${invoices.length === 1 ? '' : 'es'} across all dates`
         }
         actions={
           <>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline">
               <Link href="/billing/collect">Collect payment</Link>
             </Button>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline">
               <Link href={`/billing/day-close?day=${selectedDay}`}>Day close</Link>
             </Button>
           </>
@@ -101,18 +101,20 @@ export default async function InvoicesPage({
 
       {/* A GET form: Enter in any field applies the filters, and the browser
           does the navigation. Nothing here needs JavaScript. */}
-      <form className="flex flex-wrap items-end gap-2 rounded-lg border p-2">
-        <label className="grid gap-1">
-          <span className="text-xs text-muted-foreground">Day</span>
-          <Input type="date" name="day" defaultValue={selectedDay} className="h-8 w-40" />
+      <form className="flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm md:p-4">
+        <label className="grid flex-1 gap-1.5 sm:flex-none">
+          <span className="text-sm font-medium">Day</span>
+          <Input type="date" name="day" defaultValue={selectedDay} className="w-full sm:w-44" />
         </label>
 
-        <label className="grid gap-1">
-          <span className="text-xs text-muted-foreground">Status</span>
+        <label className="grid flex-1 gap-1.5 sm:flex-none">
+          <span className="text-sm font-medium">Status</span>
+          {/* A native select, not the Radix one: this form is a plain GET and
+              submits without JavaScript, which a controlled listbox would not. */}
           <select
             name="status"
             defaultValue={isStatus(status) ? status : ''}
-            className="h-8 rounded-lg border border-input bg-transparent px-2 text-sm"
+            className="h-10 rounded-lg border border-input bg-background px-3 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:h-8 md:px-2.5"
           >
             <option value="">All</option>
             {INVOICE_STATUSES.map((option) => (
@@ -123,28 +125,30 @@ export default async function InvoicesPage({
           </select>
         </label>
 
-        <label className="grid gap-1">
-          <span className="text-xs text-muted-foreground">
-            Invoice no, patient, MRN or visit - searches every day
-          </span>
+        <label className="grid min-w-0 flex-1 gap-1.5">
+          <span className="text-sm font-medium">Invoice no, patient, MRN or visit</span>
           <Input
             name="q"
             defaultValue={search}
             placeholder="INV/2026-27/00042"
-            className="h-8 w-72"
+            className="w-full"
             autoComplete="off"
           />
         </label>
 
-        <Button type="submit" size="sm">
-          Apply
-        </Button>
-        {search !== '' || isStatus(status) ? (
-          <Button asChild variant="ghost" size="sm">
-            <Link href="/billing/invoices">Clear</Link>
-          </Button>
-        ) : null}
+        <div className="flex items-center gap-2">
+          <Button type="submit">Apply</Button>
+          {search !== '' || isStatus(status) ? (
+            <Button asChild variant="ghost">
+              <Link href="/billing/invoices">Clear</Link>
+            </Button>
+          ) : null}
+        </div>
       </form>
+
+      <p className="-mt-2 text-xs text-muted-foreground">
+        A search looks across every date; leave it empty to stay on one day.
+      </p>
 
       <InvoiceTable invoices={invoices} />
     </div>

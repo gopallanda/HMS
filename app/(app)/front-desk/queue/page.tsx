@@ -31,9 +31,9 @@ export default async function QueuePage() {
 
   if (error) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <PageHeader title="Queue" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           The queue could not be loaded: {error.message}
         </p>
       </div>
@@ -43,12 +43,12 @@ export default async function QueuePage() {
   const entries: QueueEntry[] = data ?? [];
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-5">
       <PageHeader
         title="Queue"
-        description={formatDate(today)}
+        description={`Tokens issued today, ${formatDate(today)}.`}
         actions={
-          <Button asChild size="sm">
+          <Button asChild>
             <Link href="/front-desk/register">Register patient</Link>
           </Button>
         }

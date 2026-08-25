@@ -13,7 +13,7 @@ export function SetPasswordForm() {
   const [state, formAction] = useActionState(setPassword, IDLE);
 
   return (
-    <form action={formAction} className="grid gap-3">
+    <form action={formAction} className="grid gap-4">
       <FormMessage state={state} />
 
       <Field
@@ -51,7 +51,7 @@ export function SetPasswordForm() {
         />
       </Field>
 
-      <SubmitButton className="mt-1 w-full" size="lg" pendingLabel="Saving...">
+      <SubmitButton className="mt-2 w-full" size="lg" pendingLabel="Saving...">
         Save and continue
       </SubmitButton>
     </form>

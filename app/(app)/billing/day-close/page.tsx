@@ -1,3 +1,4 @@
+import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import { PageHeader } from '@/components/shared/page-header';
@@ -13,6 +14,7 @@ import {
 } from '@/components/ui/table';
 import { requireSession } from '@/lib/auth/session';
 import { PAYMENT_MODE_LABEL, type PaymentMode } from '@/lib/billing';
+import { cn } from '@/lib/cn';
 import { dayCloseReport, groupDayClose, type DayCloseRow } from '@/lib/rpc/billing';
 import { createClient } from '@/lib/supabase/server';
 import { formatDate, todayIst } from '@/lib/utils/dates';
@@ -55,9 +57,9 @@ export default async function DayClosePage({
 
   if (error) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <PageHeader title="Day close" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           The report could not be run: {error.message}
         </p>
       </div>
@@ -67,40 +69,52 @@ export default async function DayClosePage({
   const report = groupDayClose((data ?? []) as DayCloseRow[]);
   const collected = report.collected?.amount ?? 0;
 
+  const atToday = selectedDay >= today;
+
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-5">
       <PageHeader
         title="Day close"
-        description={`${formatDate(selectedDay)}${selectedDay === today ? ' - today, still open' : ''}`}
+        description={`${formatDate(selectedDay)}${selectedDay === today ? ' \u00b7 today, still open' : ''}`}
         actions={
-          <>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/billing/day-close?day=${shiftDay(selectedDay, -1)}`}>
-                &larr; Previous
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="sm" disabled={selectedDay >= today}>
-              <Link href={`/billing/day-close?day=${shiftDay(selectedDay, 1)}`}>Next &rarr;</Link>
-            </Button>
-            <Button asChild variant="outline" size="sm">
-              <Link href={`/billing/invoices?day=${selectedDay}`}>Invoices</Link>
-            </Button>
-          </>
+          <Button asChild variant="outline">
+            <Link href={`/billing/invoices?day=${selectedDay}`}>Invoices</Link>
+          </Button>
         }
       />
 
-      <form className="flex flex-wrap items-end gap-2 rounded-lg border p-2">
-        <label className="grid gap-1">
-          <span className="text-xs text-muted-foreground">Day (IST)</span>
-          <Input type="date" name="day" defaultValue={selectedDay} max={today} className="h-8 w-40" />
+      {/* Day navigation. The arrows and the picker are one control group: a
+          cashier reconciling a week walks it a day at a time, and somebody
+          answering a query about last month types the date. */}
+      <form className="flex flex-wrap items-end gap-2 rounded-xl border border-border/60 bg-card p-3 shadow-sm">
+        <div className="flex items-center gap-1">
+          <Button asChild variant="outline" size="icon" aria-label="Previous day">
+            <Link href={`/billing/day-close?day=${shiftDay(selectedDay, -1)}`}>
+              <ChevronLeftIcon />
+            </Link>
+          </Button>
+          {atToday ? (
+            <Button variant="outline" size="icon" disabled aria-label="Next day">
+              <ChevronRightIcon />
+            </Button>
+          ) : (
+            <Button asChild variant="outline" size="icon" aria-label="Next day">
+              <Link href={`/billing/day-close?day=${shiftDay(selectedDay, 1)}`}>
+                <ChevronRightIcon />
+              </Link>
+            </Button>
+          )}
+        </div>
+
+        <label className="grid gap-1.5">
+          <span className="text-sm font-medium">Day (IST)</span>
+          <Input type="date" name="day" defaultValue={selectedDay} max={today} className="w-44" />
         </label>
-        <Button type="submit" size="sm">
-          Run
-        </Button>
+        <Button type="submit">Run</Button>
       </form>
 
       {/* The three numbers somebody actually reads out. */}
-      <div className="grid gap-2 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-3">
         <Summary
           label="Collected"
           value={collected}
@@ -119,7 +133,7 @@ export default async function DayClosePage({
         />
       </div>
 
-      <div className="grid gap-3 lg:grid-cols-3">
+      <div className="grid gap-6 lg:grid-cols-3">
         <Section
           title="By payment mode"
           caption="What should be in the drawer, and what should have settled."
@@ -168,6 +182,13 @@ export default async function DayClosePage({
   );
 }
 
+/**
+ * One headline figure.
+ *
+ * `strong` marks the drawer total -- the only one of the three that is counted
+ * against physical cash, so it carries the accent rule and the heavier weight
+ * while billed and voided stay quiet beside it.
+ */
 function Summary({
   label,
   value,
@@ -180,18 +201,24 @@ function Summary({
   strong?: boolean;
 }) {
   return (
-    <div className="rounded-lg border p-3">
-      <p className="text-xs text-muted-foreground">{label}</p>
+    <div
+      className={cn(
+        'rounded-xl border border-border/60 bg-card p-4 shadow-sm md:p-5',
+        strong && 'border-l-4 border-l-primary',
+      )}
+    >
+      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
       <p
-        className={
+        className={cn(
+          'mt-1.5 leading-none tabular-nums',
           strong
-            ? 'text-2xl font-semibold tabular-nums'
-            : 'text-xl font-medium tabular-nums text-muted-foreground'
-        }
+            ? 'text-3xl font-bold tracking-tight text-primary'
+            : 'text-2xl font-semibold text-foreground/80',
+        )}
       >
         {formatMoney(value)}
       </p>
-      <p className="text-xs text-muted-foreground">{note}</p>
+      <p className="mt-1.5 text-xs text-muted-foreground">{note}</p>
     </div>
   );
 }
@@ -210,13 +237,13 @@ function Section({
   empty?: string;
 }) {
   return (
-    <section className="grid content-start gap-1.5">
+    <section className="grid content-start gap-2">
       <div>
-        <h2 className="text-sm font-semibold">{title}</h2>
-        <p className="text-xs text-muted-foreground">{caption}</p>
+        <h2 className="text-lg font-medium">{title}</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground">{caption}</p>
       </div>
 
-      <div className="rounded-lg border">
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
@@ -234,7 +261,7 @@ function Section({
               </TableRow>
             ) : (
               rows.map((row) => (
-                <TableRow key={row.key}>
+                <TableRow key={row.key} className="even:bg-muted/25">
                   <TableCell className="truncate">{row.label}</TableCell>
                   <TableCell className="text-right text-xs tabular-nums text-muted-foreground">
                     {row.count}
@@ -246,7 +273,7 @@ function Section({
               ))
             )}
             {rows.length > 0 ? (
-              <TableRow className="border-t-2">
+              <TableRow className="border-t-2 border-t-border bg-muted/40 hover:bg-muted/40">
                 <TableCell className="font-medium">Total</TableCell>
                 <TableCell />
                 <TableCell className="text-right font-semibold tabular-nums">

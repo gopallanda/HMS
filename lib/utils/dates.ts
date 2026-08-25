@@ -57,3 +57,34 @@ export function todayIst(at: Date = new Date()): string {
 function toDate(value: string | Date): Date {
   return value instanceof Date ? value : new Date(value);
 }
+
+/** "Tuesday, 25 August 2026" — the dashboard's date line. */
+export function formatLongDate(value: string | Date = new Date()): string {
+  return fmt({
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  }).format(toDate(value));
+}
+
+/**
+ * "morning" / "afternoon" / "evening", by the clock in the hospital.
+ *
+ * Read from the IST hour rather than the server's, for the same reason every
+ * other formatter here is: a box in Washington would greet the Mumbai front
+ * desk with "good evening" at eleven in the morning.
+ */
+export function greetingIst(at: Date = new Date()): 'morning' | 'afternoon' | 'evening' {
+  const hour = Number(
+    new Intl.DateTimeFormat('en-GB', {
+      timeZone: IST_TIME_ZONE,
+      hour: '2-digit',
+      hour12: false,
+    }).format(at),
+  );
+
+  if (hour < 12) return 'morning';
+  if (hour < 17) return 'afternoon';
+  return 'evening';
+}

@@ -1,9 +1,9 @@
-import { HospitalIcon } from 'lucide-react';
+import { InfoIcon } from 'lucide-react';
 import Link from 'next/link';
 import type { Metadata } from 'next';
 
 import { LoginForm } from './login-form';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { AuthCard } from '@/components/shell/auth-card';
 
 export const metadata: Metadata = {
   title: 'Sign in',
@@ -40,33 +40,31 @@ export default async function LoginPage({
   const next = typeof params.next === 'string' ? params.next : undefined;
 
   return (
-    <Card className="w-full max-w-sm">
-      <CardHeader>
-        <div className="flex items-center gap-2">
-          <span className="flex size-8 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <HospitalIcon className="size-4" />
-          </span>
-          <div>
-            <CardTitle className="text-base">Hospital Management System</CardTitle>
-            <p className="text-xs text-muted-foreground">Sign in to your hospital</p>
-          </div>
-        </div>
-      </CardHeader>
-
-      <CardContent className="grid gap-3">
+    <AuthCard
+      title="Sign in"
+      subtitle="Hospital Management System"
+      footer={
+        <>
+          New here?{' '}
+          <Link
+            href="/signup"
+            className="font-medium text-primary underline-offset-4 hover:underline"
+          >
+            Create a hospital
+          </Link>
+        </>
+      }
+    >
+      <div className="grid gap-4">
         {reason ? (
-          <p className="rounded-lg bg-muted px-2.5 py-2 text-xs text-muted-foreground">{reason}</p>
+          <p className="flex items-start gap-2 rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground">
+            <InfoIcon className="mt-0.5 size-3.5 shrink-0" />
+            <span>{reason}</span>
+          </p>
         ) : null}
 
         <LoginForm next={next} />
-
-        <p className="text-xs text-muted-foreground">
-          New here?{' '}
-          <Link href="/signup" className="underline underline-offset-2">
-            Create a hospital
-          </Link>
-        </p>
-      </CardContent>
-    </Card>
+      </div>
+    </AuthCard>
   );
 }

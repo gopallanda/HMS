@@ -1,11 +1,13 @@
 'use client';
 
-import { PencilIcon, PlusIcon } from 'lucide-react';
+import { Building2Icon, PencilIcon, PlusIcon } from 'lucide-react';
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { saveDepartment, setDepartmentActive } from './actions';
+import { EmptyState } from '@/components/shared/empty-state';
 import { Field } from '@/components/shared/field';
+import { KbdHint } from '@/components/shared/kbd';
 import { FormMessage } from '@/components/shared/form-message';
 import { SubmitButton } from '@/components/shared/submit-button';
 import { Badge } from '@/components/ui/badge';
@@ -85,31 +87,30 @@ export function DepartmentsTable({ departments }: { departments: DepartmentRow[]
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Input
           ref={searchInput}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search name or code"
-          className="h-8 w-56"
+          className="w-full sm:w-64"
           aria-label="Search departments"
           autoFocus
         />
         <span className="text-xs text-muted-foreground">
           {filtered.length} of {departments.length} &middot; {activeCount} active
         </span>
-        <span className="ml-auto hidden text-xs text-muted-foreground sm:block">
-          <kbd className="rounded border px-1">/</kbd> search
-          <span className="mx-1">&middot;</span>
-          <kbd className="rounded border px-1">N</kbd> new
+        <span className="ml-auto flex items-center gap-4">
+          <KbdHint keys="/">search</KbdHint>
+          <KbdHint keys="N">new</KbdHint>
         </span>
-        <Button size="sm" onClick={() => setEditing(blankDepartment())}>
+        <Button onClick={() => setEditing(blankDepartment())}>
           <PlusIcon data-icon="inline-start" />
           New department
         </Button>
       </div>
 
-      <div className="rounded-lg border">
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
@@ -121,20 +122,34 @@ export function DepartmentsTable({ departments }: { departments: DepartmentRow[]
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={4} className="py-8 text-center text-xs text-muted-foreground">
-                  {departments.length === 0
-                    ? 'No departments yet. Create the ones patients are registered against.'
-                    : `Nothing matches "${query}".`}
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={4} className="p-0">
+                  <EmptyState
+                    compact
+                    icon={Building2Icon}
+                    title={
+                      departments.length === 0
+                        ? 'No departments yet'
+                        : `Nothing matches \u201c${query}\u201d`
+                    }
+                    description={
+                      departments.length === 0
+                        ? 'Create the ones patients are registered against \u2014 they drive the staff list and the day-close breakdown.'
+                        : undefined
+                    }
+                  />
                 </TableCell>
               </TableRow>
             ) : (
               filtered.map((department) => (
-                <TableRow key={department.id} className={department.is_active ? undefined : 'opacity-60'}>
+                <TableRow
+                  key={department.id}
+                  className={department.is_active ? 'even:bg-muted/25' : 'opacity-60 even:bg-muted/25'}
+                >
                   <TableCell className="font-mono text-xs">{department.code}</TableCell>
                   <TableCell className="font-medium">{department.name}</TableCell>
                   <TableCell>
-                    <Badge variant={department.is_active ? 'secondary' : 'outline'}>
+                    <Badge variant={department.is_active ? 'success' : 'outline'}>
                       {department.is_active ? 'Active' : 'Inactive'}
                     </Badge>
                   </TableCell>
@@ -229,7 +244,7 @@ function DepartmentDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={action} className="grid gap-3">
+        <form action={action} className="grid gap-4">
           <input type="hidden" name="id" value={department.id} />
 
           <FormMessage state={state} />
@@ -271,10 +286,10 @@ function DepartmentDialog({
           </label>
 
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <SubmitButton size="sm" pendingLabel="Saving...">
+            <SubmitButton pendingLabel="Saving...">
               {isNew ? 'Create department' : 'Save changes'}
             </SubmitButton>
           </DialogFooter>
@@ -314,7 +329,7 @@ function DeactivateDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={action} className="grid gap-3">
+        <form action={action} className="grid gap-4">
           <input type="hidden" name="id" value={department.id} />
           <input type="hidden" name="is_active" value="false" />
 
@@ -338,10 +353,10 @@ function DeactivateDialog({
           </Field>
 
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <SubmitButton size="sm" variant="destructive" disabled={!matches} pendingLabel="Working...">
+            <SubmitButton variant="destructive" disabled={!matches} pendingLabel="Working...">
               Deactivate
             </SubmitButton>
           </DialogFooter>

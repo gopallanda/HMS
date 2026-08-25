@@ -25,16 +25,16 @@ export default async function DoctorQueuePage() {
 
   if (session.staffId === null) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <PageHeader title="My queue" description={formatDate(today)} />
         <Card className="mx-auto mt-6 max-w-md">
           <CardContent className="grid gap-3 text-center">
-            <span className="mx-auto flex size-9 items-center justify-center rounded-lg bg-muted">
-              <StethoscopeIcon className="size-4 text-muted-foreground" />
+            <span className="mx-auto grid size-11 place-items-center rounded-xl bg-primary/10">
+              <StethoscopeIcon className="size-5 stroke-[1.5] text-primary" />
             </span>
-            <div className="grid gap-1">
-              <p className="text-sm font-semibold">This login has no staff record</p>
-              <p className="text-xs text-muted-foreground">
+            <div className="grid gap-1.5">
+              <p className="text-base font-semibold">This login has no staff record</p>
+              <p className="text-sm leading-relaxed text-muted-foreground">
                 A queue follows the doctor on the staff list, not the account. Ask an
                 administrator to attach this login to your staff record under Admin &rarr;
                 Staff, and today&apos;s patients will appear here.
@@ -68,9 +68,9 @@ export default async function DoctorQueuePage() {
 
   if (error) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <PageHeader title="My queue" description={formatDate(today)} />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           Your queue could not be loaded: {error.message}
         </p>
       </div>
@@ -111,13 +111,13 @@ export default async function DoctorQueuePage() {
   }));
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-5">
       <PageHeader
         title="My queue"
         description={`${session.staffName ?? 'Today'} · ${formatDate(today)}`}
       />
       {writtenError ? (
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           Your queue is shown, but the notes written so far could not be read:{' '}
           {writtenError.message}
         </p>

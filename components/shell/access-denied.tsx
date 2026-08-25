@@ -23,22 +23,22 @@ export function AccessDenied({
   audience?: string;
 }) {
   return (
-    <Card className="mx-auto mt-10 max-w-md">
-      <CardContent className="grid gap-3 text-center">
-        <span className="mx-auto flex size-9 items-center justify-center rounded-lg bg-muted">
-          <ShieldIcon className="size-4 text-muted-foreground" />
+    <Card className="mx-auto mt-12 max-w-md">
+      <CardContent className="grid gap-4 py-4 text-center">
+        <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10">
+          <ShieldIcon className="size-6 stroke-[1.5] text-primary" />
         </span>
-        <div className="grid gap-1">
-          <p className="text-sm font-semibold">
+        <div className="grid gap-1.5">
+          <p className="text-base font-semibold">
             {area} is for {audience}
           </p>
-          <p className="text-xs text-muted-foreground">
+          <p className="text-sm leading-relaxed text-muted-foreground">
             You are signed in as {roleLabel(role)}. Ask an administrator if you need access, or
             sign in with an account that has it.
           </p>
         </div>
-        <Button asChild variant="outline" size="sm" className="mx-auto">
-          <Link href="/">Back to overview</Link>
+        <Button asChild variant="outline" className="mx-auto">
+          <Link href="/">Go to overview</Link>
         </Button>
       </CardContent>
     </Card>

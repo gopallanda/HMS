@@ -19,7 +19,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // QueryProvider is a client boundary, but `children` is passed through it
     // as a prop, so pages beneath stay Server Components.
     <QueryProvider>
-      <div className="flex min-h-svh flex-1">
+      <div className="flex min-h-svh flex-1 flex-col md:flex-row">
         <AppSidebar
           role={session.role}
           hospitalName={session.hospital.name}
@@ -27,7 +27,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           userName={session.staffName}
           userEmail={session.email}
         />
-        <main className="min-w-0 flex-1 px-4 py-4 md:px-6">
+        <main className="min-w-0 flex-1 px-4 py-4 md:px-6 md:py-6">
           <LifecycleBanner
             hospital={session.hospital}
             lifecycle={session.lifecycle}

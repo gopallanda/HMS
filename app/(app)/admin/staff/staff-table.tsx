@@ -1,11 +1,13 @@
 'use client';
 
-import { KeyRoundIcon, MailPlusIcon, PencilIcon, PlusIcon } from 'lucide-react';
+import { KeyRoundIcon, MailPlusIcon, PencilIcon, PlusIcon, UsersIcon } from 'lucide-react';
 import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { inviteStaff, saveStaff, setStaffActive } from './actions';
+import { EmptyState } from '@/components/shared/empty-state';
 import { Field } from '@/components/shared/field';
+import { KbdHint } from '@/components/shared/kbd';
 import { FormMessage } from '@/components/shared/form-message';
 import { MoneyInput } from '@/components/shared/money-input';
 import { SubmitButton } from '@/components/shared/submit-button';
@@ -37,6 +39,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { fieldError, IDLE, type ActionState } from '@/lib/action-state';
+import { cn } from '@/lib/cn';
 import { APP_ROLES, chargesConsultationFee, ROLE_LABEL, type AppRole } from '@/lib/roles';
 import { INVITABLE_ROLES } from '@/lib/schemas/staff';
 import { formatAmount } from '@/lib/utils/money';
@@ -54,6 +57,19 @@ export type StaffRow = {
 };
 
 export type DepartmentOption = { id: string; name: string; is_active: boolean };
+
+/** "Dr. Anjali Rao" -> "AR". Stands in for the photograph nobody uploads. */
+function initials(name: string): string {
+  return (
+    name
+      .replace(/^(dr|mr|mrs|ms)\.?\s+/i, '')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((word) => word[0]?.toUpperCase() ?? '')
+      .join('') || '?'
+  );
+}
 
 /** Radix Select cannot hold an empty value, so "no department" needs a token. */
 const NO_DEPARTMENT = '__none__';
@@ -126,31 +142,30 @@ export function StaffTable({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
         <Input
           ref={searchInput}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="Search name, role, phone"
-          className="h-8 w-64"
+          className="w-full sm:w-72"
           aria-label="Search staff"
           autoFocus
         />
         <span className="text-xs text-muted-foreground">
           {filtered.length} of {staff.length} &middot; {doctorCount} doctors
         </span>
-        <span className="ml-auto hidden text-xs text-muted-foreground sm:block">
-          <kbd className="rounded border px-1">/</kbd> search
-          <span className="mx-1">&middot;</span>
-          <kbd className="rounded border px-1">N</kbd> new
+        <span className="ml-auto flex items-center gap-4">
+          <KbdHint keys="/">search</KbdHint>
+          <KbdHint keys="N">new</KbdHint>
         </span>
-        <Button size="sm" onClick={() => setEditing(blankStaff())}>
+        <Button onClick={() => setEditing(blankStaff())}>
           <PlusIcon data-icon="inline-start" />
           New staff
         </Button>
       </div>
 
-      <div className="rounded-lg border">
+      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
         <Table>
           <TableHeader>
             <TableRow>
@@ -166,30 +181,49 @@ export function StaffTable({
           </TableHeader>
           <TableBody>
             {filtered.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-xs text-muted-foreground">
-                  {staff.length === 0
-                    ? 'No staff yet. Add the doctors first -- their fee seeds the consultation charge.'
-                    : `Nothing matches "${query}".`}
+              <TableRow className="hover:bg-transparent">
+                <TableCell colSpan={8} className="p-0">
+                  <EmptyState
+                    compact
+                    icon={UsersIcon}
+                    title={
+                      staff.length === 0
+                        ? 'No staff yet'
+                        : `Nothing matches \u201c${query}\u201d`
+                    }
+                    description={
+                      staff.length === 0
+                        ? 'Add the doctors first \u2014 their consultation fee is what seeds the charge on every new visit.'
+                        : undefined
+                    }
+                  />
                 </TableCell>
               </TableRow>
             ) : (
               filtered.map((person) => (
-                <TableRow key={person.id} className={person.is_active ? undefined : 'opacity-60'}>
+                <TableRow
+                  key={person.id}
+                  className={cn('even:bg-muted/25', !person.is_active && 'opacity-60')}
+                >
                   <TableCell className="font-medium">
-                    <span className="flex items-center gap-1.5">
-                      {person.full_name}
+                    <span className="flex items-center gap-2.5">
+                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
+                        {initials(person.full_name)}
+                      </span>
+                      <span className="min-w-0 truncate">{person.full_name}</span>
                       {person.user_id ? (
                         // Someone who can actually sign in. Worth seeing at a
                         // glance: deactivating them does not revoke the login.
                         <KeyRoundIcon
-                          className="size-3 text-muted-foreground"
+                          className="size-3 shrink-0 text-muted-foreground"
                           aria-label="Has a login"
                         />
                       ) : null}
                     </span>
                   </TableCell>
-                  <TableCell className="text-xs">{ROLE_LABEL[person.role]}</TableCell>
+                  <TableCell className="text-xs">
+                    <Badge variant="secondary">{ROLE_LABEL[person.role]}</Badge>
+                  </TableCell>
                   <TableCell className="text-xs">{departmentName(person.department_id)}</TableCell>
                   <TableCell className="font-mono text-xs">{person.phone ?? '-'}</TableCell>
                   <TableCell className="font-mono text-xs">{person.reg_no ?? '-'}</TableCell>
@@ -197,7 +231,7 @@ export function StaffTable({
                     {chargesConsultationFee(person.role) ? formatAmount(person.consultation_fee) : '-'}
                   </TableCell>
                   <TableCell>
-                    <Badge variant={person.is_active ? 'secondary' : 'outline'}>
+                    <Badge variant={person.is_active ? 'success' : 'outline'}>
                       {person.is_active ? 'Active' : 'Inactive'}
                     </Badge>
                   </TableCell>
@@ -317,7 +351,7 @@ function StaffDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={action} className="grid gap-3">
+        <form action={action} className="grid gap-4">
           <input type="hidden" name="id" value={person.id} />
           {/* The Select cannot post an empty value, so the real one is posted
               from here and the token stays in the UI. */}
@@ -341,7 +375,7 @@ function StaffDialog({
             />
           </Field>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Role" htmlFor="staff-role" error={fieldError(state, 'role')} required>
               <Select
                 name="role"
@@ -383,7 +417,7 @@ function StaffDialog({
             </Field>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Phone" htmlFor="staff-phone" error={fieldError(state, 'phone')}>
               <Input
                 id="staff-phone"
@@ -443,10 +477,10 @@ function StaffDialog({
           </label>
 
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <SubmitButton size="sm" pendingLabel="Saving...">
+            <SubmitButton pendingLabel="Saving...">
               {isNew ? 'Create staff record' : 'Save changes'}
             </SubmitButton>
           </DialogFooter>
@@ -484,7 +518,7 @@ function DeactivateDialog({ person, onClose }: { person: StaffRow; onClose: () =
           </DialogDescription>
         </DialogHeader>
 
-        <form action={action} className="grid gap-3">
+        <form action={action} className="grid gap-4">
           <input type="hidden" name="id" value={person.id} />
           <input type="hidden" name="is_active" value="false" />
 
@@ -507,7 +541,7 @@ function DeactivateDialog({ person, onClose }: { person: StaffRow; onClose: () =
           </Field>
 
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <SubmitButton
@@ -564,7 +598,7 @@ function InviteDialog({ person, onClose }: { person: StaffRow; onClose: () => vo
           </DialogDescription>
         </DialogHeader>
 
-        <form action={action} className="grid gap-3">
+        <form action={action} className="grid gap-4">
           <input type="hidden" name="staff_id" value={person.id} />
           <input type="hidden" name="full_name" value={person.full_name} />
 

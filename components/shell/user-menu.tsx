@@ -29,10 +29,13 @@ export function UserMenu({
   name,
   email,
   role,
+  showLabels = true,
 }: {
   name: string | null;
   email: string | null;
   role: AppRole;
+  /** False in the tablet icon rail, where only the avatar fits. */
+  showLabels?: boolean;
 }) {
   // A plain form so sign-out is a real POST to the Server Action, with the
   // menu item merely pressing the button.
@@ -45,17 +48,30 @@ export function UserMenu({
       <form ref={signOutForm} action={signOut} className="hidden" />
 
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left transition-colors hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-full bg-sidebar-accent text-xs font-semibold text-sidebar-accent-foreground">
+        <DropdownMenuTrigger
+          className={
+            showLabels
+              ? 'flex w-full items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-left transition-colors hover:border-sidebar-border hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none'
+              : 'grid w-full place-items-center rounded-lg px-1 py-2 transition-colors hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none'
+          }
+          title={showLabels ? undefined : `${label} — ${roleLabel(role)}`}
+        >
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
             {label.slice(0, 2).toUpperCase()}
           </span>
-          <span className="hidden min-w-0 flex-1 md:block">
-            <span className="block truncate text-xs font-medium">{label}</span>
-            <span className="block truncate text-xs text-muted-foreground">
-              {roleLabel(role)}
-            </span>
-          </span>
-          <ChevronDownIcon className="hidden size-3.5 shrink-0 text-muted-foreground md:block" />
+          {showLabels ? (
+            <>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-xs font-medium">{label}</span>
+                {/* The role reads as a badge, not as a second line of the name:
+                    on a shared machine it is the fact people actually check. */}
+                <span className="mt-0.5 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] leading-none font-semibold tracking-wide text-primary uppercase">
+                  {roleLabel(role)}
+                </span>
+              </span>
+              <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
+            </>
+          ) : null}
         </DropdownMenuTrigger>
 
         <DropdownMenuContent align="start" side="top" className="w-56">

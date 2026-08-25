@@ -106,28 +106,37 @@ export function PrintLayout({
   }, [autoPrint]);
 
   return (
-    <div className="flex min-h-svh flex-col items-center gap-3 bg-muted/40 py-4 print:bg-white print:py-0">
+    <div className="flex min-h-svh flex-col items-center gap-4 bg-muted/40 py-4 print:bg-white print:py-0">
       <style>{SHARED_CSS + (format === 'thermal' ? THERMAL_CSS : A4_CSS)}</style>
 
-      <div className="print-hide flex w-full max-w-[210mm] flex-wrap items-center gap-2 px-3">
+      {/* The paper itself is untouched by this redesign -- @media print and the
+          80mm/A4 sheets are load-bearing. Only the chrome around it moved. */}
+      <div className="print-hide flex w-full max-w-[210mm] flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card px-3 py-2.5 shadow-sm">
         <Button asChild variant="outline" size="sm">
           <Link href={backHref}>Back</Link>
         </Button>
         <span className="text-sm font-medium">{title}</span>
 
-        <div className="ml-auto flex items-center gap-1">
-          {PRINT_FORMATS.map((option) => (
-            <Button
-              key={option}
-              asChild
-              size="sm"
-              variant={option === format ? 'default' : 'outline'}
-            >
-              <Link href={`${documentHref}?format=${option}`} replace>
+        <div className="ml-auto flex items-center gap-2">
+          {/* Paper size as a segmented control: it is one choice out of two,
+              not two competing actions. */}
+          <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+            {PRINT_FORMATS.map((option) => (
+              <Link
+                key={option}
+                href={`${documentHref}?format=${option}`}
+                replace
+                aria-current={option === format ? 'true' : undefined}
+                className={
+                  option === format
+                    ? 'rounded-md bg-background px-3 py-1.5 text-[0.8rem] font-medium shadow-sm'
+                    : 'rounded-md px-3 py-1.5 text-[0.8rem] text-muted-foreground transition-colors hover:text-foreground'
+                }
+              >
                 {PRINT_FORMAT_LABEL[option]}
               </Link>
-            </Button>
-          ))}
+            ))}
+          </div>
           <Button size="sm" onClick={() => window.print()}>
             <PrinterIcon data-icon="inline-start" />
             Print
@@ -135,7 +144,9 @@ export function PrintLayout({
         </div>
       </div>
 
-      <div className="print-sheet shadow-sm print:shadow-none">{children}</div>
+      <div className="print-sheet rounded-sm shadow-md print:rounded-none print:shadow-none">
+        {children}
+      </div>
 
       <p className="print-hide max-w-[210mm] px-3 text-center text-xs text-muted-foreground">
         {format === 'thermal'

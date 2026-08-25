@@ -43,16 +43,18 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-      <Card size="sm">
+    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+      <Card>
         <CardHeader>
-          <CardTitle className="text-sm">Hospital</CardTitle>
+          <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+            Hospital
+          </CardTitle>
           <p className="text-xs text-muted-foreground">
             These fields print at the top of every invoice, receipt and prescription.
           </p>
         </CardHeader>
         <CardContent>
-          <form id={FORM_ID} action={save} className="grid gap-3">
+          <form id={FORM_ID} action={save} className="grid gap-5">
             <FormMessage state={state} />
 
             <Field label="Name" htmlFor="name" error={fieldError(state, 'name')} required>
@@ -67,7 +69,7 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
               />
             </Field>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
               <Field label="Phone" htmlFor="phone" error={fieldError(state, 'phone')}>
                 <Input
                   id="phone"
@@ -84,7 +86,7 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
                 label="GSTIN"
                 htmlFor="gstin"
                 error={fieldError(state, 'gstin')}
-                hint="Optional. Hospital services are largely GST exempt."
+                hint="15 characters, e.g. 29ABCDE1234F1Z5. Hospital services are largely GST exempt."
               >
                 <Input
                   id="gstin"
@@ -112,7 +114,7 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
               />
             </Field>
 
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-3 border-t border-border/60 pt-4">
               <SubmitButton pendingLabel="Saving...">Save changes</SubmitButton>
               <span className="text-xs text-muted-foreground">
                 Saves the logo selected alongside too.
@@ -122,12 +124,14 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
         </CardContent>
       </Card>
 
-      <Card size="sm" className="h-fit">
+      <Card className="h-fit">
         <CardHeader>
-          <CardTitle className="text-sm">Logo</CardTitle>
+          <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
+            Logo
+          </CardTitle>
         </CardHeader>
         <CardContent className="grid gap-3">
-          <div className="flex items-center gap-3 rounded-lg border border-dashed p-3">
+          <div className="flex items-center gap-3 rounded-xl border border-dashed border-border bg-muted/30 p-3">
             {preview ? (
               // A local blob URL. next/image cannot optimise one, and would
               // only add a loader between the file picker and the preview.
@@ -157,19 +161,19 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
             type="file"
             accept={LOGO_ACCEPT}
             onChange={onPickLogo}
-            className="h-auto py-1.5 text-xs"
+            className="h-auto cursor-pointer py-2 text-xs file:mr-3 file:cursor-pointer file:rounded-md file:bg-muted file:px-2.5 file:py-1"
           />
 
-          {logoError ? <p className="text-xs text-destructive">{logoError}</p> : null}
+          {logoError ? <p className="text-xs font-medium text-destructive">{logoError}</p> : null}
           {fieldError(state, 'logo') ? (
-            <p className="text-xs text-destructive">{fieldError(state, 'logo')}</p>
+            <p className="text-xs font-medium text-destructive">{fieldError(state, 'logo')}</p>
           ) : null}
 
           <FormMessage state={removeState} />
 
           {hospital.logo_url ? (
             <form action={remove}>
-              <SubmitButton variant="outline" size="sm" pendingLabel="Removing...">
+              <SubmitButton variant="outline" pendingLabel="Removing...">
                 <Trash2Icon data-icon="inline-start" />
                 Remove logo
               </SubmitButton>

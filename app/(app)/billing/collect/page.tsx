@@ -55,9 +55,9 @@ export default async function CollectPage({
   const failed = visitResult.error ?? serviceResult.error;
   if (failed) {
     return (
-      <div className="grid gap-4">
+      <div className="grid gap-6">
         <PageHeader title="Collect payment" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           The counter could not be loaded: {failed.message}
         </p>
       </div>
@@ -68,16 +68,16 @@ export default async function CollectPage({
   const services: ServiceOption[] = serviceResult.data ?? [];
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-5">
       <PageHeader
         title="Collect payment"
-        description={`${formatDate(today)} - ${visits.filter((v) => v.pending_count > 0).length} of ${visits.length} visits still to bill`}
+        description={`${formatDate(today)} \u00b7 ${visits.filter((v) => v.pending_count > 0).length} of ${visits.length} visits still to bill`}
         actions={
           <>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline">
               <Link href="/billing/invoices">Invoices</Link>
             </Button>
-            <Button asChild variant="outline" size="sm">
+            <Button asChild variant="outline">
               <Link href="/billing/day-close">Day close</Link>
             </Button>
           </>
@@ -85,7 +85,7 @@ export default async function CollectPage({
       />
 
       {services.length === 0 ? (
-        <p className="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
           The charge master is empty, so no charge can be added at the counter. An administrator
           has to add services before billing works.
         </p>

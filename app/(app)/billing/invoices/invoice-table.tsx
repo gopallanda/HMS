@@ -1,11 +1,12 @@
 'use client';
 
-import { BanIcon, PrinterIcon } from 'lucide-react';
+import { BanIcon, PrinterIcon, ReceiptIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useActionState, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { voidInvoiceAction } from './actions';
+import { EmptyState } from '@/components/shared/empty-state';
 import { Field } from '@/components/shared/field';
 import { FormMessage } from '@/components/shared/form-message';
 import { SubmitButton } from '@/components/shared/submit-button';
@@ -29,6 +30,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { fieldError, IDLE, type ActionState } from '@/lib/action-state';
+import { cn } from '@/lib/cn';
 import {
   INVOICE_STATUS_LABEL,
   INVOICE_STATUS_VARIANT,
@@ -63,9 +65,107 @@ export type InvoiceRowData = {
 export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
   const [voiding, setVoiding] = useState<InvoiceRowData | null>(null);
 
+  if (invoices.length === 0) {
+    return (
+      <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+        <EmptyState
+          icon={ReceiptIcon}
+          title="No invoices here"
+          description="Change the day, or search across every date."
+        />
+      </div>
+    );
+  }
+
   return (
     <>
-      <div className="rounded-lg border">
+      {/* Below `lg` the nine columns become one card per invoice. The numbers
+          stay right-aligned and tabular inside the card, so a column of totals
+          is still a column of totals on a phone (CLAUDE.md 7). */}
+      <div className="grid gap-2 lg:hidden">
+        {invoices.map((invoice) => (
+          <div
+            key={invoice.id}
+            className={cn(
+              'rounded-xl border border-border/60 bg-card p-3 shadow-sm',
+              invoice.status === 'void' && 'opacity-60',
+            )}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p
+                  className={cn(
+                    'truncate font-mono text-xs',
+                    invoice.status === 'void' && 'line-through',
+                  )}
+                >
+                  {invoice.invoice_no}
+                </p>
+                <p className="mt-0.5 truncate font-medium">{invoice.patient_name_snapshot}</p>
+                <p className="truncate font-mono text-xs text-muted-foreground">
+                  {invoice.patient_mrn} &middot; token {invoice.token_no}
+                </p>
+              </div>
+              <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]} className="shrink-0">
+                {INVOICE_STATUS_LABEL[invoice.status]}
+              </Badge>
+            </div>
+
+            <dl className="mt-2.5 grid grid-cols-3 gap-2 border-t border-border/60 pt-2.5 text-xs">
+              <div>
+                <dt className="text-muted-foreground">Total</dt>
+                <dd className="font-medium tabular-nums">{formatAmount(invoice.grand_total)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Paid</dt>
+                <dd className="tabular-nums">{formatAmount(invoice.paid_total)}</dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">Balance</dt>
+                <dd
+                  className={cn(
+                    'tabular-nums',
+                    invoice.balance > 0 ? 'font-medium text-destructive' : 'text-muted-foreground',
+                  )}
+                >
+                  {invoice.balance > 0 ? formatAmount(invoice.balance) : '-'}
+                </dd>
+              </div>
+            </dl>
+
+            {invoice.void_reason ? (
+              <p className="mt-2 text-xs text-muted-foreground">{invoice.void_reason}</p>
+            ) : null}
+
+            <div className="mt-2.5 flex items-center gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">
+                {formatDateTime(invoice.invoice_date)}
+              </span>
+              <div className="ml-auto flex items-center gap-1">
+                <Button asChild variant="ghost" size="icon-sm" title="Print">
+                  <Link href={`/print/invoice/${invoice.id}`}>
+                    <PrinterIcon />
+                    <span className="sr-only">Print {invoice.invoice_no}</span>
+                  </Link>
+                </Button>
+                {invoice.status === 'void' ? null : (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    title="Void"
+                    onClick={() => setVoiding(invoice)}
+                  >
+                    <BanIcon className="text-destructive" />
+                    <span className="sr-only">Void {invoice.invoice_no}</span>
+                  </Button>
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm lg:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -77,106 +177,106 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
               <TableHead className="w-28 text-right">Paid &#8377;</TableHead>
               <TableHead className="w-28 text-right">Balance &#8377;</TableHead>
               <TableHead className="w-28">Status</TableHead>
-              <TableHead className="w-32" />
+              <TableHead className="w-24 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {invoices.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={9} className="py-10 text-center text-xs text-muted-foreground">
-                  No invoices here. Change the day, or search across every date.
+            {invoices.map((invoice) => (
+              <TableRow
+                key={invoice.id}
+                className={cn(
+                  'even:bg-muted/25',
+                  invoice.status === 'void' && 'opacity-60',
+                )}
+              >
+                <TableCell
+                  className={cn(
+                    'font-mono text-xs',
+                    invoice.status === 'void' && 'line-through',
+                  )}
+                >
+                  {invoice.invoice_no}
+                  {invoice.void_reason ? (
+                    <span
+                      className="block truncate font-sans text-xs text-muted-foreground"
+                      title={invoice.void_reason}
+                    >
+                      {invoice.void_reason}
+                    </span>
+                  ) : null}
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground tabular-nums">
+                  {formatDateTime(invoice.invoice_date)}
+                </TableCell>
+                <TableCell>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate font-medium">
+                      {invoice.patient_name_snapshot}
+                    </span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {invoice.patient_mrn} &middot; {invoice.visit_no} &middot; token{' '}
+                      {invoice.token_no}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="truncate text-xs">
+                  {invoice.doctor_name ?? '-'}
+                  {invoice.department_name ? (
+                    <span className="block text-xs text-muted-foreground">
+                      {invoice.department_name}
+                    </span>
+                  ) : null}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatAmount(invoice.grand_total)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {formatAmount(invoice.paid_total)}
+                  {invoice.payment_modes && invoice.payment_modes.length > 0 ? (
+                    <span className="block text-xs text-muted-foreground">
+                      {invoice.payment_modes
+                        .map((mode) => PAYMENT_MODE_LABEL[mode])
+                        .join(', ')}
+                    </span>
+                  ) : null}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {invoice.balance > 0 ? (
+                    <span className="font-medium text-destructive">
+                      {formatAmount(invoice.balance)}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">-</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]}>
+                    {INVOICE_STATUS_LABEL[invoice.status]}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <div className="flex items-center justify-end gap-1">
+                    <Button asChild variant="ghost" size="icon-sm" title="Print">
+                      <Link href={`/print/invoice/${invoice.id}`}>
+                        <PrinterIcon />
+                        <span className="sr-only">Print {invoice.invoice_no}</span>
+                      </Link>
+                    </Button>
+                    {invoice.status === 'void' ? null : (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        title="Void"
+                        onClick={() => setVoiding(invoice)}
+                      >
+                        <BanIcon className="text-destructive" />
+                        <span className="sr-only">Void {invoice.invoice_no}</span>
+                      </Button>
+                    )}
+                  </div>
                 </TableCell>
               </TableRow>
-            ) : (
-              invoices.map((invoice) => (
-                <TableRow
-                  key={invoice.id}
-                  className={invoice.status === 'void' ? 'opacity-60' : undefined}
-                >
-                  <TableCell className="font-mono text-xs">
-                    {invoice.invoice_no}
-                    {invoice.void_reason ? (
-                      <span
-                        className="block truncate font-sans text-xs text-muted-foreground"
-                        title={invoice.void_reason}
-                      >
-                        {invoice.void_reason}
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {formatDateTime(invoice.invoice_date)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium">
-                        {invoice.patient_name_snapshot}
-                      </span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {invoice.patient_mrn} &middot; {invoice.visit_no} &middot; token{' '}
-                        {invoice.token_no}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="truncate text-xs">
-                    {invoice.doctor_name ?? '-'}
-                    {invoice.department_name ? (
-                      <span className="block text-xs text-muted-foreground">
-                        {invoice.department_name}
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatAmount(invoice.grand_total)}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatAmount(invoice.paid_total)}
-                    {invoice.payment_modes && invoice.payment_modes.length > 0 ? (
-                      <span className="block text-xs text-muted-foreground">
-                        {invoice.payment_modes
-                          .map((mode) => PAYMENT_MODE_LABEL[mode])
-                          .join(', ')}
-                      </span>
-                    ) : null}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {invoice.balance > 0 ? (
-                      <span className="font-medium text-destructive">
-                        {formatAmount(invoice.balance)}
-                      </span>
-                    ) : (
-                      <span className="text-muted-foreground">-</span>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]}>
-                      {INVOICE_STATUS_LABEL[invoice.status]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-1">
-                      <Button asChild variant="ghost" size="sm" title="Print">
-                        <Link href={`/print/invoice/${invoice.id}`}>
-                          <PrinterIcon />
-                          <span className="sr-only">Print {invoice.invoice_no}</span>
-                        </Link>
-                      </Button>
-                      {invoice.status === 'void' ? null : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          title="Void"
-                          onClick={() => setVoiding(invoice)}
-                        >
-                          <BanIcon className="text-destructive" />
-                          <span className="sr-only">Void {invoice.invoice_no}</span>
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
+            ))}
           </TableBody>
         </Table>
       </div>
@@ -241,7 +341,7 @@ function VoidDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <form action={action} className="grid gap-3">
+        <form action={action} className="grid gap-4">
           <input type="hidden" name="invoice_id" value={invoice.id} />
 
           <FormMessage state={state} />
@@ -270,11 +370,10 @@ function VoidDialog({
             <span className="mr-auto hidden text-xs text-muted-foreground sm:block">
               The number {invoice.invoice_no} stays used. Nothing is deleted.
             </span>
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
             <SubmitButton
-              size="sm"
               variant="destructive"
               pendingLabel="Voiding..."
               disabled={reason.trim().length < 4}

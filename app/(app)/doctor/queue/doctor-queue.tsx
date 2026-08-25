@@ -1,9 +1,11 @@
 'use client';
 
-import { CheckIcon, FileTextIcon } from 'lucide-react';
+import { CheckIcon, CoffeeIcon, FileTextIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
+import { EmptyState } from '@/components/shared/empty-state';
+import { KbdHint } from '@/components/shared/kbd';
 import { Badge } from '@/components/ui/badge';
 import {
   Table,
@@ -186,7 +188,7 @@ export function DoctorQueue({
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-2 text-xs">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
         <span className="flex items-center gap-1.5">
           <Badge>{open.length}</Badge>
           <span className="text-muted-foreground">
@@ -198,24 +200,89 @@ export function DoctorQueue({
           <span className="text-muted-foreground">seen today</span>
         </span>
 
-        <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span
-            className={cn(
-              'size-1.5 rounded-full',
-              live ? 'bg-emerald-500' : 'bg-muted-foreground/40',
-            )}
-            aria-hidden
-          />
+        <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+          <span className="relative grid size-2 place-items-center" aria-hidden>
+            {live ? (
+              <span className="absolute size-2 animate-ping rounded-full bg-success/60" />
+            ) : null}
+            <span
+              className={cn(
+                'size-2 rounded-full',
+                live ? 'bg-success' : 'bg-muted-foreground/40',
+              )}
+            />
+          </span>
           {live ? 'Live' : 'Connecting...'}
           {updatedAt ? <span>&middot; updated {formatTime(updatedAt)}</span> : null}
         </span>
       </div>
 
-      <div className="rounded-lg border">
+      {open.length === 0 ? (
+        <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+          <EmptyState
+            icon={CoffeeIcon}
+            title="Nobody is waiting for you right now"
+            description="New patients appear here the moment the front desk assigns them to you."
+          />
+        </div>
+      ) : (
+        // Below `md` the row becomes a card. A doctor reads this on a phone
+        // between consultations, where a seven-column table is a scroll.
+        <div className="grid gap-2 md:hidden">
+          {open.map((entry, index) => (
+            <button
+              key={entry.id}
+              type="button"
+              data-index={index}
+              onClick={() => openVisit(entry.id)}
+              onFocus={() => setHighlight(index)}
+              className={cn(
+                'flex w-full items-start gap-3 rounded-xl border bg-card p-3 text-left shadow-sm transition-colors',
+                index === active ? 'border-primary/40 bg-primary/5' : 'border-border/60',
+              )}
+            >
+              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-base font-bold text-primary-foreground tabular-nums">
+                {entry.token_no}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="flex items-start justify-between gap-2">
+                  <span className="min-w-0 truncate font-medium">{entry.patient_name}</span>
+                  <Badge variant={VISIT_STATUS_VARIANT[entry.status]} className="shrink-0">
+                    {VISIT_STATUS_LABEL[entry.status]}
+                  </Badge>
+                </span>
+                <span className="mt-0.5 block truncate text-xs text-muted-foreground">
+                  {ageGender(entry.patient_dob, entry.patient_gender)} &middot;{' '}
+                  <span className="font-mono">{entry.patient_mrn}</span>
+                </span>
+                <span className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                  <span className="tabular-nums">{formatTime(entry.visited_at)}</span>
+                  {entry.visit_type === 'opd' ? null : (
+                    <Badge variant="destructive">{VISIT_TYPE_LABEL[entry.visit_type]}</Badge>
+                  )}
+                  {entry.has_notes ? (
+                    <span className="ml-auto flex items-center gap-1">
+                      <FileTextIcon className="size-3.5" aria-hidden />
+                      Started
+                    </span>
+                  ) : null}
+                </span>
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      <div
+        className={cn(
+          'overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm',
+          open.length === 0 ? 'hidden' : 'hidden md:block',
+        )}
+      >
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-16 text-right">Token</TableHead>
+              <TableHead className="w-16">Token</TableHead>
               <TableHead className="w-20">Time</TableHead>
               <TableHead>Patient</TableHead>
               <TableHead className="w-20">Age / sex</TableHead>
@@ -226,107 +293,106 @@ export function DoctorQueue({
             </TableRow>
           </TableHeader>
           <TableBody ref={listRef}>
-            {open.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={8} className="py-10 text-center text-xs text-muted-foreground">
-                  Nobody is waiting for you right now.
+            {open.map((entry, index) => (
+              <TableRow
+                key={entry.id}
+                data-index={index}
+                tabIndex={0}
+                role="button"
+                aria-label={`Open ${entry.patient_name}, token ${entry.token_no}`}
+                onClick={() => openVisit(entry.id)}
+                onFocus={() => setHighlight(index)}
+                className={cn(
+                  'cursor-pointer',
+                  index === active && 'bg-primary/10 outline-none hover:bg-primary/10',
+                )}
+              >
+                <TableCell>
+                  <span className="grid size-8 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground tabular-nums">
+                    {entry.token_no}
+                  </span>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground tabular-nums">
+                  {formatTime(entry.visited_at)}
+                </TableCell>
+                <TableCell>
+                  <div className="flex min-w-0 flex-col">
+                    <span className="truncate font-medium">{entry.patient_name}</span>
+                    <span className="font-mono text-xs text-muted-foreground">
+                      {entry.patient_mrn}
+                      {entry.patient_phone ? ` - ${entry.patient_phone}` : ''}
+                    </span>
+                  </div>
+                </TableCell>
+                <TableCell className="text-xs tabular-nums">
+                  {ageGender(entry.patient_dob, entry.patient_gender)}
+                </TableCell>
+                <TableCell className="truncate text-xs">
+                  {entry.department_name ?? '-'}
+                </TableCell>
+                <TableCell className="text-xs">
+                  {entry.visit_type === 'opd' ? (
+                    <span className="text-muted-foreground">
+                      {VISIT_TYPE_LABEL[entry.visit_type]}
+                    </span>
+                  ) : (
+                    <Badge variant="destructive">{VISIT_TYPE_LABEL[entry.visit_type]}</Badge>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
+                    {VISIT_STATUS_LABEL[entry.status]}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">
+                  {entry.has_notes ? (
+                    <span className="flex items-center gap-1">
+                      <FileTextIcon className="size-3.5" aria-hidden />
+                      Started
+                    </span>
+                  ) : (
+                    '-'
+                  )}
                 </TableCell>
               </TableRow>
-            ) : (
-              open.map((entry, index) => (
-                <TableRow
-                  key={entry.id}
-                  data-index={index}
-                  tabIndex={0}
-                  role="button"
-                  aria-label={`Open ${entry.patient_name}, token ${entry.token_no}`}
-                  onClick={() => openVisit(entry.id)}
-                  onFocus={() => setHighlight(index)}
-                  className={cn('cursor-pointer', index === active && 'bg-accent/60 outline-none')}
-                >
-                  <TableCell className="text-right text-base font-semibold tabular-nums">
-                    {entry.token_no}
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {formatTime(entry.visited_at)}
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex min-w-0 flex-col">
-                      <span className="truncate font-medium">{entry.patient_name}</span>
-                      <span className="font-mono text-xs text-muted-foreground">
-                        {entry.patient_mrn}
-                        {entry.patient_phone ? ` - ${entry.patient_phone}` : ''}
-                      </span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums">
-                    {ageGender(entry.patient_dob, entry.patient_gender)}
-                  </TableCell>
-                  <TableCell className="truncate text-xs">
-                    {entry.department_name ?? '-'}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {entry.visit_type === 'opd' ? (
-                      <span className="text-muted-foreground">
-                        {VISIT_TYPE_LABEL[entry.visit_type]}
-                      </span>
-                    ) : (
-                      <Badge variant="destructive">{VISIT_TYPE_LABEL[entry.visit_type]}</Badge>
-                    )}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
-                      {VISIT_STATUS_LABEL[entry.status]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">
-                    {entry.has_notes ? (
-                      <span className="flex items-center gap-1">
-                        <FileTextIcon className="size-3.5" aria-hidden />
-                        Started
-                      </span>
-                    ) : (
-                      '-'
-                    )}
-                  </TableCell>
-                </TableRow>
-              ))
-            )}
+            ))}
           </TableBody>
         </Table>
       </div>
 
       {closed.length > 0 ? (
-        <section className="grid gap-1.5">
-          <h2 className="text-xs font-medium text-muted-foreground">Earlier today</h2>
-          <ul className="grid gap-px overflow-hidden rounded-lg border">
+        <section className="grid gap-2">
+          <h2 className="text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
+            Earlier today
+          </h2>
+          <ul className="grid overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
             {closed.map((entry) => (
               <li key={entry.id}>
                 <button
                   type="button"
                   onClick={() => openVisit(entry.id)}
                   className={cn(
-                    'flex w-full items-center gap-3 bg-background px-3 py-1.5 text-left text-xs hover:bg-accent/50',
+                    'flex w-full items-center gap-3 border-b border-border/60 px-3 py-2 text-left text-xs transition-colors last:border-0 hover:bg-muted/50',
                     entry.status === 'cancelled' && 'opacity-60',
                   )}
                 >
-                  <span className="w-8 text-right font-semibold tabular-nums">
+                  <span className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold tabular-nums">
                     {entry.token_no}
                   </span>
                   <span className="min-w-0 flex-1 truncate font-medium">
                     {entry.patient_name}
                   </span>
-                  <span className="font-mono text-xs text-muted-foreground">
+                  <span className="hidden font-mono text-xs text-muted-foreground sm:block">
                     {entry.patient_mrn}
                   </span>
-                  <span className="w-20 text-right text-xs text-muted-foreground tabular-nums">
+                  <span className="hidden w-20 text-right text-xs text-muted-foreground tabular-nums sm:block">
                     {entry.seen_at ? formatTime(entry.seen_at) : ''}
                   </span>
                   <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
                     {VISIT_STATUS_LABEL[entry.status]}
                   </Badge>
                   {entry.has_notes ? (
-                    <CheckIcon className="size-3.5 text-emerald-600" aria-label="Notes written" />
+                    <CheckIcon className="size-3.5 text-success" aria-label="Notes written" />
                   ) : (
                     <span className="size-3.5" aria-hidden />
                   )}
@@ -337,10 +403,10 @@ export function DoctorQueue({
         </section>
       ) : null}
 
-      <p className="text-xs text-muted-foreground">
-        <kbd className="rounded border px-1">↑</kbd> <kbd className="rounded border px-1">↓</kbd>{' '}
-        to move, <kbd className="rounded border px-1">Enter</kbd> to open. The queue updates
-        itself as the front desk registers patients.
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+        <KbdHint keys={['\u2191', '\u2193']}>move</KbdHint>
+        <KbdHint keys="Enter">open</KbdHint>
+        <span>The queue updates itself as the front desk registers patients.</span>
       </p>
     </>
   );

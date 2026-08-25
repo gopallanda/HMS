@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { saveConsultationAction, type SaveConsultationState } from './actions';
 import { Field } from '@/components/shared/field';
 import { FormMessage } from '@/components/shared/form-message';
+import { KbdHint } from '@/components/shared/kbd';
 import { SubmitButton } from '@/components/shared/submit-button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent } from '@/components/ui/card';
@@ -141,26 +142,29 @@ export function ConsultationScreen({
   }, [router, readOnly]);
 
   return (
-    <div className="grid gap-3 lg:grid-cols-[280px_minmax(0,1fr)]">
+    <div className="grid gap-4 lg:grid-cols-[300px_minmax(0,1fr)]">
       {/* ------------------------------------------------------------------ */}
       {/* Who is in the room                                                  */}
       {/* ------------------------------------------------------------------ */}
-      <aside className="grid content-start gap-3">
+      <aside className="grid content-start gap-4">
         <Card>
-          <CardContent className="grid gap-2 text-sm">
+          <CardContent className="grid gap-3 text-sm">
             <div className="flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="truncate font-medium">{visit.patient_name}</p>
-                <p className="font-mono text-xs text-muted-foreground">
-                  {visit.patient_mrn}
-                </p>
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground tabular-nums">
+                  {visit.token_no}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate font-medium">{visit.patient_name}</p>
+                  <p className="font-mono text-xs text-muted-foreground">{visit.patient_mrn}</p>
+                </div>
               </div>
-              <Badge variant={VISIT_STATUS_VARIANT[visit.status]}>
+              <Badge variant={VISIT_STATUS_VARIANT[visit.status]} className="shrink-0">
                 {VISIT_STATUS_LABEL[visit.status]}
               </Badge>
             </div>
 
-            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1 text-xs">
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-t border-border/60 pt-3 text-xs">
               <dt className="text-muted-foreground">Age</dt>
               <dd className="tabular-nums">
                 {formatAge(visit.patient_dob)}{' '}
@@ -191,8 +195,8 @@ export function ConsultationScreen({
             person before, and when" -- so it is dates first, not a wall of
             detail. Opening one is a later phase. */}
         <Card>
-          <CardContent className="grid gap-2">
-            <p className="text-xs font-medium text-muted-foreground">
+          <CardContent className="grid gap-2.5">
+            <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
               Past visits {history && history.length > 0 ? `(${history.length})` : ''}
             </p>
             {history === null ? (
@@ -206,7 +210,10 @@ export function ConsultationScreen({
             ) : (
               <ul className="grid gap-1.5 text-xs">
                 {history.map((past) => (
-                  <li key={past.id} className="flex items-baseline justify-between gap-2">
+                  <li
+                    key={past.id}
+                    className="flex items-baseline justify-between gap-2 border-b border-border/60 pb-1.5 last:border-0 last:pb-0"
+                  >
                     <span className="tabular-nums">{formatDate(past.visited_at)}</span>
                     <span className="min-w-0 flex-1 truncate text-right text-muted-foreground">
                       {past.doctor_name ?? past.department_name ?? VISIT_TYPE_LABEL[past.visit_type]}
@@ -222,14 +229,14 @@ export function ConsultationScreen({
       {/* ------------------------------------------------------------------ */}
       {/* Vitals and notes                                                    */}
       {/* ------------------------------------------------------------------ */}
-      <form ref={formRef} action={action} className="grid content-start gap-3">
+      <form ref={formRef} action={action} className="grid content-start gap-4 pb-20 lg:pb-0">
         <input type="hidden" name="id" value={recordId} />
         <input type="hidden" name="visit_id" value={visit.id} />
 
         <FormMessage state={state} />
 
         {readOnly ? (
-          <p className="flex items-start gap-2 rounded-lg bg-muted px-2.5 py-2 text-xs text-muted-foreground">
+          <p className="flex items-start gap-2 rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground">
             <LockIcon className="mt-0.5 size-3.5 shrink-0" />
             <span>
               This visit is booked to {visit.doctor_name ?? 'another doctor'}, so it is shown
@@ -240,14 +247,17 @@ export function ConsultationScreen({
 
         <Card>
           <CardContent className="grid gap-3">
-            <div className="flex items-baseline justify-between gap-2">
-              <h2 className="text-sm font-semibold">Vitals</h2>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-lg font-medium">Vitals</h2>
               <p className="text-xs text-muted-foreground">
                 Leave a box empty if it was not taken.
               </p>
             </div>
 
-            <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6">
+            {/* Two up on a phone, three on a tablet, six across a desk monitor.
+                Six vitals in one row is the shape of the paper chart these are
+                copied from, so it is the shape a doctor scans fastest. */}
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
               {VITALS.map((spec, index) => (
                 <Field
                   key={spec.key}
@@ -278,8 +288,8 @@ export function ConsultationScreen({
 
         <Card>
           <CardContent className="grid gap-2">
-            <div className="flex items-baseline justify-between gap-2">
-              <h2 className="text-sm font-semibold">Consultation notes</h2>
+            <div className="flex flex-wrap items-baseline justify-between gap-2">
+              <h2 className="text-lg font-medium">Consultation notes</h2>
               {consultation ? (
                 <p className="text-xs text-muted-foreground">
                   Last saved {formatTime(consultation.updated_at)}
@@ -298,16 +308,19 @@ export function ConsultationScreen({
                 'Complaint, findings, impression, advice.\n\nFree text for now -- structured history and prescriptions come in a later phase.'
               }
               aria-invalid={fieldError(state, 'notes') !== undefined}
-              className="min-h-48 font-mono text-sm leading-relaxed"
+              className="min-h-64 font-mono text-sm leading-relaxed"
             />
             {fieldError(state, 'notes') ? (
-              <p className="text-xs text-destructive">{fieldError(state, 'notes')}</p>
+              <p className="text-xs font-medium text-destructive">{fieldError(state, 'notes')}</p>
             ) : null}
           </CardContent>
         </Card>
 
         {readOnly ? null : (
-          <div className="flex flex-wrap items-center gap-2">
+          // Sticky at the bottom of a phone screen: the notes box is taller
+          // than the viewport, and a Save button that scrolled off the end of
+          // it is a note that never gets saved.
+          <div className="fixed inset-x-0 bottom-0 z-20 flex flex-wrap items-center gap-2 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-background/80 lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
             {/*
               Two submit buttons, each carrying its own name and value: the
               browser puts the one that was pressed into the FormData, so what
@@ -333,11 +346,10 @@ export function ConsultationScreen({
               </SubmitButton>
             )}
 
-            <p className="ml-auto hidden text-xs text-muted-foreground sm:block">
-              <kbd className="rounded border px-1">Ctrl</kbd>+
-              <kbd className="rounded border px-1">S</kbd> saves,{' '}
-              <kbd className="rounded border px-1">Esc</kbd> returns to the queue.
-            </p>
+            <span className="ml-auto hidden items-center gap-4 sm:flex">
+              <KbdHint keys={['Ctrl', 'S']}>save</KbdHint>
+              <KbdHint keys="Esc">back to the queue</KbdHint>
+            </span>
           </div>
         )}
 

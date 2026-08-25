@@ -6,6 +6,9 @@ import { cn } from '@/lib/cn';
 /**
  * The banner above a form. Never renders nothing when something went wrong --
  * an error that reaches here is an error the user sees (CLAUDE.md 7).
+ *
+ * Success uses the --success token rather than a literal emerald so that the
+ * banner, the paid badge and the day-close totals are all the same green.
  */
 export function FormMessage({ state, className }: { state: ActionState; className?: string }) {
   if (state.status === 'idle') return null;
@@ -17,10 +20,10 @@ export function FormMessage({ state, className }: { state: ActionState; classNam
       role="status"
       aria-live="polite"
       className={cn(
-        'flex items-start gap-2 rounded-lg px-2.5 py-2 text-sm',
+        'flex items-start gap-2 rounded-lg px-3 py-2.5 text-sm',
         isError
-          ? 'bg-destructive/10 text-destructive'
-          : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400',
+          ? 'bg-destructive/10 text-destructive dark:bg-destructive/15'
+          : 'bg-success/10 text-success dark:bg-success/15',
         className,
       )}
     >
@@ -31,5 +34,32 @@ export function FormMessage({ state, className }: { state: ActionState; classNam
       )}
       <span>{state.message}</span>
     </p>
+  );
+}
+
+/**
+ * A standing note that is neither a failure nor a confirmation -- a duplicate
+ * phone number, a trial ending, a charge already invoiced. Amber, because the
+ * clerk has to decide something, not because anything broke.
+ */
+export function Notice({
+  icon,
+  className,
+  children,
+}: {
+  icon?: React.ReactNode;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div
+      className={cn(
+        'flex items-start gap-2 rounded-lg bg-warning/10 px-3 py-2.5 text-sm text-warning dark:bg-warning/15',
+        className,
+      )}
+    >
+      {icon ?? <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />}
+      <div className="min-w-0 flex-1">{children}</div>
+    </div>
   );
 }
