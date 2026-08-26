@@ -77,6 +77,34 @@ export function money(label: string, max = 999_999.99) {
     });
 }
 
+/**
+ * A percentage, as the operator typed it: "12", "12.5", "12%".
+ *
+ * Separate from money() because the column is different -- tax_rate is
+ * numeric(5,2) with a 0..100 check -- and because 0 is the normal answer here
+ * rather than a suspicious one (CLAUDE.md 8: hospital services are exempt).
+ */
+export function percent(label: string) {
+  return z
+    .union([z.string(), z.number(), z.null(), z.undefined()])
+    .transform((raw, ctx) => {
+      const asString = raw == null ? '' : String(raw).replace('%', '').trim();
+      if (asString === '') return 0;
+
+      const value = Number(asString);
+      if (!/^\d*\.?\d*$/.test(asString) || !Number.isFinite(value)) {
+        ctx.addIssue({ code: 'custom', message: `${label} must be a number, like 0 or 12.` });
+        return z.NEVER;
+      }
+      if (value < 0 || value > 100) {
+        ctx.addIssue({ code: 'custom', message: `${label} must be between 0 and 100.` });
+        return z.NEVER;
+      }
+      // numeric(5,2): two decimals is all the column can hold.
+      return Math.round(value * 100) / 100;
+    });
+}
+
 /** Phone numbers are entered by hand and pasted from WhatsApp. Stay permissive. */
 export function phone(label = 'Phone') {
   return z

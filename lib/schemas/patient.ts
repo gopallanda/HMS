@@ -173,3 +173,49 @@ export const patientSchema = z
   });
 
 export type PatientInput = z.infer<typeof patientSchema>;
+
+/**
+ * Correcting a record that already exists.
+ *
+ * Three deliberate differences from patientSchema above:
+ *
+ *  - No `mrn`. The number is allocated by next_number and printed on every
+ *    document the patient is holding, so it is displayed on the record screen
+ *    and never bound to an input (CLAUDE.md 3.2 -- a consumed number stays
+ *    consumed).
+ *  - No `hospital_id`. The update is scoped by the session's claim and by
+ *    patients_update_desk; a form is not allowed a say in which tenant it
+ *    writes to (CLAUDE.md 3.1).
+ *  - No `force_create`. The duplicate-phone question belongs to registration:
+ *    two people already sharing a mobile is the normal case here, and there is
+ *    no second row about to be created.
+ *
+ * `id` is the row being corrected, not a minted one -- the same dob-or-age
+ * resolution runs, because a correction is exactly where "we typed 44 and it
+ * should have been 24" gets fixed.
+ */
+export const patientEditSchema = z
+  .object({
+    id: z.uuid('Invalid patient.'),
+    full_name: text('Patient name', 2, 120),
+    dob: z.string().trim().nullish().transform((value) => value ?? ''),
+    age_years: z.string().trim().nullish().transform((value) => value ?? ''),
+    gender: z.enum(GENDERS, { error: 'Choose male, female or other.' }),
+    phone: phone(),
+    address: optionalText('Address', 300),
+  })
+  .transform((value, ctx) => {
+    const dob = resolveDob(value.dob, value.age_years, ctx);
+    if (dob === z.NEVER) return z.NEVER;
+
+    return {
+      id: value.id,
+      full_name: value.full_name,
+      dob,
+      gender: value.gender,
+      phone: value.phone,
+      address: value.address,
+    };
+  });
+
+export type PatientEditInput = z.infer<typeof patientEditSchema>;

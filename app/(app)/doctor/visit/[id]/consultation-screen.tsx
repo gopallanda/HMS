@@ -1,6 +1,7 @@
 'use client';
 
 import { LockIcon } from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -155,7 +156,14 @@ export function ConsultationScreen({
                   {visit.token_no}
                 </span>
                 <div className="min-w-0">
-                  <p className="truncate font-medium">{visit.patient_name}</p>
+                  {/* The name is the way into the full record -- every visit,
+                      every note, and (for whoever may see it) every bill. */}
+                  <Link
+                    href={`/patients/${visit.patient_id}`}
+                    className="block truncate font-medium underline-offset-4 hover:underline"
+                  >
+                    {visit.patient_name}
+                  </Link>
                   <p className="font-mono text-xs text-muted-foreground">{visit.patient_mrn}</p>
                 </div>
               </div>
@@ -193,11 +201,18 @@ export function ConsultationScreen({
 
         {/* Past visit dates. The question this answers is "have I seen this
             person before, and when" -- so it is dates first, not a wall of
-            detail. Opening one is a later phase. */}
+            detail. Ten of them, and the link goes to the patient record, which
+            carries the whole history and the notes written on it. */}
         <Card>
           <CardContent className="grid gap-2.5">
-            <p className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
-              Past visits {history && history.length > 0 ? `(${history.length})` : ''}
+            <p className="flex items-baseline justify-between gap-2 text-xs font-medium tracking-wider text-muted-foreground uppercase">
+              <span>Past visits {history && history.length > 0 ? `(${history.length})` : ''}</span>
+              <Link
+                href={`/patients/${visit.patient_id}`}
+                className="text-xs font-medium tracking-normal text-primary normal-case underline-offset-4 hover:underline"
+              >
+                Full record
+              </Link>
             </p>
             {history === null ? (
               <p className="text-xs text-destructive">

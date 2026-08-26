@@ -52,6 +52,7 @@ export type InvoiceRowData = {
   grand_total: number;
   paid_total: number;
   balance: number;
+  patient_id: string;
   patient_name_snapshot: string;
   patient_mrn: string;
   visit_no: string;
@@ -101,7 +102,12 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
                 >
                   {invoice.invoice_no}
                 </p>
-                <p className="mt-0.5 truncate font-medium">{invoice.patient_name_snapshot}</p>
+                <Link
+                  href={`/patients/${invoice.patient_id}`}
+                  className="mt-0.5 block truncate font-medium underline-offset-4 hover:underline"
+                >
+                  {invoice.patient_name_snapshot}
+                </Link>
                 <p className="truncate font-mono text-xs text-muted-foreground">
                   {invoice.patient_mrn} &middot; token {invoice.token_no}
                 </p>
@@ -210,9 +216,16 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
                 </TableCell>
                 <TableCell>
                   <div className="flex min-w-0 flex-col">
-                    <span className="truncate font-medium">
+                    {/* The snapshot is what was printed on this bill; the
+                        link goes to the record as it stands today, which is
+                        exactly the pair somebody chasing a balance needs
+                        (CLAUDE.md 4). */}
+                    <Link
+                      href={`/patients/${invoice.patient_id}`}
+                      className="truncate font-medium underline-offset-4 hover:underline"
+                    >
                       {invoice.patient_name_snapshot}
-                    </span>
+                    </Link>
                     <span className="font-mono text-xs text-muted-foreground">
                       {invoice.patient_mrn} &middot; {invoice.visit_no} &middot; token{' '}
                       {invoice.token_no}

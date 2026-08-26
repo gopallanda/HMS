@@ -23,7 +23,7 @@ export default async function QueuePage() {
   const { data, error } = await supabase
     .from('visit_queue')
     .select(
-      'id, visit_no, token_no, visit_type, status, visited_at, patient_mrn, patient_name, patient_dob, patient_gender, patient_phone, doctor_name, department_name, charge_total',
+      'id, visit_no, token_no, visit_type, status, visited_at, patient_id, patient_mrn, patient_name, patient_dob, patient_gender, patient_phone, doctor_name, department_name, charge_total',
     )
     .eq('hospital_id', session.hospitalId)
     .eq('visit_date', today)

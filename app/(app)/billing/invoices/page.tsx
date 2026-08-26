@@ -39,7 +39,7 @@ export default async function InvoicesPage({
   let query = supabase
     .from('invoice_summary')
     .select(
-      'id, invoice_no, invoice_date, status, void_reason, subtotal, tax_total, grand_total, paid_total, balance, patient_name_snapshot, patient_mrn, visit_no, token_no, doctor_name, department_name, payment_modes, created_by_name',
+      'id, invoice_no, invoice_date, status, void_reason, subtotal, tax_total, grand_total, paid_total, balance, patient_id, patient_name_snapshot, patient_mrn, visit_no, token_no, doctor_name, department_name, payment_modes, created_by_name',
     )
     .eq('hospital_id', session.hospitalId);
 

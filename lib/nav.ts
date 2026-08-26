@@ -16,9 +16,11 @@ import {
   BuildingIcon,
   Building2Icon,
   CalendarClockIcon,
+  ContactRoundIcon,
   CreditCardIcon,
   LayoutDashboardIcon,
   ReceiptIcon,
+  ReceiptIndianRupeeIcon,
   SlidersHorizontalIcon,
   StethoscopeIcon,
   UserRoundPlusIcon,
@@ -126,6 +128,33 @@ export const NAV: readonly NavSection[] = [
       },
     ],
   },
+  /**
+   * Deliberately AFTER Clinical, and deliberately `roles: []`.
+   *
+   * Everybody looks a patient up: the cashier chasing a balance, the doctor
+   * checking what was written last month, the lab matching a sample to a name.
+   * What each of them SEES on the record differs by role -- the money and the
+   * clinical panels are gated on the page itself -- but the door is the same
+   * one.
+   *
+   * The position matters beyond tidiness: landingFor() drops a user on the
+   * first ready item they can see, so a section carrying an everyone-item
+   * placed above Front desk or Billing would quietly move reception and the
+   * cashier off the screen they open all day.
+   */
+  {
+    label: 'Records',
+    items: [
+      {
+        href: '/patients',
+        label: 'Patients',
+        icon: ContactRoundIcon,
+        roles: [],
+        status: 'ready',
+        phase: 1,
+      },
+    ],
+  },
   {
     label: 'Administration',
     items: [
@@ -152,6 +181,14 @@ export const NAV: readonly NavSection[] = [
         roles: ADMIN,
         status: 'ready',
         phase: 0,
+      },
+      {
+        href: '/admin/services',
+        label: 'Price list',
+        icon: ReceiptIndianRupeeIcon,
+        roles: ADMIN,
+        status: 'ready',
+        phase: 1,
       },
     ],
   },

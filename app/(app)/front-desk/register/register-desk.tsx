@@ -1,6 +1,5 @@
 'use client';
 
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import {
   SearchIcon,
   TicketIcon,
@@ -21,6 +20,11 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { Field } from '@/components/shared/field';
 import { FormMessage, Notice } from '@/components/shared/form-message';
 import { Kbd, KbdHint } from '@/components/shared/kbd';
+import {
+  MIN_QUERY,
+  PatientResultRow,
+  usePatientSearch,
+} from '@/components/shared/patient-search';
 import { SubmitButton } from '@/components/shared/submit-button';
 import { Button } from '@/components/ui/button';
 import {
@@ -43,9 +47,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { fieldError, IDLE } from '@/lib/action-state';
 import { cn } from '@/lib/cn';
 import { ageGender, GENDERS, GENDER_LABEL, type Gender } from '@/lib/patients';
-import { searchPatients, type PatientSearchResult } from '@/lib/rpc/patients';
-import { createClient } from '@/lib/supabase/client';
-import { formatDate } from '@/lib/utils/dates';
+import type { PatientSearchResult } from '@/lib/rpc/patients';
 import { formatMoney } from '@/lib/utils/money';
 import { VISIT_TYPES_AT_DESK, VISIT_TYPE_LABEL, type VisitType } from '@/lib/visits';
 
@@ -58,21 +60,14 @@ export type DoctorOption = {
 
 export type DepartmentOption = { id: string; name: string };
 
-/**
- * Shorter than this and the trigram indexes cannot be used, so
- * search_patients returns nothing on purpose rather than scanning the table on
- * every keystroke.
- */
-const MIN_QUERY = 3;
-
-/** Long enough to swallow a fast typist's next keystroke, short enough to feel live. */
-const DEBOUNCE_MS = 150;
-
 /** Radix Select cannot hold an empty value, so "no department" needs a token. */
 const NO_DEPARTMENT = '__none__';
 
-/** A patient, as this screen needs it -- from the search or fresh from a register. */
-type DeskPatient = {
+/**
+ * A patient, as this screen needs it -- from the search, fresh from a register,
+ * or handed in by the patient record's "New visit" button (?patient=<id>).
+ */
+export type DeskPatient = {
   id: string;
   mrn: string;
   full_name: string;
@@ -106,44 +101,23 @@ function prefillFrom(query: string): { full_name: string; phone: string } {
     : { full_name: trimmed, phone: '' };
 }
 
-/** The shared search hook: same query key everywhere, so the cache is shared. */
-function usePatientSearch(query: string, enabled = true) {
-  const supabase = useMemo(() => createClient(), []);
-  const [debounced, setDebounced] = useState(query.trim());
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(query.trim()), DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [query]);
-
-  const active = enabled && debounced.length >= MIN_QUERY;
-
-  const result = useQuery({
-    queryKey: ['patient-search', debounced],
-    enabled: active,
-    // Keeps the previous list on screen while the next one loads, so the
-    // results do not blink out from under a finger already moving to Enter.
-    placeholderData: keepPreviousData,
-    queryFn: async () => {
-      const { data, error } = await searchPatients(supabase, debounced);
-      if (error) throw new Error(error.message);
-      return data ?? [];
-    },
-  });
-
-  return { ...result, debounced, active };
-}
-
 export function RegisterDesk({
   doctors,
   departments,
+  initialPatient = null,
 }: {
   doctors: DoctorOption[];
   departments: DepartmentOption[];
+  /**
+   * Resolved from ?patient=<id> on the server: somebody pressed "New visit" on
+   * a patient record, so the visit dialog opens on that patient instead of
+   * asking them to search for a person they were already looking at.
+   */
+  initialPatient?: DeskPatient | null;
 }) {
   const [query, setQuery] = useState('');
   const [registering, setRegistering] = useState<{ full_name: string; phone: string } | null>(null);
-  const [visitFor, setVisitFor] = useState<DeskPatient | null>(null);
+  const [visitFor, setVisitFor] = useState<DeskPatient | null>(initialPatient);
   const [lastVisit, setLastVisit] = useState<{
     token_no: number;
     visit_no: string;
@@ -349,7 +323,7 @@ export function RegisterDesk({
           />
         ) : (
           results.map((patient, index) => (
-            <PatientRow
+            <PatientResultRow
               key={patient.id}
               patient={patient}
               index={index}
@@ -392,62 +366,6 @@ export function RegisterDesk({
         />
       ) : null}
     </>
-  );
-}
-
-function PatientRow({
-  patient,
-  index,
-  selected,
-  onHover,
-  onPick,
-}: {
-  patient: PatientSearchResult;
-  index: number;
-  selected: boolean;
-  onHover: () => void;
-  onPick: () => void;
-}) {
-  return (
-    <div
-      data-index={index}
-      role="option"
-      aria-selected={selected}
-      tabIndex={-1}
-      onMouseMove={onHover}
-      onClick={onPick}
-      className={cn(
-        'flex cursor-pointer items-center gap-3 border-b border-border/60 px-3 py-2.5 text-sm transition-colors last:border-0 sm:px-4',
-        selected ? 'bg-primary/10' : 'hover:bg-muted/60',
-      )}
-    >
-      <span className="min-w-0 flex-1">
-        <span className="flex items-baseline gap-2">
-          <span className="truncate font-medium">{patient.full_name}</span>
-          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">
-            {ageGender(patient.dob, patient.gender)}
-          </span>
-        </span>
-        {/* Below `sm` the columns collapse into one line of metadata under the
-            name: a 360px screen has room for who this is, not for a table. */}
-        <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-muted-foreground sm:hidden">
-          <span className="font-mono">{patient.mrn}</span>
-          {patient.phone ? <span className="font-mono">{patient.phone}</span> : null}
-        </span>
-      </span>
-
-      <span className="hidden w-40 shrink-0 font-mono text-xs text-muted-foreground sm:block">
-        {patient.mrn}
-      </span>
-      <span className="hidden w-36 shrink-0 font-mono text-xs sm:block">
-        {patient.phone ?? '-'}
-      </span>
-      <span className="hidden w-44 shrink-0 text-right text-xs text-muted-foreground lg:block">
-        {patient.last_visit_at
-          ? `${patient.visit_count} visit${patient.visit_count === 1 ? '' : 's'} \u00b7 last ${formatDate(patient.last_visit_at)}`
-          : 'No visits yet'}
-      </span>
-    </div>
   );
 }
 

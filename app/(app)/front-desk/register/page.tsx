@@ -1,6 +1,11 @@
 import Link from 'next/link';
 
-import { RegisterDesk, type DepartmentOption, type DoctorOption } from './register-desk';
+import {
+  RegisterDesk,
+  type DepartmentOption,
+  type DeskPatient,
+  type DoctorOption,
+} from './register-desk';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { requireSession } from '@/lib/auth/session';
@@ -9,7 +14,12 @@ import { createClient } from '@/lib/supabase/server';
 
 export const metadata = { title: 'Register patient' };
 
-export default async function RegisterPage() {
+export default async function RegisterPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ patient?: string }>;
+}) {
+  const { patient: patientId } = await searchParams;
   const session = await requireSession();
   const supabase = await createClient();
 
@@ -47,6 +57,17 @@ export default async function RegisterPage() {
   const doctors: DoctorOption[] = doctorResult.data ?? [];
   const departments: DepartmentOption[] = departmentResult.data ?? [];
 
+  /**
+   * ?patient=<id> -- the deep link from a patient record's "New visit".
+   *
+   * A miss is not an error here. The desk still works exactly as it always
+   * does; the only thing lost is the head start, so a stale link opens the
+   * search box rather than an apology. A soft-deleted patient is a miss on
+   * purpose -- create_visit refuses one, and offering the dialog anyway would
+   * walk the operator into that refusal.
+   */
+  const initialPatient = patientId ? await loadPatient(supabase, session.hospitalId, patientId) : null;
+
   return (
     <div className="grid gap-5">
       <PageHeader
@@ -74,7 +95,36 @@ export default async function RegisterPage() {
         </p>
       ) : null}
 
-      <RegisterDesk doctors={doctors} departments={departments} />
+      <RegisterDesk
+        doctors={doctors}
+        departments={departments}
+        initialPatient={initialPatient}
+      />
     </div>
   );
+}
+
+async function loadPatient(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  hospitalId: string,
+  id: string,
+): Promise<DeskPatient | null> {
+  const { data } = await supabase
+    .from('patients')
+    .select('id, mrn, full_name, dob, gender, phone, deleted_at')
+    .eq('hospital_id', hospitalId)
+    .eq('id', id)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    mrn: data.mrn,
+    full_name: data.full_name,
+    dob: data.dob,
+    gender: data.gender,
+    phone: data.phone,
+  };
 }

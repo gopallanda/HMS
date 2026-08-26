@@ -15,6 +15,11 @@
 -- the waiting stage, so the billing and doctor screens both open with
 -- something other than zeroes.
 --
+-- It also back-dates five earlier visits, with notes, across three of those
+-- patients. That is what gives the patient record a history to show: Arjun
+-- Reddy ends up with three visits, real consultation notes and the part-paid
+-- invoice, which is the record worth opening in a demo.
+--
 -- Runs as the postgres role: RLS does not apply, and the audit rows it writes
 -- carry actor_id null.
 -- =============================================================================
@@ -278,6 +283,115 @@ begin
   end loop;
 
   raise notice 'seed: 20 sample patients present';
+end;
+$$;
+
+-- =============================================================================
+-- Earlier visits -- so a patient record has a history rather than one line.
+--
+-- The patient record screen (/patients/[id]) is a timeline, a billing panel and
+-- a list of consultation notes. With only today's queue seeded, every patient
+-- in the demo has exactly one visit and no notes at all, which is the one shape
+-- that makes a timeline look like a bug.
+--
+-- Three patients get a past between three weeks and four months ago, and each
+-- of those visits carries the vitals and the note a doctor actually wrote.
+-- Arjun Reddy is deliberately one of them: his is the visit today's billing
+-- block leaves PART PAID, so his record is the demo that shows a real history
+-- above a non-zero outstanding balance.
+--
+-- seed_consultation is false here on purpose. A consultation charge raised on a
+-- visit four months ago and still sitting unbilled would be a debt this
+-- hospital never chased, and the honest alternative -- an invoice dated back to
+-- the visit -- is not on offer: collect_payment stamps invoice_date itself, and
+-- the seed is not going to reach past an RPC and rewrite a money column to make
+-- a demo look tidier (CLAUDE.md 3.2). These are visits that were settled before
+-- this system existed.
+--
+-- Idempotent on "does this hospital have any visit before today". Unlike the
+-- queue below, this block must NOT reproduce itself tomorrow -- yesterday's
+-- seeded queue is already a history by then.
+--
+-- Back-dating is a service-role privilege that create_visit only grants when
+-- there is no JWT claim, which is exactly the case here.
+-- =============================================================================
+do $$
+declare
+  v_hospital uuid := '00000000-0000-4000-8000-000000000001';
+  v_visit    public.visits;
+  v_ids      uuid[] := '{}';
+  r          record;
+begin
+  if exists (
+    select 1 from public.visits v
+    where v.hospital_id = v_hospital
+      and public.ist_date(v.visited_at) < public.ist_date(now())
+  ) then
+    raise notice 'seed: this hospital already has visits before today, history left alone';
+    return;
+  end if;
+
+  for r in
+    select * from (values
+      -- Arjun Reddy: the knee, twice. Same doctor both times.
+      ('00000000-0000-4000-8000-000000000303'::uuid, '00000000-0000-4000-8000-000000000202'::uuid,
+       112, 128, 82, 76, 98.4, 74.5, 98,
+       'Right knee pain after a fall on the stairs, three days.' || chr(10) ||
+       'Mild effusion, full range of movement, no bony tenderness.' || chr(10) ||
+       'Impression: soft tissue injury.' || chr(10) ||
+       'Advice: rest, ice, analgesia. Review in two weeks if not settling.'),
+      ('00000000-0000-4000-8000-000000000303'::uuid, '00000000-0000-4000-8000-000000000202'::uuid,
+       63, 124, 80, 72, 98.2, 75.0, 99,
+       'Review. Knee much improved, occasional ache after long standing.' || chr(10) ||
+       'No swelling today.' || chr(10) || 'Advice: resume normal activity, quadriceps exercises.'),
+      -- Ramesh Gowda: a diabetic follow-up, which is what an OPD sees most of.
+      ('00000000-0000-4000-8000-000000000301'::uuid, '00000000-0000-4000-8000-000000000201'::uuid,
+       97, 148, 92, 84, 98.6, 81.2, 97,
+       'Type 2 diabetes, on metformin. Reports good compliance.' || chr(10) ||
+       'BP raised today; no headache, no visual disturbance.' || chr(10) ||
+       'Advice: repeat BP in two weeks, reduce salt, continue current dose.'),
+      ('00000000-0000-4000-8000-000000000301'::uuid, '00000000-0000-4000-8000-000000000201'::uuid,
+       21, 138, 86, 80, 98.4, 80.4, 98,
+       'BP better on repeat. Continues metformin.' || chr(10) ||
+       'Advice: continue, review in three months.'),
+      -- Kavita Rao: one earlier visit, and vitals taken with no note written --
+      -- the shape the record has when a nurse saw the patient and the doctor
+      -- did not get to the notes. The panel has to read correctly for it.
+      ('00000000-0000-4000-8000-00000000030d'::uuid, '00000000-0000-4000-8000-000000000203'::uuid,
+       41, 118, 76, 88, 99.1, 58.0, 99, null)
+    ) as t(patient_id, doctor_id, days_ago, bp_systolic, bp_diastolic, pulse,
+           temperature_f, weight_kg, spo2, notes)
+    order by days_ago desc
+  loop
+    v_visit := public.create_visit(jsonb_build_object(
+      'hospital_id',       v_hospital,
+      'patient_id',        r.patient_id,
+      'doctor_id',         r.doctor_id,
+      'visit_type',        'opd',
+      'visited_at',        now() - make_interval(days => r.days_ago),
+      'seed_consultation', false
+    ));
+
+    v_ids := v_ids || v_visit.id;
+
+    perform public.save_consultation(jsonb_build_object(
+      'hospital_id',   v_hospital,
+      'visit_id',      v_visit.id,
+      'bp_systolic',   r.bp_systolic,
+      'bp_diastolic',  r.bp_diastolic,
+      'pulse',         r.pulse,
+      'temperature_f', r.temperature_f,
+      'weight_kg',     r.weight_kg,
+      'spo2',          r.spo2,
+      'notes',         r.notes,
+      -- Every one of them is over and done with. A past visit still reading
+      -- "waiting" would put five ghosts at the top of a queue history, and
+      -- save_consultation is the one path allowed to move a visit's status.
+      'visit_status',  'completed'
+    ));
+  end loop;
+
+  raise notice 'seed: % earlier visits with notes, for the patient record', array_length(v_ids, 1);
 end;
 $$;
 

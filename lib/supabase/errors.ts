@@ -22,6 +22,7 @@ const CONSTRAINT_MESSAGE: Record<string, string> = {
   staff_hospital_id_user_id_key: 'That login is already attached to another staff record.',
   staff_department_same_hospital_fkey:
     'That department belongs to a different hospital.',
+  services_hospital_id_lower_name_key: 'A service with that name already exists.',
   patients_hospital_id_mrn_key: 'That MRN is already in use.',
   visits_hospital_id_visit_no_key: 'That visit number is already in use.',
   visits_hospital_id_day_token_key:
@@ -55,6 +56,17 @@ const CONSTRAINT_MESSAGE: Record<string, string> = {
     'Systolic has to be higher than diastolic. Check the two boxes.',
   consultations_visit_same_hospital_fkey: 'That visit belongs to a different hospital.',
 };
+
+/**
+ * Whether a rejection came from one named constraint.
+ *
+ * describeDatabaseError turns a constraint into a sentence for the banner; this
+ * lets an action put that same sentence under the field that caused it, which
+ * is where the person's eyes already are (see components/shared/field.tsx).
+ */
+export function violates(error: DatabaseError, constraint: string): boolean {
+  return `${error.message} ${error.details ?? ''}`.includes(constraint);
+}
 
 export function describeDatabaseError(error: DatabaseError): string {
   const haystack = `${error.message} ${error.details ?? ''}`;

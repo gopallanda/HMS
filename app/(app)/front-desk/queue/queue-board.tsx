@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useRef, useState } from 'react';
 
@@ -36,6 +37,7 @@ export type QueueEntry = {
   visit_type: VisitType;
   status: VisitStatus;
   visited_at: string;
+  patient_id: string;
   patient_mrn: string;
   patient_name: string;
   patient_dob: string;
@@ -177,7 +179,12 @@ export function QueueBoard({
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 truncate font-medium">{entry.patient_name}</span>
+                  <Link
+                    href={`/patients/${entry.patient_id}`}
+                    className="min-w-0 truncate font-medium underline-offset-4 hover:underline"
+                  >
+                    {entry.patient_name}
+                  </Link>
                   <Badge variant={VISIT_STATUS_VARIANT[entry.status]} className="shrink-0">
                     {VISIT_STATUS_LABEL[entry.status]}
                   </Badge>
@@ -242,7 +249,15 @@ export function QueueBoard({
                 </TableCell>
                 <TableCell>
                   <div className="flex min-w-0 flex-col">
-                    <span className="truncate font-medium">{entry.patient_name}</span>
+                    {/* The name is the door to the record: the desk is asked
+                        "when was she last here" far more often than anything
+                        else on this row. */}
+                    <Link
+                      href={`/patients/${entry.patient_id}`}
+                      className="truncate font-medium underline-offset-4 hover:underline"
+                    >
+                      {entry.patient_name}
+                    </Link>
                     <span className="font-mono text-xs text-muted-foreground">
                       {entry.patient_mrn}
                       {entry.patient_phone ? ` - ${entry.patient_phone}` : ''}

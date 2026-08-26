@@ -38,6 +38,7 @@ import {
 import { cn } from '@/lib/cn';
 import { ageGender, type Gender } from '@/lib/patients';
 import type { BillLine } from '@/lib/schemas/billing';
+import { SERVICE_CATEGORIES, SERVICE_CATEGORY_LABEL } from '@/lib/services';
 import { createClient } from '@/lib/supabase/client';
 import { formatDate, formatTime } from '@/lib/utils/dates';
 import { formatAmount, formatMoney, lineAmount, parseMoney } from '@/lib/utils/money';
@@ -82,15 +83,6 @@ type AdHocLine = {
   qty: string;
   unit_price: string;
   tax_rate: number;
-};
-
-const CATEGORY_LABEL: Record<ServiceOption['category'], string> = {
-  consultation: 'Consultation',
-  lab: 'Laboratory',
-  procedure: 'Procedures',
-  bed: 'Beds',
-  pharmacy: 'Pharmacy',
-  other: 'Other',
 };
 
 export function CollectDesk({
@@ -725,14 +717,12 @@ export function CollectDesk({
                 <SelectValue placeholder="Add a charge from the service list" />
               </SelectTrigger>
               <SelectContent>
-                {(
-                  ['consultation', 'procedure', 'lab', 'pharmacy', 'bed', 'other'] as const
-                ).map((category) => {
+                {SERVICE_CATEGORIES.map((category) => {
                   const options = services.filter((service) => service.category === category);
                   if (options.length === 0) return null;
                   return (
                     <SelectGroup key={category}>
-                      <SelectLabel>{CATEGORY_LABEL[category]}</SelectLabel>
+                      <SelectLabel>{SERVICE_CATEGORY_LABEL[category]}</SelectLabel>
                       {options.map((service) => (
                         <SelectItem key={service.id} value={service.id}>
                           {service.name} - {formatAmount(service.price)}
