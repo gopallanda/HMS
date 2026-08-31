@@ -41,6 +41,29 @@ const THERMAL_CSS = `
 }
 `;
 
+/**
+ * A5, the second receipt stylesheet (block 5).
+ *
+ * The same 80mm document laid out on half a sheet, for a hospital whose
+ * counter has a laser printer rather than a roll. Deliberately NOT a shrunken
+ * A4 invoice: what the patient is handed at the desk is a receipt either way,
+ * and only the paper changes.
+ */
+const A5_CSS = `
+@page { size: A5; margin: 8mm; }
+@media print {
+  html, body { background: #fff; }
+  .print-sheet { width: auto; padding: 0; box-shadow: none; }
+}
+.print-sheet {
+  width: 148mm;
+  padding: 8mm;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 11px;
+  line-height: 1.45;
+}
+`;
+
 const A4_CSS = `
 @page { size: A4; margin: 12mm; }
 @media print {
@@ -67,6 +90,19 @@ const SHARED_CSS = `
 }
 `;
 
+const PAPER_HINT: Record<PrintFormat, string> = {
+  thermal:
+    'Set the printer to 80mm roll with no scaling. Turn off headers and footers in the browser print dialog.',
+  a5: 'A5 with 8mm margins, no scaling. Turn off headers and footers in the browser print dialog.',
+  a4: 'A4 with 12mm margins. Turn off headers and footers in the browser print dialog.',
+};
+
+const PAPER_CSS: Record<PrintFormat, string> = {
+  thermal: THERMAL_CSS,
+  a5: A5_CSS,
+  a4: A4_CSS,
+};
+
 export function PrintLayout({
   format,
   autoPrint,
@@ -80,7 +116,7 @@ export function PrintLayout({
   autoPrint: boolean;
   backHref: string;
   /**
-   * Path to this document WITHOUT a query, e.g. `/print/invoice/<id>`. The
+   * Path to this document WITHOUT a query, e.g. `/print/receipt/<id>`. The
    * paper buttons append `?format=`.
    *
    * A string rather than the `(format) => string` builder this used to take:
@@ -107,7 +143,7 @@ export function PrintLayout({
 
   return (
     <div className="flex min-h-svh flex-col items-center gap-4 bg-muted/40 py-4 print:bg-white print:py-0">
-      <style>{SHARED_CSS + (format === 'thermal' ? THERMAL_CSS : A4_CSS)}</style>
+      <style>{SHARED_CSS + PAPER_CSS[format]}</style>
 
       {/* The paper itself is untouched by this redesign -- @media print and the
           80mm/A4 sheets are load-bearing. Only the chrome around it moved. */}
@@ -149,9 +185,7 @@ export function PrintLayout({
       </div>
 
       <p className="print-hide max-w-[210mm] px-3 text-center text-xs text-muted-foreground">
-        {format === 'thermal'
-          ? 'Set the printer to 80mm roll with no scaling. Turn off headers and footers in the browser print dialog.'
-          : 'A4 with 12mm margins. Turn off headers and footers in the browser print dialog.'}
+        {PAPER_HINT[format]}
       </p>
     </div>
   );

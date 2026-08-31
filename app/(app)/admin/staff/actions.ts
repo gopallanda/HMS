@@ -1,89 +1,141 @@
 'use server';
 
 import { refresh } from 'next/cache';
-import { z } from 'zod';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
-import { requireSessionForAction } from '@/lib/auth/session';
-import { attachStaffLogin } from '@/lib/rpc/onboarding';
-import { isAdminRole } from '@/lib/roles';
-import { staffInviteSchema, staffSchema } from '@/lib/schemas/staff';
+import {
+  provisionStaffAccount as provisionAccount,
+  removeStaffAccount as removeAccount,
+  resetStaffPassword as resetPassword,
+  setAccountEnabled,
+} from '@/lib/accounts/provision';
+import type { CredentialState } from './credential-state';
+import { appBaseUrl } from '@/lib/env';
+import { checkPermission } from '@/lib/auth/session';
+import {
+  provisionAccountSchema,
+  resetStaffPasswordSchema,
+  setAccountEnabledSchema,
+} from '@/lib/schemas/account';
+import { staffActivationSchema, staffSchema } from '@/lib/schemas/staff';
 import { describeDatabaseError } from '@/lib/supabase/errors';
-import { createAdminClient } from '@/lib/supabase/admin';
 import { createClient } from '@/lib/supabase/server';
 
 /**
- * Create or update a staff record.
+ * Staff records and the logins attached to them.
  *
- * Note what this does NOT do: it never touches memberships. A staff row is the
- * hospital's record of a person; a membership is that person's login and the
- * role their JWT carries. Editing someone's staff role here does not silently
- * hand them admin rights in the database -- that is a separate, deliberate act
- * (CLAUDE.md 5).
+ * Note what saveStaff still does NOT do: it never issues credentials. A staff
+ * record is the hospital's record of a person and exists whether or not that
+ * person ever opens the software -- which is the whole point of block 1, and
+ * the reason a cleaner now has somewhere to live.
+ *
+ * Every action here checks a PERMISSION from the session, not a role name. A
+ * hospital that invents "Ward sister" and gives it staff.update gets a working
+ * ward sister without anybody shipping anything; a hardcoded role check would
+ * have locked every custom role out of everything.
  */
+
 export async function saveStaff(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const session = await requireSessionForAction();
-  if (!isAdminRole(session.role)) {
-    return failure('Only an administrator can change staff records.');
+  const id = formData.get('id')?.toString() ?? '';
+  const supabase = await createClient();
+
+  // Creating and editing are different permissions, so which one is being
+  // asked for has to be settled before the check. An id that is already on
+  // file is an edit; anything else is a creation.
+  const existing = id
+    ? await supabase.from('staff').select('id').eq('id', id).maybeSingle()
+    : { data: null };
+
+  const allowed = await checkPermission(existing.data ? 'staff.update' : 'staff.create');
+  if (!allowed.ok) return failure(allowed.message);
+  const { session } = allowed;
+
+  // The doctor-specific rules (a registration number is required, a
+  // consultation fee is forced to zero) depend on which role the posted id
+  // names, and only the database knows that. Resolve it first, then build the
+  // schema around the answer -- one set of rules, not two.
+  const roleId = formData.get('role_id')?.toString() ?? '';
+  const { data: role } = await supabase
+    .from('roles')
+    .select('id, code, name')
+    .eq('id', roleId)
+    .eq('hospital_id', session.hospitalId)
+    .is('deleted_at', null)
+    .maybeSingle();
+
+  if (!role) {
+    return failure('Choose a role.', { role_id: ['That role is not in this hospital.'] });
   }
 
-  const parsed = staffSchema.safeParse({
+  const parsed = staffSchema(role.code).safeParse({
     id: formData.get('id'),
     full_name: formData.get('full_name'),
-    role: formData.get('role'),
+    role_id: roleId,
     department_id: formData.get('department_id'),
+    employee_code: formData.get('employee_code') ?? '',
+    employment_type: formData.get('employment_type'),
     phone: formData.get('phone'),
     reg_no: formData.get('reg_no'),
     consultation_fee: formData.get('consultation_fee'),
+    denied_login: formData.get('denied_login'),
     is_active: formData.get('is_active'),
   });
   if (!parsed.success) return invalid(parsed.error);
-
-  const supabase = await createClient();
 
   const { error } = await supabase.from('staff').upsert(
     {
       id: parsed.data.id,
       hospital_id: session.hospitalId,
       full_name: parsed.data.full_name,
-      role: parsed.data.role,
+      role_id: parsed.data.role_id,
       department_id: parsed.data.department_id,
+      employee_code: parsed.data.employee_code,
+      employment_type: parsed.data.employment_type,
       phone: parsed.data.phone,
       reg_no: parsed.data.reg_no,
       consultation_fee: parsed.data.consultation_fee,
+      can_login: parsed.data.can_login,
       is_active: parsed.data.is_active,
+      // staff.role is derived from role_id by trigger (20260828090100), so it
+      // is deliberately absent here. Writing it would be writing a value the
+      // database is about to overwrite.
     },
     { onConflict: 'id' },
   );
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    if (`${error.message} ${error.details ?? ''}`.includes('employee_code')) {
+      return failure('Another staff member already uses that employee code.', {
+        employee_code: ['That code is taken.'],
+      });
+    }
+    return failure(describeDatabaseError(error));
+  }
 
   refresh();
   return success(`${parsed.data.full_name} saved.`);
 }
 
-const activationSchema = z.object({
-  id: z.uuid('Invalid staff record.'),
-  confirm: z.string().trim(),
-});
-
 /**
  * Deactivate or reactivate a staff record. Never a delete: consultation notes,
- * charges and payments in Phase 1 all point back at a staff row (CLAUDE.md 3.5).
+ * charges and payments all point back at a staff row (CLAUDE.md 3.5).
+ *
+ * Deactivating does NOT revoke a login -- that is a separate, deliberate act on
+ * the account, and the dialog says so. Conflating the two would mean a person
+ * who has left is still able to sign in, or a person on leave is locked out.
  */
 export async function setStaffActive(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const session = await requireSessionForAction();
-  if (!isAdminRole(session.role)) {
-    return failure('Only an administrator can change staff records.');
-  }
+  const allowed = await checkPermission('staff.deactivate');
+  if (!allowed.ok) return failure(allowed.message);
+  const { session } = allowed;
 
-  const parsed = activationSchema.safeParse({
+  const parsed = staffActivationSchema.safeParse({
     id: formData.get('id'),
     confirm: formData.get('confirm') ?? '',
   });
@@ -97,13 +149,12 @@ export async function setStaffActive(
     .from('staff')
     .select('full_name')
     .eq('id', parsed.data.id)
+    .eq('hospital_id', session.hospitalId)
     .maybeSingle();
 
   if (readError) return failure(describeDatabaseError(readError));
   if (!staff) return failure('That staff record no longer exists.');
 
-  // Same reasoning as departments: the schema has no reason column, so the
-  // typed name is what makes the action deliberate.
   const normalise = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
   if (!activate && normalise(parsed.data.confirm) !== normalise(staff.full_name)) {
     return failure(`Type ${staff.full_name} to confirm.`, {
@@ -114,7 +165,8 @@ export async function setStaffActive(
   const { error } = await supabase
     .from('staff')
     .update({ is_active: activate })
-    .eq('id', parsed.data.id);
+    .eq('id', parsed.data.id)
+    .eq('hospital_id', session.hospitalId);
 
   if (error) return failure(describeDatabaseError(error));
 
@@ -123,85 +175,193 @@ export async function setStaffActive(
 }
 
 /**
- * Issue a login to an existing staff record.
+ * Credentials, shown once.
  *
- * Three steps, and the order is what makes it safe:
- *
- *   1. attach_staff_login. If that email already has an account -- they work at
- *      another hospital, or were invited here before and deactivated -- this
- *      finishes the job outright and no email is sent.
- *   2. Only if it reports 'no_such_user': create the account and send the
- *      invitation, through the service-role admin API. This is the one step
- *      that genuinely needs the service role, and it is the only thing it does.
- *   3. attach_staff_login again, now that the account exists.
- *
- * Doing it this way means the RPC is never trusted with account creation and
- * the service-role client never touches memberships or staff -- those writes
- * stay behind the tenant and role checks inside the function.
+ * CredentialState lives in ./credential-state so this file exports nothing but
+ * async functions -- a `'use server'` module that exports a constant fails at
+ * request time rather than at build time.
  */
-export async function inviteStaff(
-  _previous: ActionState,
+export async function provisionStaffAccount(
+  _previous: CredentialState,
   formData: FormData,
-): Promise<ActionState> {
-  const session = await requireSessionForAction();
-  if (!isAdminRole(session.role)) {
-    return failure('Only an administrator can issue a login.');
-  }
+): Promise<CredentialState> {
+  const allowed = await checkPermission('accounts.provision');
+  if (!allowed.ok) return { status: 'error', message: allowed.message };
+  const { session } = allowed;
 
-  const parsed = staffInviteSchema.safeParse({
+  const parsed = provisionAccountSchema.safeParse({
     staff_id: formData.get('staff_id'),
-    email: formData.get('email'),
-    role: formData.get('role'),
+    contact_email: formData.get('contact_email'),
   });
-  if (!parsed.success) return invalid(parsed.error);
-
-  const supabase = await createClient();
-  const args = {
-    p_staff_id: parsed.data.staff_id,
-    p_email: parsed.data.email,
-    p_role: parsed.data.role,
-  };
-
-  const first = await attachStaffLogin(supabase, args);
-  if (first.error) return failure(describeDatabaseError(first.error));
-
-  if (first.data?.status === 'attached') {
-    refresh();
-    return success(
-      `${parsed.data.email} already had an account and can now sign in to this hospital. No invitation was sent.`,
-    );
+  if (!parsed.success) {
+    const flat = parsed.error.flatten();
+    return {
+      status: 'error',
+      message: flat.formErrors[0] ?? 'Check the highlighted fields.',
+      fieldErrors: flat.fieldErrors as Record<string, string[] | undefined>,
+    };
   }
 
-  // Step 2. Note what is NOT passed as user metadata: no hospital_name. That
-  // key is what provision_hospital acts on, and an invited member must never
-  // get a hospital of their own -- they are joining this one.
-  const admin = createAdminClient();
-  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(parsed.data.email, {
-    data: { full_name: formData.get('full_name')?.toString() ?? '' },
+  // The hospital comes from the SESSION, never from the form. A manager may
+  // provision only inside their own hospital, and an id in a request body is
+  // not evidence of anything.
+  const result = await provisionAccount({
+    hospitalId: session.hospitalId,
+    hospitalSlug: session.hospital.slug,
+    actorId: session.userId,
+    staffId: parsed.data.staff_id,
+    contactEmail: parsed.data.contact_email,
   });
 
-  if (inviteError) {
-    return failure(`The invitation could not be sent: ${inviteError.message}`);
-  }
-
-  const second = await attachStaffLogin(supabase, args);
-  if (second.error) {
-    // The account exists now but is attached to nothing. Say so plainly rather
-    // than reporting success -- the fix is to invite the same address again,
-    // which step 1 will complete without sending a second email.
-    return failure(
-      `${parsed.data.email} was invited, but could not be linked to this staff record: ` +
-        `${describeDatabaseError(second.error)} Invite the same address again to finish.`,
-    );
-  }
-
-  if (second.data?.status !== 'attached') {
-    return failure(
-      `${parsed.data.email} was invited, but the account could not be found afterwards. ` +
-        'Invite the same address again to finish.',
-    );
+  if (!result.ok) {
+    return {
+      status: 'error',
+      message: result.error.message,
+      fieldErrors:
+        result.error.field === 'contact_email'
+          ? { contact_email: [result.error.message] }
+          : undefined,
+    };
   }
 
   refresh();
-  return success(`Invitation sent to ${parsed.data.email}.`);
+  return {
+    status: 'issued',
+    message: `${result.account.staffName} can sign in now.`,
+    staffName: result.account.staffName,
+    username: result.account.username,
+    password: result.account.password,
+    loginUrl: result.account.loginUrl,
+  };
+}
+
+export async function resetStaffPassword(
+  _previous: CredentialState,
+  formData: FormData,
+): Promise<CredentialState> {
+  const allowed = await checkPermission('accounts.reset_password');
+  if (!allowed.ok) return { status: 'error', message: allowed.message };
+  const { session } = allowed;
+
+  const parsed = resetStaffPasswordSchema.safeParse({
+    account_id: formData.get('account_id'),
+  });
+  if (!parsed.success) return { status: 'error', message: 'Invalid account.' };
+
+  const result = await resetPassword({
+    hospitalId: session.hospitalId,
+    accountId: parsed.data.account_id,
+  });
+
+  if (!result.ok) return { status: 'error', message: result.message };
+
+  refresh();
+  return {
+    status: 'issued',
+    message: `${result.staffName} has a new temporary password.`,
+    staffName: result.staffName,
+    username: result.username,
+    password: result.password,
+    loginUrl: `${appBaseUrl()}/login`,
+  };
+}
+
+/**
+ * Revoking or restoring access. One write, and reversible -- which matters on
+ * the Tuesday somebody is disabled by mistake.
+ */
+export async function setStaffAccountEnabled(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const allowed = await checkPermission('accounts.provision');
+  if (!allowed.ok) return failure(allowed.message);
+  const { session } = allowed;
+
+  const parsed = setAccountEnabledSchema.safeParse({
+    account_id: formData.get('account_id'),
+    enabled: formData.get('enabled'),
+    confirm: formData.get('confirm') ?? '',
+  });
+  if (!parsed.success) return invalid(parsed.error);
+
+  const enabling = parsed.data.enabled === 'true';
+
+  const supabase = await createClient();
+  const { data: account } = await supabase
+    .from('staff_accounts')
+    .select('id, username, staff_id')
+    .eq('id', parsed.data.account_id)
+    .eq('hospital_id', session.hospitalId)
+    .maybeSingle();
+
+  if (!account) return failure('That account is not in this hospital.');
+
+  // Revoking somebody's access is destructive in the way that matters: they
+  // stop being able to work. A typed username is a decision; a confirm button
+  // is a reflex (CLAUDE.md 7).
+  if (!enabling && parsed.data.confirm.trim().toLowerCase() !== account.username) {
+    return failure(`Type ${account.username} to confirm.`, {
+      confirm: ['That does not match the username.'],
+    });
+  }
+
+  const result = await setAccountEnabled({
+    hospitalId: session.hospitalId,
+    accountId: account.id,
+    enabled: enabling,
+  });
+
+  if (!result.ok) return failure(result.message);
+
+  refresh();
+  return success(
+    enabling
+      ? `${account.username} can sign in again.`
+      : `${account.username} can no longer sign in.`,
+  );
+}
+
+/**
+ * Removing a login entirely, rather than disabling it.
+ *
+ * The staff record survives -- the person still worked here, and their name is
+ * on visits and invoices. What goes is the ability to sign in.
+ */
+export async function removeStaffAccount(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const allowed = await checkPermission('accounts.provision');
+  if (!allowed.ok) return failure(allowed.message);
+  const { session } = allowed;
+
+  const accountId = formData.get('account_id')?.toString() ?? '';
+  const confirm = (formData.get('confirm')?.toString() ?? '').trim().toLowerCase();
+
+  const supabase = await createClient();
+  const { data: account } = await supabase
+    .from('staff_accounts')
+    .select('id, username')
+    .eq('id', accountId)
+    .eq('hospital_id', session.hospitalId)
+    .maybeSingle();
+
+  if (!account) return failure('That account is not in this hospital.');
+
+  if (confirm !== account.username) {
+    return failure(`Type ${account.username} to confirm.`, {
+      confirm: ['That does not match the username.'],
+    });
+  }
+
+  const result = await removeAccount({
+    hospitalId: session.hospitalId,
+    accountId: account.id,
+  });
+
+  if (!result.ok) return failure(result.message);
+
+  refresh();
+  return success(`The login for ${account.username} has been removed.`);
 }

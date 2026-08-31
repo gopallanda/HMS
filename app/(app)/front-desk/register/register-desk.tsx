@@ -1,40 +1,24 @@
 'use client';
 
 import {
+  BanknoteIcon,
+  PencilIcon,
+  PrinterIcon,
   SearchIcon,
   TicketIcon,
   UserRoundPlusIcon,
-  UserRoundSearchIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import {
-  registerPatientAction,
-  startVisitAction,
-  type RegisterPatientState,
-  type StartVisitState,
-} from './actions';
-import { EmptyState } from '@/components/shared/empty-state';
-import { Field } from '@/components/shared/field';
-import { FormMessage, Notice } from '@/components/shared/form-message';
-import { Kbd, KbdHint } from '@/components/shared/kbd';
-import {
-  MIN_QUERY,
-  PatientResultRow,
-  usePatientSearch,
-} from '@/components/shared/patient-search';
+import { registerAction, type RegisterState } from './actions';
+import { Field, FieldSet } from '@/components/shared/field';
+import { FormMessage } from '@/components/shared/form-message';
+import { KbdHint } from '@/components/shared/kbd';
+import { MIN_QUERY, usePatientSearch } from '@/components/shared/patient-search';
 import { SubmitButton } from '@/components/shared/submit-button';
 import { Button } from '@/components/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -45,28 +29,49 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { fieldError, IDLE } from '@/lib/action-state';
+import { PAYMENT_MODES, PAYMENT_MODE_LABEL, type PaymentMode } from '@/lib/billing';
 import { cn } from '@/lib/cn';
 import { ageGender, GENDERS, GENDER_LABEL, type Gender } from '@/lib/patients';
 import type { PatientSearchResult } from '@/lib/rpc/patients';
 import { formatMoney } from '@/lib/utils/money';
-import { VISIT_TYPES_AT_DESK, VISIT_TYPE_LABEL, type VisitType } from '@/lib/visits';
+
+/**
+ * The register desk.
+ *
+ * ONE form, one RPC, one transaction (block 4.2). It used to be a search, then
+ * a dialog that created a patient, then a second dialog that created a visit,
+ * and a clerk could stop after any of them. Now nothing is written until
+ * submit, and what is written is complete: patient, visit, token, invoice, and
+ * either the payment or a recorded deferral.
+ *
+ * The layout rules are block 6, and they are worth stating because they apply
+ * to every form after this one:
+ *
+ *   * <Field> reserves the hint/error line, so a validation message appearing
+ *     under one control never moves its neighbour. That single change is most
+ *     of what the screenshot in the brief was complaining about.
+ *   * One 12-column grid, items-start, gap-x-6 gap-y-5. Every control the same
+ *     height.
+ *   * The search icon is positioned against the INPUT at left-3 with pl-10 on
+ *     the input itself, never against a wrapper whose padding the input does
+ *     not inherit.
+ *   * Cancel is a ghost, "Register & collect" is the primary. Nothing on the
+ *     happy path is styled destructive.
+ */
 
 export type DoctorOption = {
   id: string;
   full_name: string;
   department_id: string | null;
   consultation_fee: number;
+  /** How many people are already waiting for them today. */
+  waiting: number;
+  /** Rostered today, or the hospital keeps no roster. See the page. */
+  on_duty: boolean;
 };
 
 export type DepartmentOption = { id: string; name: string };
 
-/** Radix Select cannot hold an empty value, so "no department" needs a token. */
-const NO_DEPARTMENT = '__none__';
-
-/**
- * A patient, as this screen needs it -- from the search, fresh from a register,
- * or handed in by the patient record's "New visit" button (?patient=<id>).
- */
 export type DeskPatient = {
   id: string;
   mrn: string;
@@ -75,6 +80,9 @@ export type DeskPatient = {
   gender: Gender;
   phone: string | null;
 };
+
+/** Radix Select cannot hold an empty value, so "no department" needs a token. */
+const NO_DEPARTMENT = '__none__';
 
 function fromSearch(row: PatientSearchResult): DeskPatient {
   return {
@@ -87,399 +95,360 @@ function fromSearch(row: PatientSearchResult): DeskPatient {
   };
 }
 
-/**
- * What the operator typed, split into the field it most likely belongs in.
- * Somebody who typed a phone number and found nothing should not have to type
- * it again in the register form.
- */
+/** What was typed, split into the field it most likely belongs in. */
 function prefillFrom(query: string): { full_name: string; phone: string } {
   const trimmed = query.trim();
   const digits = trimmed.replace(/\D/g, '');
-
-  return digits.length >= 6
-    ? { full_name: '', phone: trimmed }
-    : { full_name: trimmed, phone: '' };
+  return digits.length >= 6 ? { full_name: '', phone: trimmed } : { full_name: trimmed, phone: '' };
 }
 
 export function RegisterDesk({
   doctors,
   departments,
   initialPatient = null,
+  canEditFee,
+  canDefer,
 }: {
   doctors: DoctorOption[];
   departments: DepartmentOption[];
-  /**
-   * Resolved from ?patient=<id> on the server: somebody pressed "New visit" on
-   * a patient record, so the visit dialog opens on that patient instead of
-   * asking them to search for a person they were already looking at.
-   */
   initialPatient?: DeskPatient | null;
+  /** billing.collect. Without it the fee is shown but not editable. */
+  canEditFee: boolean;
+  /** billing.defer. Without it the "cannot pay now" link is not rendered. */
+  canDefer: boolean;
 }) {
+  const [state, action] = useActionState<RegisterState, FormData>(registerAction, IDLE);
+
+  /**
+   * One generation of ids per registration. Regenerated only when the desk
+   * starts the NEXT patient, so a resubmit after a dropped connection returns
+   * the same patient, visit and invoice instead of a second set (CLAUDE.md 7).
+   */
+  const [ids, setIds] = useState(newIds);
+
+  /**
+   * The registration whose success panel has been dismissed (defect 2).
+   *
+   * useActionState owns `state`, and there is no way to clear it from here --
+   * it only changes when the action runs again. So "Register next patient"
+   * used to reset every local field, leave state.status on 'success', and
+   * re-render the very same panel: the button looked dead because nothing it
+   * touched was what decided which screen you were on.
+   *
+   * Keyed on the visit id rather than a boolean, so the NEXT registration's
+   * panel appears on its own without anything having to remember to unset a
+   * flag first.
+   */
+  const [dismissed, setDismissed] = useState<string | null>(null);
+
+  /**
+   * Set while the form is coming back, so focus lands after it has mounted.
+   *
+   * A ref rather than state: nothing renders differently because of it, and a
+   * setState in the effect that reads it would be a cascading render for no
+   * visible reason.
+   */
+  const refocus = useRef(false);
+
   const [query, setQuery] = useState('');
-  const [registering, setRegistering] = useState<{ full_name: string; phone: string } | null>(null);
-  const [visitFor, setVisitFor] = useState<DeskPatient | null>(initialPatient);
-  const [lastVisit, setLastVisit] = useState<{
-    token_no: number;
-    visit_no: string;
-    patient: string;
-  } | null>(null);
+  const [chosen, setChosen] = useState<DeskPatient | null>(initialPatient);
+  const [editingChosen, setEditingChosen] = useState(false);
 
+  const [gender, setGender] = useState<Gender>('female');
+  const [phone, setPhone] = useState('');
+  const [doctorId, setDoctorId] = useState('');
+  const [departmentPick, setDepartmentPick] = useState<string | null>(null);
+  const [fee, setFee] = useState('');
+  const [feeTouched, setFeeTouched] = useState(false);
+  const [mode, setMode] = useState<PaymentMode | ''>('cash');
+  const [deferring, setDeferring] = useState(false);
+
+  const formRef = useRef<HTMLFormElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLDivElement>(null);
+  const nextButton = useRef<HTMLButtonElement>(null);
 
-  const { data, isFetching, error, active, debounced } = usePatientSearch(query);
-  const results = useMemo(() => data ?? [], [data]);
+  const { data, isFetching, active } = usePatientSearch(query);
+  const matches = useMemo(() => data ?? [], [data]);
 
-  const dialogOpen = registering !== null || visitFor !== null;
+  const doctor = doctors.find((option) => option.id === doctorId);
+  const departmentId = departmentPick ?? doctor?.department_id ?? NO_DEPARTMENT;
 
-  const [highlight, setHighlight] = useState(0);
-  const [highlightFor, setHighlightFor] = useState('');
+  /**
+   * Doctors, narrowed to the chosen department (block 4.2 step 3).
+   *
+   * Never narrowed to nothing: a department with no doctor assigned to it
+   * would otherwise leave the desk unable to register anybody, which is a
+   * worse answer than showing the whole list.
+   */
+  const visible = useMemo(() => {
+    if (departmentPick === null || departmentPick === NO_DEPARTMENT) return doctors;
+    const inDepartment = doctors.filter((option) => option.department_id === departmentPick);
+    return inDepartment.length > 0 ? inDepartment : doctors;
+  }, [doctors, departmentPick]);
 
-  if (highlightFor !== debounced) {
-    // Adjusted during render rather than in an effect: a new set of results
-    // starts at the top, and React re-renders before anything reaches the DOM.
-    setHighlightFor(debounced);
-    setHighlight(0);
-  }
+  // The fee follows whichever doctor is selected until somebody types over it.
+  const effectiveFee = feeTouched ? fee : doctor ? String(doctor.consultation_fee) : '';
 
-  /** Highlighted row, clamped -- the list can shrink under a held arrow key. */
-  const cursor = results.length === 0 ? -1 : Math.min(highlight, results.length - 1);
+  const result = state.status === 'success' ? state.result : undefined;
+  const done = result && result.visit_id !== dismissed ? result : undefined;
 
-  // Keep the highlighted row visible when the list is longer than the panel.
+  /**
+   * The banner belongs to the registration that produced it. Once its panel is
+   * dismissed the next patient starts on a clean form, not under a green
+   * message about the last one.
+   */
+  const formState = result && result.visit_id === dismissed ? IDLE : state;
+
   useEffect(() => {
-    listRef.current
-      ?.querySelector(`[data-index="${cursor}"]`)
-      ?.scrollIntoView({ block: 'nearest' });
-  }, [cursor]);
-
-  const openRegister = useCallback(() => {
-    setRegistering(prefillFrom(query));
-  }, [query]);
-
-  const backToSearch = useCallback(() => {
-    setQuery('');
-    // The next patient is already at the counter: the caret goes back where
-    // the work starts, without anyone reaching for the mouse.
-    searchInput.current?.focus();
-  }, []);
+    if (done) {
+      toast.success(`Token ${done.token_no} - ${done.patient_name}`, {
+        description: `${done.mrn} · ${done.invoice_no}`,
+      });
+      // The clerk's hands stay on the keyboard: the next thing they will press
+      // is "Register next patient", so that is what has focus.
+      nextButton.current?.focus();
+    }
+  }, [done]);
 
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
-      if (dialogOpen) return;
-
-      // F2 is not a typing key, so it works from inside the search box too --
-      // which is exactly where the operator's hands already are.
-      if (event.key === 'F2') {
-        event.preventDefault();
-        openRegister();
-        return;
-      }
-
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-
-      const target = event.target as HTMLElement | null;
-      if (target?.closest('input, textarea, select, [role="dialog"]')) return;
-
-      if (event.key === '/') {
-        event.preventDefault();
+      if (event.key === 'Escape') {
+        const target = event.target as HTMLElement | null;
+        if (target?.closest('[role="listbox"], [role="dialog"]')) return;
+        setQuery('');
         searchInput.current?.focus();
       }
     }
-
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [dialogOpen, openRegister]);
-
-  function onSearchKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      setHighlight((current) => (results.length === 0 ? 0 : (current + 1) % results.length));
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setHighlight((current) =>
-        results.length === 0 ? 0 : (current - 1 + results.length) % results.length,
-      );
-    } else if (event.key === 'Enter') {
-      event.preventDefault();
-      const picked = cursor >= 0 ? results[cursor] : undefined;
-      if (picked) {
-        // Enter on a match goes straight to the visit -- the common case, and
-        // the reason this screen is search-first (CLAUDE.md 3.3).
-        setVisitFor(fromSearch(picked));
-      } else if (query.trim().length >= MIN_QUERY) {
-        openRegister();
-      }
-    } else if (event.key === 'Escape' && query !== '') {
-      event.preventDefault();
-      setQuery('');
-    }
-  }
-
-  return (
-    <>
-      {/* The command bar. This one control is the whole screen: the day starts
-          with a phone number typed into it, and everything else on the page is
-          a consequence of what it returns (CLAUDE.md 3.3). It is sized and
-          weighted to say so, rather than sitting in a toolbar as one more
-          control among several. */}
-      <div className="grid gap-3">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <div className="relative min-w-0 flex-1">
-            <SearchIcon className="pointer-events-none absolute inset-y-0 left-4 my-auto size-4.5 text-muted-foreground" />
-            <Input
-              ref={searchInput}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={onSearchKeyDown}
-              placeholder="Phone, name or MRN"
-              className="h-12 rounded-xl border-transparent bg-muted/60 pr-12 pl-12 text-base shadow-none transition-all focus-visible:border-primary focus-visible:bg-background focus-visible:shadow-md md:h-12 md:text-base"
-              aria-label="Search patients"
-              aria-controls="patient-results"
-              autoComplete="off"
-              spellCheck={false}
-              autoFocus
-            />
-            <span className="pointer-events-none absolute inset-y-0 right-3 hidden items-center lg:flex">
-              <Kbd always>/</Kbd>
-            </span>
-          </div>
-
-          <Button
-            variant="outline"
-            onClick={openRegister}
-            className="h-12 shrink-0 rounded-xl md:h-12"
-          >
-            <UserRoundPlusIcon data-icon="inline-start" />
-            Register new patient
-            <Kbd className="ml-1.5">F2</Kbd>
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-          <span className="text-xs text-muted-foreground" role="status" aria-live="polite">
-            {!active
-              ? `Type ${MIN_QUERY} characters or more`
-              : isFetching
-                ? 'Searching...'
-                : `${results.length} match${results.length === 1 ? '' : 'es'}`}
-          </span>
-
-          <span className="ml-auto flex flex-wrap items-center gap-x-4 gap-y-1.5">
-            <KbdHint keys={['\u2191', '\u2193']}>move</KbdHint>
-            <KbdHint keys="Enter">new visit</KbdHint>
-            <KbdHint keys="F2">register</KbdHint>
-            <KbdHint keys="Esc">clear</KbdHint>
-          </span>
-        </div>
-      </div>
-
-      {lastVisit ? (
-        <div className="flex flex-wrap items-center gap-3 rounded-xl bg-success/10 px-4 py-3 text-sm text-success dark:bg-success/15">
-          <span className="grid size-10 shrink-0 place-items-center rounded-full bg-success text-base font-bold text-background tabular-nums">
-            {lastVisit.token_no}
-          </span>
-          <span className="min-w-0">
-            <span className="flex items-center gap-1.5 font-semibold">
-              <TicketIcon className="size-4" />
-              Token {lastVisit.token_no} issued
-            </span>
-            <span className="block truncate text-xs opacity-90">
-              {lastVisit.visit_no} &middot; {lastVisit.patient}
-            </span>
-          </span>
-          <Link
-            href="/front-desk/queue"
-            className="ml-auto shrink-0 text-xs font-medium underline underline-offset-4 hover:no-underline"
-          >
-            Open the queue
-          </Link>
-        </div>
-      ) : null}
-
-      {error ? (
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
-          Search failed: {error.message}
-        </p>
-      ) : null}
-
-      <div
-        ref={listRef}
-        id="patient-results"
-        role="listbox"
-        aria-label="Matching patients"
-        className="custom-scrollbar max-h-[28rem] overflow-y-auto rounded-xl border border-border/60 bg-card shadow-sm"
-      >
-        {!active ? (
-          <EmptyState
-            icon={UserRoundSearchIcon}
-            title="Search for a patient, or press F2 to register"
-            description="Phone number, name or MRN. Registering a patient who is already on file splits their history in two."
-          />
-        ) : results.length === 0 && !isFetching ? (
-          <EmptyState
-            icon={UserRoundPlusIcon}
-            title={`Nobody matches \u201c${query.trim()}\u201d`}
-            description="Press Enter or F2 to register a new patient. What you typed is carried over."
-          />
-        ) : (
-          results.map((patient, index) => (
-            <PatientResultRow
-              key={patient.id}
-              patient={patient}
-              index={index}
-              selected={index === cursor}
-              onHover={() => setHighlight(index)}
-              onPick={() => setVisitFor(fromSearch(patient))}
-            />
-          ))
-        )}
-      </div>
-
-      {registering ? (
-        <RegisterDialog
-          prefill={registering}
-          onClose={() => setRegistering(null)}
-          onRegistered={(patient) => {
-            setRegistering(null);
-            // Straight on to the visit: registering somebody who then walks
-            // away without a token is not a completed job.
-            setVisitFor(patient);
-          }}
-          onUseExisting={(patient) => {
-            setRegistering(null);
-            setVisitFor(patient);
-          }}
-        />
-      ) : null}
-
-      {visitFor ? (
-        <VisitDialog
-          patient={visitFor}
-          doctors={doctors}
-          departments={departments}
-          onClose={() => setVisitFor(null)}
-          onCreated={(visit) => {
-            setLastVisit({ ...visit, patient: visitFor.full_name });
-            setVisitFor(null);
-            backToSearch();
-          }}
-        />
-      ) : null}
-    </>
-  );
-}
-
-/**
- * The fallback path, never the default one (CLAUDE.md 3.3).
- *
- * It carries over whatever was typed into the search box, and it refuses to
- * silently create a second patient on a phone number that is already on file --
- * register_patient raises, this shows who is already there, and a human
- * decides.
- */
-function RegisterDialog({
-  prefill,
-  onClose,
-  onRegistered,
-  onUseExisting,
-}: {
-  prefill: { full_name: string; phone: string };
-  onClose: () => void;
-  onRegistered: (patient: DeskPatient) => void;
-  onUseExisting: (patient: DeskPatient) => void;
-}) {
-  const initial: RegisterPatientState = IDLE;
-  const [state, action] = useActionState(registerPatientAction, initial);
-
-  // One id per dialog instance, generated in the browser: a form resubmitted
-  // after a dropped connection writes the same patient, not a second one
-  // (CLAUDE.md 7).
-  const [id] = useState(() => crypto.randomUUID());
-  const [gender, setGender] = useState<Gender>('female');
-  const [phone, setPhone] = useState(prefill.phone);
-  const [force, setForce] = useState(false);
-  const formRef = useRef<HTMLFormElement>(null);
-
-  useEffect(() => {
-    if (state.status === 'success' && state.patient) {
-      toast.success(state.message);
-      onRegistered({ ...state.patient, gender });
-    }
-  }, [state, gender, onRegistered]);
-
-  // Only asked for once the database has said the number is already in use.
-  const digits = phone.replace(/\D/g, '');
-  const duplicates = usePatientSearch(digits, state.duplicate === true);
+  }, []);
 
   function onFormKeyDown(event: React.KeyboardEvent<HTMLFormElement>) {
-    // Submit from anywhere in the form, including from a closed dropdown.
     if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
       event.preventDefault();
       formRef.current?.requestSubmit();
     }
   }
 
+  function startNext() {
+    // Before anything else: this is what actually takes the success panel off
+    // the screen. Everything below it only decides what the form underneath
+    // will be showing once it is gone.
+    if (result) setDismissed(result.visit_id);
+    setIds(newIds());
+    setQuery('');
+    setChosen(null);
+    setEditingChosen(false);
+    setGender('female');
+    setPhone('');
+    setDoctorId('');
+    setDepartmentPick(null);
+    setFee('');
+    setFeeTouched(false);
+    setMode('cash');
+    setDeferring(false);
+    // Both refs are null when this runs from the success panel -- the form is
+    // not mounted -- so the focus has to wait for the render that brings it
+    // back. formRef.reset() is a no-op in that case and still correct when
+    // Cancel calls this with the form on screen.
+    formRef.current?.reset();
+    refocus.current = true;
+  }
+
+  useEffect(() => {
+    if (done || !refocus.current) return;
+    refocus.current = false;
+    searchInput.current?.focus();
+  }, [done]);
+
+  // ---- The success panel (block 4.4) ---------------------------------------
+  if (done) {
+    return (
+      <section className="mx-auto grid w-full max-w-2xl gap-5 rounded-2xl border border-success/30 bg-success/5 p-6 sm:p-8">
+        <div className="grid gap-1 text-center">
+          <span className="text-xs font-semibold tracking-widest text-success uppercase">
+            {done.payment_due ? 'Registered - payment due' : 'Registered'}
+          </span>
+          <span className="text-6xl leading-none font-bold text-success tabular-nums sm:text-7xl">
+            {done.token_no}
+          </span>
+          <span className="text-sm text-muted-foreground">
+            Token for {done.doctor_name ?? 'the doctor'}
+            {done.department_name ? ` · ${done.department_name}` : ''}
+          </span>
+        </div>
+
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl bg-background/70 px-4 py-3 text-sm sm:grid-cols-4">
+          <Fact label="Patient" value={done.patient_name} />
+          <Fact label="MRN" value={done.mrn} mono />
+          <Fact label="Visit" value={done.visit_no} mono />
+          <Fact label="Invoice" value={done.invoice_no} mono />
+        </dl>
+
+        {done.payment_due ? (
+          <p className="rounded-lg bg-warning/10 px-3 py-2.5 text-sm text-warning">
+            <strong className="font-semibold">Payment due.</strong> This visit carries a PAYMENT
+            DUE badge on the queue until billing collects {formatMoney(done.grand_total)}.
+          </p>
+        ) : null}
+
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button asChild variant="outline">
+            <Link href="/front-desk/queue">Open the queue</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={`/print/receipt/${done.invoice_id}`} target="_blank">
+              <PrinterIcon data-icon="inline-start" />
+              Print receipt
+            </Link>
+          </Button>
+          <Button ref={nextButton} onClick={startNext}>
+            <UserRoundPlusIcon data-icon="inline-start" />
+            Register next patient
+          </Button>
+        </div>
+      </section>
+    );
+  }
+
+  const showDemographics = chosen === null || editingChosen;
+
   return (
-    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>Register a new patient</DialogTitle>
-          <DialogDescription>
-            The MRN is allocated by the database. Age is stored as a date of birth, so it stays
-            correct next year.
-          </DialogDescription>
-        </DialogHeader>
+    <form ref={formRef} action={action} onKeyDown={onFormKeyDown} className="grid gap-5">
+      <input type="hidden" name="patient_new_id" value={ids.patient} />
+      <input type="hidden" name="visit_id" value={ids.visit} />
+      <input type="hidden" name="invoice_id" value={ids.invoice} />
+      <input type="hidden" name="patient_id" value={chosen?.id ?? ''} />
+      <input type="hidden" name="gender" value={gender} />
+      <input type="hidden" name="doctor_id" value={doctorId} />
+      <input
+        type="hidden"
+        name="department_id"
+        value={departmentId === NO_DEPARTMENT ? '' : departmentId}
+      />
+      <input type="hidden" name="fee" value={effectiveFee} />
+      <input type="hidden" name="payment_mode" value={deferring ? '' : mode} />
+      <input type="hidden" name="deferred" value={deferring ? 'true' : ''} />
 
-        <form ref={formRef} action={action} onKeyDown={onFormKeyDown} className="grid gap-4">
-          <input type="hidden" name="id" value={id} />
-          <input type="hidden" name="gender" value={gender} />
-          <input type="hidden" name="force_create" value={force ? 'true' : ''} />
+      <FormMessage state={formState} />
 
-          <FormMessage state={state} />
+      {/* ---- 1. Search ------------------------------------------------------
+          The whole screen starts here (CLAUDE.md 3.3). The icon is absolutely
+          positioned against the input at left-3 and the input carries pl-10;
+          relying on a wrapper's padding is what let the icon sit on top of
+          typed text (defect 7). */}
+      <section className="grid gap-3">
+        <Field
+          label="Find the patient"
+          htmlFor="patient-search"
+          hint={`Phone, name or MRN. ${MIN_QUERY} characters or more. Esc clears.`}
+        >
+          <div className="relative">
+            <SearchIcon
+              className="pointer-events-none absolute top-1/2 left-3 size-4.5 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              ref={searchInput}
+              id="patient-search"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Phone, name or MRN"
+              className="h-11 pl-10 text-base md:h-11 md:pl-10 md:text-base"
+              autoComplete="off"
+              spellCheck={false}
+              autoFocus
+            />
+          </div>
+        </Field>
 
-          {state.duplicate ? (
-            <Notice>
-              <p className="font-medium">Already registered on this number</p>
-              <div className="mt-1.5 grid gap-0.5">
-                {(duplicates.data ?? []).map((match) => (
-                  <button
-                    key={match.id}
-                    type="button"
-                    onClick={() => onUseExisting(fromSearch(match))}
-                    className="flex items-center gap-2 rounded-md bg-background/60 px-2 py-1.5 text-left text-sm text-foreground transition-colors hover:bg-background"
-                  >
-                    <span className="font-mono text-xs text-muted-foreground">{match.mrn}</span>
-                    <span className="min-w-0 flex-1 truncate">{match.full_name}</span>
-                    <span className="hidden text-xs text-muted-foreground sm:block">
-                      {ageGender(match.dob, match.gender)}
-                    </span>
-                    <span className="shrink-0 text-xs font-medium text-primary underline-offset-4 hover:underline">
-                      use this one
-                    </span>
-                  </button>
-                ))}
-              </div>
-              <p className="mt-1.5 text-xs opacity-80">
-                A family sharing one mobile is normal. If this really is a different person,
-                register anyway.
-              </p>
-            </Notice>
-          ) : null}
+        {/* Neutral, never a warning (block 4.1). Two people on one phone number
+            is the normal case in an Indian household; this panel exists to save
+            a re-type and to prevent a duplicate MRN, not to stop anybody. */}
+        {active && (matches.length > 0 || isFetching) ? (
+          <div className="grid gap-1 rounded-xl border border-border/60 bg-muted/40 p-2">
+            <p className="px-1.5 pb-0.5 text-xs text-muted-foreground">
+              {isFetching && matches.length === 0
+                ? 'Searching...'
+                : `${matches.length} already on file. Use one, or carry on registering a new patient.`}
+            </p>
+            {matches.map((match) => (
+              <button
+                key={match.id}
+                type="button"
+                onClick={() => {
+                  setChosen(fromSearch(match));
+                  setEditingChosen(false);
+                  setQuery('');
+                }}
+                className="flex items-center gap-3 rounded-lg bg-background px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
+              >
+                <span className="font-mono text-xs text-muted-foreground">{match.mrn}</span>
+                <span className="min-w-0 flex-1 truncate font-medium">{match.full_name}</span>
+                <span className="hidden text-xs text-muted-foreground sm:block">
+                  {ageGender(match.dob, match.gender)}
+                </span>
+                <span className="shrink-0 text-xs font-medium text-primary">Use this patient</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
 
-          <div className="grid gap-4 sm:grid-cols-2">
+        {active && matches.length === 0 && !isFetching ? (
+          <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+            Nobody matches &ldquo;{query.trim()}&rdquo;. Fill in the details below to register
+            them.
+          </p>
+        ) : null}
+      </section>
+
+      {/* ---- 2. Patient ----------------------------------------------------- */}
+      <section className="grid gap-4 rounded-xl border border-border/60 p-4 sm:p-5">
+        <SectionHead
+          step="1"
+          title="Patient"
+          note={chosen ? 'On file already' : 'A new record'}
+        />
+
+        {chosen && !editingChosen ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-muted/60 px-3 py-2.5 text-sm">
+            <span className="font-medium">{chosen.full_name}</span>
+            <span className="text-xs text-muted-foreground">
+              {ageGender(chosen.dob, chosen.gender)}
+            </span>
+            <span className="font-mono text-xs text-muted-foreground">{chosen.mrn}</span>
+            {chosen.phone ? (
+              <span className="font-mono text-xs text-muted-foreground">{chosen.phone}</span>
+            ) : null}
+            <button
+              type="button"
+              onClick={() => {
+                setChosen(null);
+                setQuery('');
+                searchInput.current?.focus();
+              }}
+              className="ml-auto flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+            >
+              <PencilIcon className="size-3" />
+              Not this patient
+            </button>
+          </div>
+        ) : null}
+
+        {showDemographics ? (
+          <div className="grid grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-12">
             <Field
               label="Patient name"
-              htmlFor="patient-name"
-              error={fieldError(state, 'full_name')}
+              htmlFor="full_name"
               required
+              error={fieldError(state, 'full_name')}
+              className="sm:col-span-5"
             >
               <Input
-                id="patient-name"
+                id="full_name"
                 name="full_name"
-                defaultValue={prefill.full_name}
+                defaultValue={prefillFrom(query).full_name}
                 maxLength={120}
-                required
-                autoFocus
                 autoComplete="off"
                 aria-invalid={fieldError(state, 'full_name') !== undefined}
               />
@@ -487,62 +456,37 @@ function RegisterDialog({
 
             <Field
               label="Phone"
-              htmlFor="patient-phone"
+              htmlFor="phone"
               error={fieldError(state, 'phone')}
-              hint="How this patient is found next time. Worth asking for."
+              hint="How this patient is found next time."
+              className="sm:col-span-4"
             >
               <Input
-                id="patient-phone"
+                id="phone"
                 name="phone"
                 type="tel"
                 inputMode="tel"
                 value={phone}
-                onChange={(event) => {
-                  setPhone(event.target.value);
-                  setForce(false);
-                }}
+                onChange={(event) => setPhone(event.target.value)}
                 placeholder="+91 98450 11223"
                 autoComplete="off"
                 aria-invalid={fieldError(state, 'phone') !== undefined}
               />
             </Field>
-          </div>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+            {/* Gender sits with name and phone, not beside the Age fieldset:
+                a bordered group carries a legend and its own padding, so a
+                plain control next to it can never share a baseline with the
+                controls inside it (defect 7). */}
             <Field
-              label="Date of birth"
-              htmlFor="patient-dob"
-              error={fieldError(state, 'dob')}
-              className="sm:col-span-1"
+              label="Gender"
+              htmlFor="gender"
+              required
+              error={fieldError(state, 'gender')}
+              className="sm:col-span-3"
             >
-              <Input
-                id="patient-dob"
-                name="dob"
-                type="date"
-                aria-invalid={fieldError(state, 'dob') !== undefined}
-              />
-            </Field>
-
-            <Field
-              label="or age in years"
-              htmlFor="patient-age"
-              error={fieldError(state, 'age_years')}
-              hint="Stored as an approximate date."
-            >
-              <Input
-                id="patient-age"
-                name="age_years"
-                inputMode="numeric"
-                maxLength={3}
-                placeholder="42"
-                autoComplete="off"
-                aria-invalid={fieldError(state, 'age_years') !== undefined}
-              />
-            </Field>
-
-            <Field label="Gender" htmlFor="patient-gender" error={fieldError(state, 'gender')} required>
               <Select value={gender} onValueChange={(value) => setGender(value as Gender)}>
-                <SelectTrigger id="patient-gender" className="w-full">
+                <SelectTrigger id="gender" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -554,228 +498,286 @@ function RegisterDialog({
                 </SelectContent>
               </Select>
             </Field>
+
+            {/* Date of birth and age are ONE question with two entry modes
+                (block 6.3). The border is what says so; two loose fields with
+                "or age in years" between them read as two questions. */}
+            <FieldSet
+              legend="Age"
+              hint="Enter either. Age is stored as an approximate date of birth, so it stays correct next year."
+              error={fieldError(state, 'dob') ?? fieldError(state, 'age_years')}
+              className="sm:col-span-6"
+            >
+              <div className="grid grid-cols-2 items-start gap-x-4">
+                <Field label="Date of birth" htmlFor="dob" collapse>
+                  <Input id="dob" name="dob" type="date" />
+                </Field>
+                <Field label="or age in years" htmlFor="age_years" collapse>
+                  <Input
+                    id="age_years"
+                    name="age_years"
+                    inputMode="numeric"
+                    maxLength={3}
+                    placeholder="42"
+                    autoComplete="off"
+                  />
+                </Field>
+              </div>
+            </FieldSet>
+
+            <Field
+              label="Address"
+              htmlFor="address"
+              error={fieldError(state, 'address')}
+              className="sm:col-span-6"
+            >
+              <Textarea id="address" name="address" rows={3} maxLength={300} autoComplete="off" />
+            </Field>
           </div>
+        ) : null}
+      </section>
 
-          <Field label="Address" htmlFor="patient-address" error={fieldError(state, 'address')}>
-            <Textarea
-              id="patient-address"
-              name="address"
-              rows={2}
-              maxLength={300}
-              autoComplete="off"
-            />
-          </Field>
+      {/* ---- 3. Visit ------------------------------------------------------- */}
+      <section className="grid gap-4 rounded-xl border border-border/60 p-4 sm:p-5">
+        <SectionHead step="2" title="Visit" note="The doctor is required" />
 
-          <DialogFooter className="items-center">
-            <span className="mr-auto hidden items-center gap-4 sm:flex">
-              <KbdHint keys={['Ctrl', 'Enter']} always>
-                save
-              </KbdHint>
-              <KbdHint keys="Esc" always>
-                close
-              </KbdHint>
-            </span>
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
-              Cancel
-            </Button>
-            {state.duplicate && !force ? (
-              <Button type="button" size="sm" variant="destructive" onClick={() => setForce(true)}>
-                Different person - register anyway
-              </Button>
-            ) : (
-              <SubmitButton size="sm" pendingLabel="Registering...">
-                {force ? 'Register anyway' : 'Register and start visit'}
-              </SubmitButton>
-            )}
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/**
- * The visit is where the doctor, department and episode live (CLAUDE.md 4).
- * Creating one allocates the visit number and today's next token, and raises
- * the consultation charge from the doctor's own fee -- in one transaction.
- */
-function VisitDialog({
-  patient,
-  doctors,
-  departments,
-  onClose,
-  onCreated,
-}: {
-  patient: DeskPatient;
-  doctors: DoctorOption[];
-  departments: DepartmentOption[];
-  onClose: () => void;
-  onCreated: (visit: { token_no: number; visit_no: string }) => void;
-}) {
-  const initial: StartVisitState = IDLE;
-  const [state, action] = useActionState(startVisitAction, initial);
-
-  const [id] = useState(() => crypto.randomUUID());
-  const [doctorId, setDoctorId] = useState(doctors[0]?.id ?? '');
-  const [visitType, setVisitType] = useState<VisitType>('opd');
-  const [departmentOverride, setDepartmentOverride] = useState<string | null>(null);
-  const formRef = useRef<HTMLFormElement>(null);
-
-  const doctor = doctors.find((option) => option.id === doctorId);
-
-  // Derived, not stored: the department follows the doctor until somebody
-  // picks one, and after that it stays picked. Most OPD registrations never
-  // touch it.
-  const departmentId = departmentOverride ?? doctor?.department_id ?? NO_DEPARTMENT;
-
-  useEffect(() => {
-    if (state.status === 'success' && state.visit) {
-      toast.success(`Token ${state.visit.token_no} - ${patient.full_name}`, {
-        description: state.visit.visit_no,
-      });
-      onCreated(state.visit);
-    }
-  }, [state, patient.full_name, onCreated]);
-
-  function onFormKeyDown(event: React.KeyboardEvent<HTMLFormElement>) {
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-      event.preventDefault();
-      formRef.current?.requestSubmit();
-    }
-  }
-
-  return (
-    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>New visit</DialogTitle>
-          <DialogDescription asChild>
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-muted/60 px-3 py-2.5 text-sm">
-              <span className="font-medium text-foreground">{patient.full_name}</span>
-              <span className="text-xs text-muted-foreground">
-                {ageGender(patient.dob, patient.gender)}
-              </span>
-              <span className="font-mono text-xs text-muted-foreground">{patient.mrn}</span>
-              {patient.phone ? (
-                <span className="font-mono text-xs text-muted-foreground">{patient.phone}</span>
-              ) : null}
-            </div>
-          </DialogDescription>
-        </DialogHeader>
-
-        <form ref={formRef} action={action} onKeyDown={onFormKeyDown} className="grid gap-4">
-          <input type="hidden" name="id" value={id} />
-          <input type="hidden" name="patient_id" value={patient.id} />
-          <input type="hidden" name="doctor_id" value={doctorId} />
-          <input type="hidden" name="visit_type" value={visitType} />
-          <input
-            type="hidden"
-            name="department_id"
-            value={departmentId === NO_DEPARTMENT ? '' : departmentId}
-          />
-
-          <FormMessage state={state} />
-
-          <Field label="Doctor" htmlFor="visit-doctor" error={fieldError(state, 'doctor_id')} required>
-            <Select value={doctorId} onValueChange={setDoctorId}>
-              <SelectTrigger id="visit-doctor" className="w-full" autoFocus>
-                <SelectValue placeholder="Choose a doctor" />
+        <div className="grid grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-12">
+          <Field
+            label="Department"
+            htmlFor="department"
+            hint="Optional. Narrows the doctor list."
+            className="sm:col-span-5"
+          >
+            <Select
+              value={departmentId}
+              onValueChange={(value) => {
+                setDepartmentPick(value);
+                // A doctor left over from another department would be
+                // submitted invisibly.
+                if (
+                  value !== NO_DEPARTMENT &&
+                  doctor &&
+                  doctor.department_id !== value &&
+                  doctors.some((option) => option.department_id === value)
+                ) {
+                  setDoctorId('');
+                }
+              }}
+            >
+              <SelectTrigger id="department" className="h-10 w-full">
+                <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {doctors.map((option) => (
+                <SelectItem value={NO_DEPARTMENT}>No department</SelectItem>
+                {departments.map((option) => (
                   <SelectItem key={option.id} value={option.id}>
-                    {option.full_name}
+                    {option.name}
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field
-              label="Department"
-              htmlFor="visit-department"
-              error={fieldError(state, 'department_id')}
-              hint={departmentOverride ? undefined : "Follows the doctor's department."}
-            >
-              <Select
-                value={departmentId}
-                onValueChange={setDepartmentOverride}
+          <Field
+            label="Doctor"
+            htmlFor="doctor"
+            required
+            error={fieldError(state, 'doctor_id')}
+            hint="On duty today, with how many are already waiting."
+            className="sm:col-span-7"
+          >
+            <Select value={doctorId} onValueChange={setDoctorId}>
+              <SelectTrigger
+                id="doctor"
+                className="h-10 w-full"
+                aria-invalid={fieldError(state, 'doctor_id') !== undefined}
               >
-                <SelectTrigger id="visit-department" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value={NO_DEPARTMENT}>No department</SelectItem>
-                  {departments.map((option) => (
-                    <SelectItem key={option.id} value={option.id}>
-                      {option.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-
-            <Field label="Visit type" htmlFor="visit-type" error={fieldError(state, 'visit_type')}>
-              <div
-                id="visit-type"
-                className="flex h-10 items-center gap-1 rounded-lg bg-muted p-1 md:h-8"
-              >
-                {VISIT_TYPES_AT_DESK.map((option) => (
-                  <button
-                    key={option}
-                    type="button"
-                    aria-pressed={visitType === option}
-                    onClick={() => setVisitType(option)}
-                    className={cn(
-                      'flex-1 rounded-md px-3 py-1 text-sm transition-all focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
-                      visitType === option
-                        ? 'bg-background font-medium text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
-                    )}
-                  >
-                    {VISIT_TYPE_LABEL[option]}
-                  </button>
+                <SelectValue placeholder="Choose a doctor" />
+              </SelectTrigger>
+              <SelectContent>
+                {visible.map((option) => (
+                  <SelectItem key={option.id} value={option.id}>
+                    {option.full_name}
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      {option.waiting === 0 ? 'no queue' : `${option.waiting} waiting`}
+                      {option.on_duty ? '' : ' · not rostered'}
+                    </span>
+                  </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+      </section>
+
+      {/* ---- 4. Payment ----------------------------------------------------- */}
+      <section className="grid gap-4 rounded-xl border border-border/60 p-4 sm:p-5">
+        <SectionHead
+          step="3"
+          title="Payment"
+          note={deferring ? 'Deferred' : 'Collected at the desk'}
+        />
+
+        <div className="grid grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-12">
+          <Field
+            label="Consultation fee"
+            htmlFor="fee-input"
+            error={fieldError(state, 'fee')}
+            hint={
+              canEditFee
+                ? "Prefilled from the doctor's own fee."
+                : 'Set from the doctor’s fee. You may not change it.'
+            }
+            className="sm:col-span-4"
+          >
+            <Input
+              id="fee-input"
+              inputMode="decimal"
+              value={effectiveFee}
+              disabled={!canEditFee || !doctor}
+              onChange={(event) => {
+                setFeeTouched(true);
+                setFee(event.target.value);
+              }}
+              className="h-10 text-right tabular-nums"
+              aria-invalid={fieldError(state, 'fee') !== undefined}
+            />
+          </Field>
+
+          <Field
+            label="Payment mode"
+            htmlFor="payment-mode"
+            required={!deferring}
+            error={fieldError(state, 'payment_mode')}
+            hint={deferring ? 'Nothing is collected now.' : 'Required. Who collected it is you.'}
+            className="sm:col-span-8"
+          >
+            <div id="payment-mode" className="flex flex-wrap gap-2">
+              {PAYMENT_MODES.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  disabled={deferring}
+                  aria-pressed={!deferring && mode === option}
+                  onClick={() => setMode(option)}
+                  className={cn(
+                    'h-10 min-w-20 rounded-lg border px-4 text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
+                    deferring
+                      ? 'cursor-not-allowed border-border/60 text-muted-foreground/50'
+                      : mode === option
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground',
+                  )}
+                >
+                  {PAYMENT_MODE_LABEL[option]}
+                </button>
+              ))}
+            </div>
+          </Field>
+        </div>
+
+        {/* Rare, visible and auditable -- not a silent skip (block 4.2 step 5). */}
+        {canDefer ? (
+          deferring ? (
+            <Field
+              label="Why is the patient being seen before paying?"
+              htmlFor="defer_reason"
+              required
+              error={fieldError(state, 'defer_reason')}
+              hint="Recorded against your name and shown on the queue as PAYMENT DUE."
+            >
+              <div className="flex gap-2">
+                <Input
+                  id="defer_reason"
+                  name="defer_reason"
+                  maxLength={200}
+                  autoFocus
+                  placeholder="Emergency, will settle at discharge"
+                  aria-invalid={fieldError(state, 'defer_reason') !== undefined}
+                />
+                <Button type="button" variant="ghost" onClick={() => setDeferring(false)}>
+                  Cancel
+                </Button>
               </div>
             </Field>
-          </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setDeferring(true)}
+              className="justify-self-start text-xs font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground"
+            >
+              Patient cannot pay now
+            </button>
+          )
+        ) : null}
+      </section>
 
-          <p className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground">
-            {doctor && doctor.consultation_fee > 0 ? (
-              <>
-                A pending consultation charge of{' '}
-                <strong className="font-semibold text-foreground tabular-nums">
-                  {formatMoney(doctor.consultation_fee)}
-                </strong>{' '}
-                will be raised on this visit. Billing collects it.
-              </>
-            ) : (
-              <>
-                {doctor?.full_name ?? 'This doctor'} has no consultation fee on record, so no
-                charge is raised. Set one in Staff if that is wrong.
-              </>
-            )}
-          </p>
+      {/* ---- Footer --------------------------------------------------------- */}
+      <div className="sticky bottom-0 -mx-4 flex flex-col gap-3 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur sm:mx-0 sm:flex-row sm:items-center sm:rounded-xl sm:border sm:px-4">
+        <span className="hidden items-center gap-4 sm:flex">
+          <KbdHint keys={['Ctrl', 'Enter']} always>
+            register
+          </KbdHint>
+          <KbdHint keys="Esc" always>
+            clear search
+          </KbdHint>
+        </span>
 
-          <DialogFooter className="items-center">
-            <span className="mr-auto hidden items-center gap-4 sm:flex">
-              <KbdHint keys={['Ctrl', 'Enter']} always>
-                start visit
-              </KbdHint>
-              <KbdHint keys="Esc" always>
-                close
-              </KbdHint>
-            </span>
-            <Button type="button" variant="outline" size="sm" onClick={onClose}>
-              Cancel
-            </Button>
-            <SubmitButton size="sm" pendingLabel="Starting..." disabled={doctors.length === 0}>
-              Start visit
-            </SubmitButton>
-          </DialogFooter>
-        </form>
-      </DialogContent>
-    </Dialog>
+        <span className="text-sm text-muted-foreground sm:ml-auto">
+          {deferring ? (
+            <>
+              <BanknoteIcon className="mr-1 inline size-4 align-text-bottom" />
+              Nothing collected
+            </>
+          ) : (
+            <>
+              Collecting{' '}
+              <strong className="font-semibold text-foreground tabular-nums">
+                {formatMoney(Number(effectiveFee) || 0)}
+              </strong>
+            </>
+          )}
+        </span>
+
+        <div className="flex gap-2">
+          <Button type="button" variant="ghost" onClick={startNext}>
+            Cancel
+          </Button>
+          <SubmitButton pendingLabel="Registering...">
+            <TicketIcon data-icon="inline-start" />
+            Register &amp; collect
+          </SubmitButton>
+        </div>
+      </div>
+    </form>
+  );
+}
+
+function newIds() {
+  return {
+    patient: crypto.randomUUID(),
+    visit: crypto.randomUUID(),
+    invoice: crypto.randomUUID(),
+  };
+}
+
+function SectionHead({ step, title, note }: { step: string; title: string; note: string }) {
+  return (
+    <div className="flex items-baseline gap-2.5">
+      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
+        {step}
+      </span>
+      <h2 className="text-sm font-semibold">{title}</h2>
+      <span className="text-xs text-muted-foreground">{note}</span>
+    </div>
+  );
+}
+
+function Fact({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
+  return (
+    <div className="grid gap-0.5">
+      <dt className="text-[11px] tracking-wide text-muted-foreground uppercase">{label}</dt>
+      <dd className={cn('truncate text-sm font-medium', mono && 'font-mono')}>{value}</dd>
+    </div>
   );
 }

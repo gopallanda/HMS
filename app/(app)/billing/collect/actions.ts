@@ -3,8 +3,7 @@
 import { refresh } from 'next/cache';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
-import { requireSessionForAction } from '@/lib/auth/session';
-import { isBillingRole } from '@/lib/roles';
+import { checkPermission } from '@/lib/auth/session';
 import {
   ALREADY_BILLED,
   collectPayment,
@@ -43,10 +42,9 @@ export async function collectPaymentAction(
   _previous: CollectPaymentState,
   formData: FormData,
 ): Promise<CollectPaymentState> {
-  const session = await requireSessionForAction();
-  if (!isBillingRole(session.role)) {
-    return failure('Only billing staff can take payments.');
-  }
+  const gate = await checkPermission('billing.collect');
+  if (!gate.ok) return failure(gate.message);
+  const session = gate.session;
 
   const parsed = collectPaymentSchema.safeParse({
     invoice_id: formData.get('invoice_id'),

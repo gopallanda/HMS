@@ -9,6 +9,12 @@
  * no membership pointing at it, so nothing here is reachable from the app and
  * nothing touches the demo data in seed.sql.
  *
+ * ONE tenant shared by every test FILE, which is why `npm test` passes
+ * `--concurrency=1`. node --test otherwise runs files in parallel, and two
+ * files both calling setUp() -- which begins with wipe() -- delete each
+ * other's rows halfway through. The failure mode is not a clean red: the runs
+ * block on each other's locks and produce no output at all.
+ *
  * The tenant row itself is reused between runs rather than dropped, because a
  * hospital genuinely cannot be deleted: hospitals carries an AFTER DELETE audit
  * trigger, and the audit row it writes references the hospital that is being
@@ -36,6 +42,8 @@ export const FIXTURE = {
   hospitalName: 'ZZ Test Hospital (automated tests)',
   /** create_visit seeds a charge of exactly this from the doctor's fee. */
   consultationFee: 500,
+  /** A second doctor, so the per-doctor token rule can be tested at all. */
+  doctorTwoId: '00000000-0000-4000-8000-0000000000f5',
 };
 
 /** SUPABASE_DB_URL out of .env.local, the same file scripts/db.mjs reads. */
@@ -80,6 +88,10 @@ export async function wipe(client) {
 
   // payments -> invoices, charge_items -> invoices and visits, and so on. The
   // audit rows go last, because the deletes above write more of them.
+  // Before invoices and visits: both hold composite FKs into them
+  // (20260829090000, 20260829090200).
+  await client.query('delete from public.visit_payment_deferrals where hospital_id = $1', [id]);
+  await client.query('delete from public.visit_transfers         where hospital_id = $1', [id]);
   await client.query('delete from public.payments      where hospital_id = $1', [id]);
   await client.query('delete from public.charge_items  where hospital_id = $1', [id]);
   await client.query('delete from public.invoices      where hospital_id = $1', [id]);
@@ -89,6 +101,12 @@ export async function wipe(client) {
   await client.query('delete from public.visits        where hospital_id = $1', [id]);
   await client.query('delete from public.services      where hospital_id = $1', [id]);
   await client.query('delete from public.patients      where hospital_id = $1', [id]);
+  // staff_accounts before staff: the account holds a composite FK to it.
+  // Nothing in these tests provisions one, but a wipe that only works when the
+  // previous run happened to leave none is a wipe that fails the first time it
+  // matters.
+  await client.query('delete from public.staff_accounts where hospital_id = $1', [id]);
+  await client.query('delete from public.staff_shifts   where hospital_id = $1', [id]);
   await client.query('delete from public.staff         where hospital_id = $1', [id]);
   await client.query('delete from public.departments   where hospital_id = $1', [id]);
   await client.query('delete from public.number_series where hospital_id = $1', [id]);
@@ -104,12 +122,18 @@ export async function wipe(client) {
 export async function setUp(client) {
   await wipe(client);
 
+  // slug is not null and immutable (20260828090200): it is a component of every
+  // synthetic staff login address, so the fixture tenant needs one of its own.
   await client.query(
-    `insert into public.hospitals (id, name, address, phone, gstin)
-     values ($1, $2, 'Nowhere', '+91 00000 00000', '29ZZZZZ0000Z1Z0')
+    `insert into public.hospitals (id, name, slug, address, phone, gstin)
+     values ($1, $2, 'zz-test-hospital', 'Nowhere', '+91 00000 00000', '29ZZZZZ0000Z1Z0')
      on conflict (id) do update set name = excluded.name`,
     [FIXTURE.hospitalId, FIXTURE.hospitalName],
   );
+
+  // The same function a real tenant gets at provisioning, so the fixture's
+  // roles cannot drift from the product's (20260828090000).
+  await client.query('select public.seed_system_roles($1)', [FIXTURE.hospitalId]);
 
   await client.query(
     `insert into public.departments (id, hospital_id, name, code)
@@ -117,11 +141,27 @@ export async function setUp(client) {
     [FIXTURE.departmentId, FIXTURE.hospitalId],
   );
 
+  // role_id, not role: staff.role is derived from it by trigger, and
+  // create_visit still reads that derived value to refuse a non-doctor.
   await client.query(
     `insert into public.staff
-       (id, hospital_id, full_name, role, department_id, consultation_fee)
-     values ($1, $2, 'Dr. Test', 'doctor', $3, $4)`,
+       (id, hospital_id, full_name, role_id, department_id, consultation_fee)
+     select $1, $2, 'Dr. Test', r.id, $3, $4
+     from public.roles r
+     where r.hospital_id = $2 and r.code = 'doctor' and r.deleted_at is null`,
     [FIXTURE.doctorId, FIXTURE.hospitalId, FIXTURE.departmentId, FIXTURE.consultationFee],
+  );
+
+  // A second doctor. Tokens are per doctor per day (20260829090000), and one
+  // doctor cannot demonstrate that at all -- two patients would simply get 1
+  // and 2 either way.
+  await client.query(
+    `insert into public.staff
+       (id, hospital_id, full_name, role_id, department_id, consultation_fee)
+     select $1, $2, 'Dr. Second', r.id, $3, $4
+     from public.roles r
+     where r.hospital_id = $2 and r.code = 'doctor' and r.deleted_at is null`,
+    [FIXTURE.doctorTwoId, FIXTURE.hospitalId, FIXTURE.departmentId, FIXTURE.consultationFee],
   );
 
   await client.query(

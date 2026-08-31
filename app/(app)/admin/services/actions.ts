@@ -4,8 +4,7 @@ import { refresh } from 'next/cache';
 import { z } from 'zod';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
-import { requireSessionForAction } from '@/lib/auth/session';
-import { isAdminRole } from '@/lib/roles';
+import { checkPermission } from '@/lib/auth/session';
 import { serviceSchema } from '@/lib/schemas/service';
 import { describeDatabaseError, violates } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -29,10 +28,9 @@ export async function saveService(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const session = await requireSessionForAction();
-  if (!isAdminRole(session.role)) {
-    return failure('Only an administrator can change the price list.');
-  }
+  const gate = await checkPermission('settings.manage');
+  if (!gate.ok) return failure(gate.message);
+  const session = gate.session;
 
   const parsed = serviceSchema.safeParse({
     id: formData.get('id'),
@@ -92,10 +90,9 @@ export async function setServiceActive(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const session = await requireSessionForAction();
-  if (!isAdminRole(session.role)) {
-    return failure('Only an administrator can change the price list.');
-  }
+  const gate = await checkPermission('settings.manage');
+  if (!gate.ok) return failure(gate.message);
+  const session = gate.session;
 
   const parsed = activeSchema.safeParse({
     id: formData.get('id'),

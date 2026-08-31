@@ -5,22 +5,26 @@ import { type NextRequest } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
 /**
- * Where every emailed link lands: invitations, email confirmations, password
- * resets.
+ * Where a SIGNUP confirmation link lands, and nothing else any more.
  *
  * Supabase sends a single-use token_hash rather than a session. Exchanging it
  * has to happen server-side, in a Route Handler, because that is the only place
  * in this app that can both call verifyOtp and write the session cookie it
  * returns.
  *
- * This is the second half of the staff invite: without it the invitation email
- * is a dead end, because a token_hash in a URL means nothing to a page that
- * never redeems it.
+ * WHAT NO LONGER COMES THROUGH HERE: staff invitations. The phase 1 remediation
+ * removed them outright -- staff in a small hospital do not have work mailboxes
+ * and will not complete an email round trip before their first shift, so
+ * credentials are handed over at the desk instead (lib/accounts/provision.ts).
+ * Staff password resets do not come through here either: they carry this
+ * product's own token, in the path, and are redeemed at /reset-password/[token]
+ * (lib/accounts/reset.ts).
  *
- * The Supabase email templates must point here. Dashboard -> Authentication ->
- * Email Templates -> Invite user:
+ * That leaves one caller -- somebody who created a hospital through /signup on
+ * a project that requires email confirmation. Dashboard -> Authentication ->
+ * Email Templates -> Confirm signup:
  *
- *   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=invite&next=/set-password
+ *   {{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=email&next=/
  *
  * The default template uses {{ .ConfirmationURL }}, which goes to Supabase's
  * own verify endpoint instead and never reaches this route.

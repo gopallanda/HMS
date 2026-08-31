@@ -1,9 +1,21 @@
 /**
- * Roles.
+ * The membership role on the JWT.
  *
- * The enum itself lives in Postgres (public.app_role). This file is the one
- * place the app decides what each role is CALLED and what it may reach, so a
- * new role means one edit here plus one migration, not a grep.
+ * NOT what decides who may do what. That is the staff ROLE and its permission
+ * set (lib/rbac/permissions.ts, lib/rbac/access.ts): admins invent roles at
+ * /admin/roles without a deploy, so anything branching on the strings below
+ * locks every custom role out of everything (CLAUDE.md 3.6).
+ *
+ * What survives here is what app_role is genuinely for:
+ *
+ *   * a LABEL, for a login with no staff record -- a founder, in practice
+ *   * `isAdminRole`, for the tenant-lifecycle banner, which is a fact about
+ *     the subscription rather than about the hospital's own permissions
+ *
+ * The role sets this file used to carry -- FRONT_DESK_ROLES, BILLING_ROLES,
+ * CLINICAL_ROLES, ADMIN_ROLES -- went in block 7. Each of them had a twin
+ * assert_*() in Postgres, and the pair had to be kept in step by hand;
+ * checkPermission() and the permission set replaced both.
  *
  * AppRole is re-exported from the generated database types on purpose: when
  * types/database.ts is regenerated (CLAUDE.md 9 step 4) a role added in SQL
@@ -13,18 +25,6 @@
 import type { Database } from '@/types/database';
 
 export type AppRole = Database['public']['Enums']['app_role'];
-
-/** Display order: decision makers first, then the desks, then the departments. */
-export const APP_ROLES = [
-  'super_admin',
-  'admin',
-  'doctor',
-  'front_desk',
-  'cashier',
-  'pharmacist',
-  'lab_tech',
-  'nurse',
-] as const satisfies readonly AppRole[];
 
 export const ROLE_LABEL: Record<AppRole, string> = {
   super_admin: 'Super admin',
@@ -41,78 +41,17 @@ export function roleLabel(role: AppRole | null | undefined): string {
   return role ? ROLE_LABEL[role] : 'No role';
 }
 
-/** Roles that may reach /admin. Keep in sync with public.is_hospital_admin(). */
-export const ADMIN_ROLES = ['super_admin', 'admin'] as const satisfies readonly AppRole[];
-
+/**
+ * Whether this login owns the tenant's subscription, for the lifecycle banner.
+ *
+ * Deliberately still app_role and not `settings.manage`: a suspended or expired
+ * hospital is a billing matter between the vendor and whoever signed up, and it
+ * is that person's token that carries the admin claim. A Manager holding
+ * settings.manage inside the hospital has nothing to do with it and should not
+ * be shown a "renew your subscription" banner they cannot act on.
+ *
+ * Keep in sync with public.is_hospital_admin().
+ */
 export function isAdminRole(role: AppRole | null | undefined): boolean {
   return role === 'super_admin' || role === 'admin';
-}
-
-/**
- * Roles that may register a patient and start a visit.
- *
- * Keep in sync with public.assert_front_desk(): this check decides what the UI
- * offers, that one decides what the database accepts. The second is the real
- * boundary -- a Server Action answers a POST without passing through any page
- * (CLAUDE.md 5).
- */
-export const FRONT_DESK_ROLES = [
-  'super_admin',
-  'admin',
-  'front_desk',
-] as const satisfies readonly AppRole[];
-
-export function isFrontDeskRole(role: AppRole | null | undefined): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'front_desk';
-}
-
-/**
- * Roles that may raise an invoice, take a payment and close the day.
- *
- * Keep in sync with public.assert_billing() and with the select policies on
- * invoices and payments: this check decides what the UI offers, those decide
- * what the database accepts, and the second is the real boundary.
- *
- * In hospitals where reception also takes money, add 'front_desk' here and in
- * 20260819090000_invoices_payments.sql. Those two places are the whole change.
- */
-export const BILLING_ROLES = [
-  'super_admin',
-  'admin',
-  'cashier',
-] as const satisfies readonly AppRole[];
-
-export function isBillingRole(role: AppRole | null | undefined): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'cashier';
-}
-
-/**
- * Roles that may open a consultation and record vitals or notes.
- *
- * Keep in sync with public.assert_clinical() and with
- * consultations_select_clinical: this check decides what the UI offers, those
- * decide what the database accepts, and the second is the real boundary.
- *
- * Nurses are here because vitals are taken before the doctor sees the patient.
- * The narrower rule -- a DOCTOR may only write on the visits booked to them --
- * lives in save_consultation, because it depends on the visit, not the role.
- */
-export const CLINICAL_ROLES = [
-  'super_admin',
-  'admin',
-  'doctor',
-  'nurse',
-] as const satisfies readonly AppRole[];
-
-export function isClinicalRole(role: AppRole | null | undefined): boolean {
-  return role === 'super_admin' || role === 'admin' || role === 'doctor' || role === 'nurse';
-}
-
-/**
- * Only doctors bill a consultation fee. The staff form uses this to decide
- * whether to show the fee field at all -- a nurse with a consultation fee is a
- * charge waiting to be raised by accident in Phase 1.
- */
-export function chargesConsultationFee(role: AppRole): boolean {
-  return role === 'doctor';
 }

@@ -1,12 +1,22 @@
 'use client';
 
-import { CheckIcon, CoffeeIcon, FileTextIcon } from 'lucide-react';
+import {
+  CheckIcon,
+  CircleCheckBigIcon,
+  CoffeeIcon,
+  FileTextIcon,
+  PlayIcon,
+  RotateCcwIcon,
+} from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react';
+import { toast } from 'sonner';
 
+import { setVisitStatusAction } from './actions';
 import { EmptyState } from '@/components/shared/empty-state';
 import { KbdHint } from '@/components/shared/kbd';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
   Table,
   TableBody,
@@ -17,6 +27,7 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/cn';
 import { ageGender, type Gender } from '@/lib/patients';
+import type { QueueStatus } from '@/lib/rpc/visits';
 import { createClient } from '@/lib/supabase/client';
 import { formatTime } from '@/lib/utils/dates';
 import {
@@ -89,10 +100,57 @@ export function DoctorQueue({
   const open = useMemo(() => entries.filter((entry) => isOpenStatus(entry.status)), [entries]);
   const closed = useMemo(() => entries.filter((entry) => !isOpenStatus(entry.status)), [entries]);
 
+  /**
+   * Who is actually in the room, and who is next.
+   *
+   * Both are printed at the top because they are the two things the doctor is
+   * asked out loud all morning, and because they are the two things that only
+   * become true if visits are being completed -- so they double as the
+   * feedback that the Complete button did something.
+   */
+  const withDoctor = useMemo(
+    () => open.find((entry) => entry.status === 'in_consultation') ?? null,
+    [open],
+  );
+  const nextUp = useMemo(
+    () => open.find((entry) => entry.status === 'waiting') ?? null,
+    [open],
+  );
+
   const openVisit = useCallback(
     (visitId: string) => router.push(`/doctor/visit/${visitId}`),
     [router],
   );
+
+  /**
+   * Moving a patient through the queue without opening the notes (defect 3).
+   *
+   * The doctor's actual morning is: call the token, look at the patient, send
+   * them out. Most of those thirty encounters never get typed on. Before this
+   * the only thing that could take a visit off the board was saving a
+   * consultation, so the board never emptied, the tokens never rotated, and
+   * the waiting count the front desk reads next to this doctor's name was
+   * wrong within the hour.
+   *
+   * The visit id is held as the pending marker rather than a boolean, so two
+   * rows tapped in quick succession each disable only themselves.
+   */
+  const [pendingVisit, setPendingVisit] = useState<string | null>(null);
+  const [, startTransition] = useTransition();
+
+  const move = useCallback((visitId: string, status: QueueStatus) => {
+    setPendingVisit(visitId);
+    startTransition(async () => {
+      const result = await setVisitStatusAction(visitId, status);
+      setPendingVisit((current) => (current === visitId ? null : current));
+
+      // Never swallowed into a row that silently does not move (CLAUDE.md 7).
+      // A refusal here is usually "that visit is booked to another doctor",
+      // which is a sentence the doctor can act on.
+      if (result.status === 'error') toast.error(result.message);
+      else if (result.status === 'success') toast.success(result.message);
+    });
+  }, []);
 
   useEffect(() => {
     const supabase = createClient();
@@ -179,12 +237,24 @@ export function DoctorQueue({
         event.preventDefault();
         const entry = open[active];
         if (entry) openVisit(entry.id);
+      } else if (event.key === 'c' || event.key === 'C') {
+        // The single most-pressed key on this screen once the morning starts.
+        // Deliberately unmodified: the doctor is not holding the mouse, and
+        // the guard above has already excluded anything with a text cursor
+        // in it.
+        event.preventDefault();
+        const entry = open[active];
+        if (entry) move(entry.id, 'completed');
+      } else if (event.key === 's' || event.key === 'S') {
+        event.preventDefault();
+        const entry = open[active];
+        if (entry && entry.status === 'waiting') move(entry.id, 'in_consultation');
       }
     }
 
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [open, active, openVisit]);
+  }, [open, active, openVisit, move]);
 
   return (
     <>
@@ -199,6 +269,22 @@ export function DoctorQueue({
           <Badge variant="outline">{closed.filter((e) => e.status === 'completed').length}</Badge>
           <span className="text-muted-foreground">seen today</span>
         </span>
+
+        {withDoctor ? (
+          <span className="flex items-center gap-1.5">
+            <Badge variant="info">Token {withDoctor.token_no}</Badge>
+            <span className="truncate text-muted-foreground">
+              with you &middot; {withDoctor.patient_name}
+            </span>
+          </span>
+        ) : nextUp ? (
+          <span className="flex items-center gap-1.5">
+            <Badge variant="warning">Token {nextUp.token_no}</Badge>
+            <span className="truncate text-muted-foreground">
+              next &middot; {nextUp.patient_name}
+            </span>
+          </span>
+        ) : null}
 
         <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
           <span className="relative grid size-2 place-items-center" aria-hidden>
@@ -230,14 +316,25 @@ export function DoctorQueue({
         // between consultations, where a seven-column table is a scroll.
         <div className="grid gap-2 md:hidden">
           {open.map((entry, index) => (
-            <button
+            // role="button" rather than a real one: the row now CONTAINS
+            // buttons, and a button inside a button is invalid markup that
+            // browsers resolve by dropping one of them -- which would be the
+            // Complete button, on the screen where it matters most.
+            <div
               key={entry.id}
-              type="button"
+              role="button"
+              tabIndex={0}
               data-index={index}
               onClick={() => openVisit(entry.id)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  openVisit(entry.id);
+                }
+              }}
               onFocus={() => setHighlight(index)}
               className={cn(
-                'flex w-full items-start gap-3 rounded-xl border bg-card p-3 text-left shadow-sm transition-colors',
+                'flex w-full cursor-pointer items-start gap-3 rounded-xl border bg-card p-3 text-left shadow-sm transition-colors',
                 index === active ? 'border-primary/40 bg-primary/5' : 'border-border/60',
               )}
             >
@@ -267,8 +364,19 @@ export function DoctorQueue({
                     </span>
                   ) : null}
                 </span>
+
+                {/* Full width on a phone. This is the button the doctor
+                    presses between patients, one-handed, and a 32px icon at
+                    the end of a row is not a target for that. */}
+                <QueueActions
+                  entry={entry}
+                  pending={pendingVisit === entry.id}
+                  onMove={move}
+                  className="mt-2.5 w-full"
+                  block
+                />
               </span>
-            </button>
+            </div>
           ))}
         </div>
       )}
@@ -290,6 +398,7 @@ export function DoctorQueue({
               <TableHead className="w-24">Type</TableHead>
               <TableHead className="w-28">Status</TableHead>
               <TableHead className="w-24">Notes</TableHead>
+              <TableHead className="w-44 text-right">Action</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody ref={listRef}>
@@ -354,6 +463,14 @@ export function DoctorQueue({
                     '-'
                   )}
                 </TableCell>
+                <TableCell>
+                  <QueueActions
+                    entry={entry}
+                    pending={pendingVisit === entry.id}
+                    onMove={move}
+                    className="justify-end"
+                  />
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -368,11 +485,18 @@ export function DoctorQueue({
           <ul className="grid overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
             {closed.map((entry) => (
               <li key={entry.id}>
-                <button
-                  type="button"
+                <div
+                  role="button"
+                  tabIndex={0}
                   onClick={() => openVisit(entry.id)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      openVisit(entry.id);
+                    }
+                  }}
                   className={cn(
-                    'flex w-full items-center gap-3 border-b border-border/60 px-3 py-2 text-left text-xs transition-colors last:border-0 hover:bg-muted/50',
+                    'flex w-full cursor-pointer items-center gap-3 border-b border-border/60 px-3 py-2 text-left text-xs transition-colors last:border-0 hover:bg-muted/50',
                     entry.status === 'cancelled' && 'opacity-60',
                   )}
                 >
@@ -396,7 +520,28 @@ export function DoctorQueue({
                   ) : (
                     <span className="size-3.5" aria-hidden />
                   )}
-                </button>
+
+                  {/* Completed by mistake, or the patient came straight back
+                      through the door. Cancelled visits get no button: a
+                      cancellation is a front-desk decision about a token and
+                      about money, and undoing it here would be the doctor
+                      overruling both. */}
+                  {entry.status === 'completed' ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      disabled={pendingVisit === entry.id}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        move(entry.id, 'in_consultation');
+                      }}
+                    >
+                      <RotateCcwIcon data-icon="inline-start" />
+                      Reopen
+                    </Button>
+                  ) : null}
+                </div>
               </li>
             ))}
           </ul>
@@ -405,9 +550,78 @@ export function DoctorQueue({
 
       <p className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
         <KbdHint keys={['\u2191', '\u2193']}>move</KbdHint>
-        <KbdHint keys="Enter">open</KbdHint>
+        <KbdHint keys="Enter">open notes</KbdHint>
+        <KbdHint keys="S">call in</KbdHint>
+        <KbdHint keys="C">complete</KbdHint>
         <span>The queue updates itself as the front desk registers patients.</span>
       </p>
     </>
+  );
+}
+
+/**
+ * What a doctor can do to a row without opening it.
+ *
+ * Two verbs and no more. "Call in" moves the patient to with-the-doctor so the
+ * board and the front desk can both see who is in the room; "Complete" is the
+ * one that rotates the token and is therefore the primary. There is no Cancel
+ * here on purpose -- cancelling a visit is a decision about a token somebody is
+ * holding a slip for and about money already collected, so it stays a
+ * front-desk act with a reason attached, like void_invoice and transfer_visit.
+ *
+ * Every click stops propagating: the row underneath opens the consultation,
+ * and a doctor who meant "done" must never land in a text area instead.
+ */
+function QueueActions({
+  entry,
+  pending,
+  onMove,
+  className,
+  block = false,
+}: {
+  entry: DoctorQueueEntry;
+  pending: boolean;
+  onMove: (visitId: string, status: QueueStatus) => void;
+  className?: string;
+  /** Phone layout: the buttons share the width instead of hugging the end. */
+  block?: boolean;
+}) {
+  function act(event: React.MouseEvent, status: QueueStatus) {
+    event.stopPropagation();
+    onMove(entry.id, status);
+  }
+
+  return (
+    <span
+      className={cn('flex items-center gap-1.5', className)}
+      onClick={(event) => event.stopPropagation()}
+    >
+      {entry.status === 'waiting' ? (
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={pending}
+          className={cn(block && 'flex-1')}
+          onClick={(event) => act(event, 'in_consultation')}
+          aria-label={`Call in token ${entry.token_no}`}
+        >
+          <PlayIcon data-icon="inline-start" />
+          Call in
+        </Button>
+      ) : null}
+
+      <Button
+        type="button"
+        size="sm"
+        disabled={pending}
+        className={cn(block && 'flex-1')}
+        onClick={(event) => act(event, 'completed')}
+        aria-label={`Complete token ${entry.token_no}`}
+      >
+        <CircleCheckBigIcon data-icon="inline-start" />
+        {pending ? 'Saving...' : 'Complete'}
+      </Button>
+    </span>
   );
 }

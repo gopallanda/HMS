@@ -15,7 +15,6 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { signOut } from '@/lib/auth/actions';
-import { roleLabel, type AppRole } from '@/lib/roles';
 
 /**
  * Who is signed in, and the way out.
@@ -24,16 +23,20 @@ import { roleLabel, type AppRole } from '@/lib/roles';
  * machine "am I still logged in as the night cashier" is a question people ask
  * several times a shift, and getting it wrong misattributes collected_by on
  * every payment they take (CLAUDE.md 3.2).
+ *
+ * It is the STAFF role's name -- "Ward sister", whatever the hospital called
+ * it -- not the app_role behind the token. Those two now differ for every
+ * custom role, and the one the person recognises is the one on their contract.
  */
 export function UserMenu({
   name,
   email,
-  role,
+  roleName,
   showLabels = true,
 }: {
   name: string | null;
   email: string | null;
-  role: AppRole;
+  roleName: string;
   /** False in the tablet icon rail, where only the avatar fits. */
   showLabels?: boolean;
 }) {
@@ -54,7 +57,7 @@ export function UserMenu({
               ? 'flex w-full items-center gap-2.5 rounded-lg border border-transparent px-2 py-2 text-left transition-colors hover:border-sidebar-border hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none'
               : 'grid w-full place-items-center rounded-lg px-1 py-2 transition-colors hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none'
           }
-          title={showLabels ? undefined : `${label} — ${roleLabel(role)}`}
+          title={showLabels ? undefined : `${label} — ${roleName}`}
         >
           <span className="flex size-8 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-semibold text-primary">
             {label.slice(0, 2).toUpperCase()}
@@ -66,7 +69,7 @@ export function UserMenu({
                 {/* The role reads as a badge, not as a second line of the name:
                     on a shared machine it is the fact people actually check. */}
                 <span className="mt-0.5 inline-block rounded-full bg-primary/10 px-2 py-0.5 text-[10px] leading-none font-semibold tracking-wide text-primary uppercase">
-                  {roleLabel(role)}
+                  {roleName}
                 </span>
               </span>
               <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
@@ -83,7 +86,7 @@ export function UserMenu({
               </span>
             ) : null}
             <span className="text-xs font-normal text-muted-foreground">
-              Signed in as {roleLabel(role)}
+              Signed in as {roleName}
             </span>
           </DropdownMenuLabel>
 

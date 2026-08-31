@@ -5,7 +5,9 @@ import { redirect } from 'next/navigation';
 
 import { createClient } from '@/lib/supabase/server';
 import { lifecycleState, type HospitalLifecycleState } from '@/lib/hospital-lifecycle';
-import type { AppRole } from '@/lib/roles';
+import { cachedLoadAccess, type AccessContext } from '@/lib/rbac/access';
+import type { Permission } from '@/lib/rbac/permissions';
+import { roleLabel, type AppRole } from '@/lib/roles';
 import type { Database } from '@/types/database';
 
 /**
@@ -45,11 +47,17 @@ export type SessionContext = {
    */
   staffId: string | null;
   /**
-   * The staff row's role -- the person's JOB, which is deliberately not the
-   * membership role their token carries. The seeded owner is a doctor on the
-   * staff list and a super_admin on her token.
+   * The person's ROLE, and what that role may do (block 1).
+   *
+   * Deliberately not the membership role their token carries: the membership
+   * role is what RLS enforces as a coarse safety net, this is what the app
+   * enforces screen by screen. The seeded owner is a doctor on the staff list
+   * and a super_admin on her token, and the two answer different questions.
+   *
+   * Everything deciding what somebody may SEE or DO reads
+   * session.access.permissions. Nothing new should branch on session.role.
    */
-  staffRole: AppRole | null;
+  access: AccessContext;
   /**
    * Whether the tenant may still write (20260825140000).
    *
@@ -131,18 +139,17 @@ export const getSession = cache(async (): Promise<SessionResult> => {
 
   // Both reads go through RLS. If the token said a hospital the policies
   // disagree with, hospital comes back null and we fail closed below.
-  const [hospitalResult, staffResult] = await Promise.all([
+  //
+  // my_access() replaced a direct read of staff here. It answers the same
+  // question and also carries the role, its permission keys and the account
+  // state, all of which every screen needs on the same request after block 1.
+  const [hospitalResult, access] = await Promise.all([
     supabase
       .from('hospitals')
       .select('*')
       .eq('id', claims.hospitalId)
       .maybeSingle(),
-    supabase
-      .from('staff')
-      .select('id, full_name, role')
-      .eq('hospital_id', claims.hospitalId)
-      .eq('user_id', claims.userId)
-      .maybeSingle(),
+    cachedLoadAccess(supabase, claims.role),
   ]);
 
   if (hospitalResult.error || !hospitalResult.data) {
@@ -157,9 +164,9 @@ export const getSession = cache(async (): Promise<SessionResult> => {
       hospitalId: claims.hospitalId,
       role: claims.role,
       hospital: hospitalResult.data,
-      staffName: staffResult.data?.full_name ?? null,
-      staffId: staffResult.data?.id ?? null,
-      staffRole: staffResult.data?.role ?? null,
+      staffName: access.staffName,
+      staffId: access.staffId,
+      access,
       lifecycle: lifecycleState(hospitalResult.data),
     },
   };
@@ -208,6 +215,74 @@ export async function requireSessionForAction(): Promise<SessionContext> {
   }
 
   return result.session;
+}
+
+/**
+ * The permission gate for a Server Action.
+ *
+ * This is the REAL boundary. The nav hides what somebody cannot use, and from
+ * block 3 the proxy turns them away from the route -- but a Server Action
+ * answers a POST without passing through either, so every mutating action
+ * checks here and nothing else is trusted (CLAUDE.md 5).
+ *
+ * Throws, so an action that forgets to look at the result still fails closed.
+ * Actions that need to REPORT the refusal on a form use checkPermission below,
+ * because Next.js masks thrown errors in production builds and a clerk would
+ * otherwise see "an unexpected error occurred" where a sentence belongs.
+ */
+export async function requirePermission(permission: Permission): Promise<SessionContext> {
+  const session = await requireSessionForAction();
+  if (!session.access.permissions.has(permission)) {
+    throw new Error(permissionMessage(session, permission));
+  }
+  return session;
+}
+
+/** The same check, shaped for a form. */
+export async function checkPermission(
+  permission: Permission,
+): Promise<{ ok: true; session: SessionContext } | { ok: false; message: string }> {
+  const result = await getSession();
+  if (!result.ok) {
+    return {
+      ok: false,
+      message:
+        result.problem === 'signed_out'
+          ? 'Your session has expired. Sign in again.'
+          : 'This account has no active hospital membership.',
+    };
+  }
+
+  if (result.session.lifecycle !== 'active') {
+    return { ok: false, message: LIFECYCLE_MESSAGE[result.session.lifecycle] };
+  }
+
+  if (!result.session.access.permissions.has(permission)) {
+    return { ok: false, message: permissionMessage(result.session, permission) };
+  }
+
+  return { ok: true, session: result.session };
+}
+
+/**
+ * What to CALL the signed-in person's role on screen.
+ *
+ * Their staff role's name, which is the one on their contract and the one an
+ * administrator will search /admin/roles for. The membership enum is the
+ * fallback for a login with no staff record -- a founder, in practice.
+ */
+export function roleDisplayName(session: SessionContext): string {
+  return session.access.roleName ?? roleLabel(session.role);
+}
+
+/**
+ * Names the role rather than the permission key. On a shared machine the
+ * useful half of the answer is almost always "you are signed in as somebody
+ * else"; the key in brackets is for whoever gets shown the screenshot.
+ */
+function permissionMessage(session: SessionContext, permission: Permission): string {
+  const role = session.access.roleName ?? 'This role';
+  return `${role} is not allowed to do that (${permission}). Ask an administrator.`;
 }
 
 const LIFECYCLE_MESSAGE: Record<Exclude<HospitalLifecycleState, 'active'>, string> = {

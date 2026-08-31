@@ -12,6 +12,7 @@ import {
   PatientResultRow,
   usePatientSearch,
 } from '@/components/shared/patient-search';
+import type { PatientSearchResult } from '@/lib/rpc/patients';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
@@ -22,8 +23,22 @@ import { Input } from '@/components/ui/input';
  * characters, same debounce, same row -- because it is the same question. What
  * differs is what Enter does: here it opens the record, there it starts a
  * visit.
+ *
+ * Search-first is not the same as empty-first (defect 4). An empty box used to
+ * render an empty state, so somebody who had just registered a patient opened
+ * this screen and saw a module with no patients in it. `recent` is the resting
+ * state instead: the people this hospital has actually seen, newest first,
+ * read on the server under the same RLS as everything else. Typing replaces
+ * the list; the keyboard walks whichever one is on screen.
  */
-export function PatientSearchScreen({ canRegister }: { canRegister: boolean }) {
+export function PatientSearchScreen({
+  canRegister,
+  recent,
+}: {
+  canRegister: boolean;
+  /** null when the read failed -- not the same as "nobody has been here". */
+  recent: PatientSearchResult[] | null;
+}) {
   const router = useRouter();
 
   const [query, setQuery] = useState('');
@@ -31,7 +46,16 @@ export function PatientSearchScreen({ canRegister }: { canRegister: boolean }) {
   const listRef = useRef<HTMLDivElement>(null);
 
   const { data, isFetching, error, active, debounced } = usePatientSearch(query);
-  const results = useMemo(() => data ?? [], [data]);
+
+  /**
+   * What the listbox is showing: matches while there is a query, the recent
+   * list while there is not. One array, so the arrow keys, the scroll-into-view
+   * and Enter do not each need to know which mode the screen is in.
+   */
+  const results = useMemo(
+    () => (active ? (data ?? []) : (recent ?? [])),
+    [active, data, recent],
+  );
 
   const [highlight, setHighlight] = useState(0);
   const [highlightFor, setHighlightFor] = useState('');
@@ -103,6 +127,12 @@ export function PatientSearchScreen({ canRegister }: { canRegister: boolean }) {
     <div className="grid gap-3">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="relative min-w-0 flex-1">
+          {/* The md: variants on the input's padding are not decoration
+              (defect 1). Input carries `md:px-2.5` of its own, and a media-query
+              utility sorts AFTER a bare one in the generated stylesheet -- so a
+              lone `pl-12` loses to it above 768px, padding-left collapses to
+              10px and this icon sits on top of what is being typed. Every
+              icon-in-an-input on this project therefore states both. */}
           <SearchIcon className="pointer-events-none absolute inset-y-0 left-4 my-auto size-4.5 text-muted-foreground" />
           <Input
             ref={searchInput}
@@ -110,7 +140,7 @@ export function PatientSearchScreen({ canRegister }: { canRegister: boolean }) {
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onSearchKeyDown}
             placeholder="Phone, name or MRN"
-            className="h-12 rounded-xl border-transparent bg-muted/60 pr-12 pl-12 text-base shadow-none transition-all focus-visible:border-primary focus-visible:bg-background focus-visible:shadow-md md:h-12 md:text-base"
+            className="h-12 rounded-xl border-transparent bg-muted/60 pr-12 pl-12 text-base shadow-none transition-all focus-visible:border-primary focus-visible:bg-background focus-visible:shadow-md md:h-12 md:pr-12 md:pl-12 md:text-base"
             aria-label="Search patients"
             aria-controls="patient-results"
             autoComplete="off"
@@ -135,7 +165,9 @@ export function PatientSearchScreen({ canRegister }: { canRegister: boolean }) {
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
         <span className="text-xs text-muted-foreground" role="status" aria-live="polite">
           {!active
-            ? `Type ${MIN_QUERY} characters or more`
+            ? recent === null
+              ? `Type ${MIN_QUERY} characters or more`
+              : `Recently seen. Type ${MIN_QUERY} characters or more to search everybody.`
             : isFetching
               ? 'Searching...'
               : `${results.length} match${results.length === 1 ? '' : 'es'}`}
@@ -161,13 +193,30 @@ export function PatientSearchScreen({ canRegister }: { canRegister: boolean }) {
         aria-label="Matching patients"
         className="custom-scrollbar max-h-[32rem] overflow-y-auto rounded-xl border border-border/60 bg-card shadow-sm"
       >
-        {!active ? (
+        {!active && recent === null ? (
           <EmptyState
             icon={UserRoundSearchIcon}
             title="Search for a patient"
-            description="Their record carries every visit, every bill and -- for clinical staff -- every consultation note."
+            description="The recent list could not be loaded. Do not read that as an empty hospital -- search by phone, name or MRN."
           />
-        ) : results.length === 0 && !isFetching ? (
+        ) : !active && results.length === 0 ? (
+          <EmptyState
+            icon={UserRoundSearchIcon}
+            title="No patients yet"
+            description={
+              canRegister
+                ? 'Nobody has been registered in this hospital. Register the first patient at the desk.'
+                : 'Nobody has been registered in this hospital yet.'
+            }
+            action={
+              canRegister ? (
+                <Button asChild variant="outline" size="sm">
+                  <Link href="/front-desk/register">Register a patient</Link>
+                </Button>
+              ) : null
+            }
+          />
+        ) : active && results.length === 0 && !isFetching ? (
           <EmptyState
             icon={UserRoundSearchIcon}
             title={`Nobody matches \u201c${query.trim()}\u201d`}

@@ -85,33 +85,46 @@ export function isOutstanding(status: InvoiceStatus): boolean {
 }
 
 /**
- * Which paper an invoice prints on.
+ * Which paper a receipt or invoice prints on.
  *
- * Thermal is the default for OPD receipts (CLAUDE.md 7). A4 is for anything
- * that leaves the building -- insurance, reimbursement, a company account.
+ * Thermal is the default for OPD receipts (CLAUDE.md 7) -- it is the printer
+ * bolted to the counter. A5 is the second receipt stylesheet, for a hospital
+ * running its counter off a laser printer: half a sheet, same content, no
+ * wasted paper. A4 is for anything that leaves the building -- insurance,
+ * reimbursement, a company account.
  */
-export const PRINT_FORMATS = ['thermal', 'a4'] as const;
+export const PRINT_FORMATS = ['thermal', 'a5', 'a4'] as const;
 
 export type PrintFormat = (typeof PRINT_FORMATS)[number];
 
 export const PRINT_FORMAT_LABEL: Record<PrintFormat, string> = {
-  thermal: '80mm receipt',
+  thermal: '80mm roll',
+  a5: 'A5 sheet',
   a4: 'A4 invoice',
 };
 
+export const PRINT_FORMAT_NOTE: Record<PrintFormat, string> = {
+  thermal: 'The roll printer at the counter. The default, and what most OPD desks use.',
+  a5: 'Half a sheet on a laser printer. Same receipt, no roll.',
+  a4: 'A full invoice, for insurance and company accounts.',
+};
+
 export function isPrintFormat(value: unknown): value is PrintFormat {
-  return value === 'thermal' || value === 'a4';
+  return value === 'thermal' || value === 'a5' || value === 'a4';
 }
 
 /**
- * The hospital's default paper, from hospitals.settings.receipt_default
- * (seed.sql writes 'thermal_80mm'). Falls back to thermal, because that is
- * what is loaded in the printer at an OPD counter.
+ * The hospital's default paper, from hospitals.settings.receipt_default,
+ * chosen at Administration -> Hospital settings -> Printing.
+ *
+ * Falls back to thermal, because that is what is loaded in the printer at an
+ * OPD counter and an unset value is far more likely to mean "nobody has been
+ * to settings yet" than "we want A4".
  */
 export function defaultPrintFormat(settings: unknown): PrintFormat {
   if (settings && typeof settings === 'object' && 'receipt_default' in settings) {
     const value = (settings as { receipt_default?: unknown }).receipt_default;
-    if (value === 'a4') return 'a4';
+    if (isPrintFormat(value)) return value;
   }
   return 'thermal';
 }

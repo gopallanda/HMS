@@ -44,6 +44,10 @@ export type ConsultationVisit = {
   doctor_id: string | null;
   doctor_name: string | null;
   department_name: string | null;
+  /** An invoice on this visit is still unpaid or part paid. */
+  payment_due: boolean;
+  /** Set when the desk let them through without paying, and why. */
+  defer_reason: string | null;
 };
 
 export type PastVisit = {
@@ -171,6 +175,16 @@ export function ConsultationScreen({
                 {VISIT_STATUS_LABEL[visit.status]}
               </Badge>
             </div>
+
+            {/* On the visit header as well as the queue row (block 4.5). The
+                doctor is the last person who sees the patient before they walk
+                out, so this is the last chance anybody has to mention it. */}
+            {visit.payment_due ? (
+              <p className="rounded-lg bg-warning/10 px-2.5 py-2 text-xs text-warning">
+                <strong className="font-semibold tracking-wide uppercase">Payment due</strong>
+                {visit.defer_reason ? ` - ${visit.defer_reason}` : ''}
+              </p>
+            ) : null}
 
             <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-t border-border/60 pt-3 text-xs">
               <dt className="text-muted-foreground">Age</dt>

@@ -1,5 +1,5 @@
 /* eslint-disable @next/next/no-img-element */
-import type { InvoiceDocument } from './page';
+import type { InvoiceDocument } from './document';
 import { INVOICE_STATUS_LABEL, PAYMENT_MODE_LABEL } from '@/lib/billing';
 import { formatDate, formatTime } from '@/lib/utils/dates';
 import { amountInWords, formatAmount } from '@/lib/utils/money';

@@ -13,6 +13,14 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { fieldError, IDLE } from '@/lib/action-state';
 import type { Hospital } from '@/lib/auth/session';
+import {
+  defaultPrintFormat,
+  PRINT_FORMATS,
+  PRINT_FORMAT_LABEL,
+  PRINT_FORMAT_NOTE,
+  type PrintFormat,
+} from '@/lib/billing';
+import { cn } from '@/lib/cn';
 import { checkLogoFile, LOGO_ACCEPT } from '@/lib/schemas/hospital';
 
 const FORM_ID = 'hospital-settings';
@@ -26,6 +34,10 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
   // convenience, not validation.
   const [preview, setPreview] = useState<string | null>(null);
   const [logoError, setLogoError] = useState<string | null>(null);
+
+  const [receiptDefault, setReceiptDefault] = useState<PrintFormat>(() =>
+    defaultPrintFormat(hospital.settings),
+  );
 
   function onPickLogo(event: React.ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
@@ -113,6 +125,48 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
                 aria-invalid={fieldError(state, 'address') !== undefined}
               />
             </Field>
+
+            {/* ---- Printing (block 5) ---------------------------------------
+                Which paper the counter is loaded with. It is a fact about the
+                hardware in the room, so it belongs to the hospital rather than
+                to the person, and it is the default every receipt route opens
+                with. */}
+            <fieldset className="grid gap-2 border-t border-border/60 pt-4">
+              <legend className="sr-only">Printing</legend>
+              <p className="text-sm font-medium">Printing</p>
+              <p className="text-xs text-muted-foreground">
+                The paper a receipt opens on. Either can still be chosen on the receipt
+                itself.
+              </p>
+              <div className="mt-1 grid gap-2 sm:grid-cols-3">
+                {PRINT_FORMATS.map((option) => (
+                  <label
+                    key={option}
+                    className={cn(
+                      'grid cursor-pointer gap-0.5 rounded-lg border px-3 py-2.5 transition-colors',
+                      receiptDefault === option
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border hover:border-primary/40',
+                    )}
+                  >
+                    <span className="flex items-center gap-2">
+                      <input
+                        type="radio"
+                        name="receipt_default"
+                        value={option}
+                        checked={receiptDefault === option}
+                        onChange={() => setReceiptDefault(option)}
+                        className="size-3.5 accent-primary"
+                      />
+                      <span className="text-sm font-medium">{PRINT_FORMAT_LABEL[option]}</span>
+                    </span>
+                    <span className="pl-5.5 text-xs text-muted-foreground">
+                      {PRINT_FORMAT_NOTE[option]}
+                    </span>
+                  </label>
+                ))}
+              </div>
+            </fieldset>
 
             <div className="flex flex-wrap items-center gap-3 border-t border-border/60 pt-4">
               <SubmitButton pendingLabel="Saving...">Save changes</SubmitButton>

@@ -11,7 +11,6 @@ import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { requireSession } from '@/lib/auth/session';
 import { ageGender } from '@/lib/patients';
-import { isAdminRole, isBillingRole, isClinicalRole, isFrontDeskRole } from '@/lib/roles';
 import { createClient } from '@/lib/supabase/server';
 import { formatDateTime } from '@/lib/utils/dates';
 
@@ -43,8 +42,8 @@ const CONSULTATION_LIMIT = 50;
  * half-fails:
  *
  *   identity + visits   everyone signed into the hospital
- *   billing             BILLING_ROLES and admins
- *   consultations       CLINICAL_ROLES
+ *   billing             billing.read
+ *   consultations       consultation.read
  *
  * The gate is on the QUERY, not only on the markup. consultations_select_clinical
  * would hand a cashier zero rows, and a panel that renders "no consultations"
@@ -65,10 +64,15 @@ export default async function PatientRecordPage({
   const session = await requireSession();
   const supabase = await createClient();
 
-  const canSeeMoney = isBillingRole(session.role);
-  const canSeeClinical = isClinicalRole(session.role);
-  const canEdit = isFrontDeskRole(session.role);
-  const canRemove = isAdminRole(session.role);
+  // Panel by panel, on permissions rather than on role names (CLAUDE.md 3.6).
+  // A custom "Ward sister" holding consultation.read sees the clinical panel
+  // and not the money one, which is exactly what the hospital meant when they
+  // ticked those boxes -- and is unreachable with a switch on app_role.
+  const held = session.access.permissions;
+  const canSeeMoney = held.has('billing.read');
+  const canSeeClinical = held.has('consultation.read');
+  const canEdit = held.has('patients.update');
+  const canRemove = held.has('patients.update');
 
   const [patientResult, visitResult, invoiceResult, consultationResult] = await Promise.all([
     supabase

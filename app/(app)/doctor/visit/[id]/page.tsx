@@ -31,7 +31,7 @@ export default async function ConsultationPage({
   const { data: visit, error } = await supabase
     .from('visit_queue')
     .select(
-      'id, visit_no, token_no, visit_type, status, visited_at, patient_id, patient_mrn, patient_name, patient_dob, patient_gender, patient_phone, doctor_id, doctor_name, department_name',
+      'id, visit_no, token_no, visit_type, status, visited_at, patient_id, patient_mrn, patient_name, patient_dob, patient_gender, patient_phone, doctor_id, doctor_name, department_name, payment_due, defer_reason',
     )
     .eq('hospital_id', session.hospitalId)
     .eq('id', id)

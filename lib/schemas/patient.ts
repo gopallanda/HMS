@@ -17,8 +17,8 @@
 
 import { z } from 'zod';
 
-import { checkbox, clientId, optionalText, phone, text } from '@/lib/schemas/form';
 import { GENDERS } from '@/lib/patients';
+import { optionalText, phone, text } from '@/lib/schemas/form';
 import { todayIst } from '@/lib/utils/dates';
 
 const DATE_ONLY = /^(\d{4})-(\d{2})-(\d{2})$/;
@@ -78,8 +78,12 @@ export function ageYearsFromDob(dob: string, today: string = todayIst()): number
 /**
  * Resolves the date of birth from whichever of the two fields was filled in,
  * and reports the problem against the field the operator actually used.
+ *
+ * Exported for lib/schemas/registration.ts, which asks the same question
+ * inside a larger form. A second copy of these bounds would eventually accept
+ * a date this one rejects.
  */
-function resolveDob(
+export function resolveDob(
   dob: string,
   ageYears: string,
   ctx: z.RefinementCtx,
@@ -141,38 +145,15 @@ function resolveDob(
   return z.NEVER;
 }
 
-export const patientSchema = z
-  .object({
-    id: clientId,
-    full_name: text('Patient name', 2, 120),
-    dob: z.string().trim().nullish().transform((value) => value ?? ''),
-    age_years: z.string().trim().nullish().transform((value) => value ?? ''),
-    gender: z.enum(GENDERS, { error: 'Choose male, female or other.' }),
-    phone: phone(),
-    address: optionalText('Address', 300),
-    /**
-     * An Indian family shares one mobile. A phone already on file is a
-     * question -- "is this the same person?" -- and this is the desk's answer,
-     * posted only after they have seen the matches.
-     */
-    force_create: checkbox,
-  })
-  .transform((value, ctx) => {
-    const dob = resolveDob(value.dob, value.age_years, ctx);
-    if (dob === z.NEVER) return z.NEVER;
-
-    return {
-      id: value.id,
-      full_name: value.full_name,
-      dob,
-      gender: value.gender,
-      phone: value.phone,
-      address: value.address,
-      force_create: value.force_create,
-    };
-  });
-
-export type PatientInput = z.infer<typeof patientSchema>;
+/**
+ * There is no `patientSchema` here any more.
+ *
+ * Registration is one form and one transaction (block 4), so the rules for a
+ * NEW patient live in lib/schemas/registration.ts alongside the doctor, the
+ * fee and the payment mode -- they are validated together or not at all. What
+ * stayed is resolveDob() above, which both files use, and patientEditSchema
+ * below, which is a genuinely different job.
+ */
 
 /**
  * Correcting a record that already exists.

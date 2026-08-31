@@ -27,7 +27,11 @@ const REASON_MESSAGE: Record<string, string> = {
   // /auth/confirm could not redeem the token: expired, already used, or edited.
   // All three need the same thing -- a fresh link -- so they share a sentence.
   link_invalid:
-    'That link has expired or has already been used. Ask for a new invitation, or sign in below.',
+    'That link has expired or has already been used. Ask for a new one, or sign in below.',
+  // Set after a password reset or a forced change. Saying so explicitly matters
+  // here: the person has just typed a new password and being dropped back on a
+  // login screen with no explanation reads as "it did not work".
+  password_changed: 'Your password has been changed. Sign in with it.',
 };
 
 export default async function LoginPage({

@@ -138,7 +138,7 @@ export function MoneyPanel({
                   </TableCell>
                   <TableCell>
                     <Link
-                      href={`/print/invoice/${invoice.id}`}
+                      href={`/print/receipt/${invoice.id}?autoprint=0`}
                       className="text-muted-foreground transition-colors hover:text-foreground"
                       aria-label={`Print ${invoice.invoice_no}`}
                       title={`Print ${invoice.invoice_no}`}

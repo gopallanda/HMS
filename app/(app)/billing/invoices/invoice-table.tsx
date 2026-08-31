@@ -149,7 +149,7 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
               </span>
               <div className="ml-auto flex items-center gap-1">
                 <Button asChild variant="ghost" size="icon-sm" title="Print">
-                  <Link href={`/print/invoice/${invoice.id}`}>
+                  <Link href={`/print/receipt/${invoice.id}?autoprint=0`}>
                     <PrinterIcon />
                     <span className="sr-only">Print {invoice.invoice_no}</span>
                   </Link>
@@ -270,7 +270,7 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
                 <TableCell>
                   <div className="flex items-center justify-end gap-1">
                     <Button asChild variant="ghost" size="icon-sm" title="Print">
-                      <Link href={`/print/invoice/${invoice.id}`}>
+                      <Link href={`/print/receipt/${invoice.id}?autoprint=0`}>
                         <PrinterIcon />
                         <span className="sr-only">Print {invoice.invoice_no}</span>
                       </Link>

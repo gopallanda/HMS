@@ -42,35 +42,3 @@ export async function provisionHospital(supabase: Client): Promise<ProvisionResu
 
   return client.rpc('provision_hospital');
 }
-
-export type AttachStaffLoginResult =
-  | { status: 'attached'; user_id: string }
-  | { status: 'no_such_user' };
-
-/**
- * Links an auth user to a staff record and gives them a membership.
- *
- * Returns status 'no_such_user' when that email has no account yet -- not an
- * error, but the signal to send an invitation and call this again.
- *
- * Same cast, same reason, same removal instructions as provisionHospital above.
- */
-export type AttachStaffLoginArgs = {
-  p_staff_id: string;
-  p_email: string;
-  p_role: Database['public']['Enums']['app_role'];
-};
-
-export async function attachStaffLogin(
-  supabase: Client,
-  args: AttachStaffLoginArgs,
-): Promise<{ data: AttachStaffLoginResult | null; error: PostgrestError | null }> {
-  const client = supabase as unknown as {
-    rpc: (
-      fn: 'attach_staff_login',
-      args: AttachStaffLoginArgs,
-    ) => Promise<{ data: AttachStaffLoginResult | null; error: PostgrestError | null }>;
-  };
-
-  return client.rpc('attach_staff_login', args);
-}

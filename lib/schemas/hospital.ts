@@ -9,6 +9,7 @@
 
 import { z } from 'zod';
 
+import { PRINT_FORMATS } from '@/lib/billing';
 import { optionalText, phone, text } from '@/lib/schemas/form';
 
 /**
@@ -31,6 +32,17 @@ export const hospitalSettingsSchema = z.object({
       (value) => value === null || GSTIN_PATTERN.test(value),
       'A GSTIN is 15 characters, like 29ABCDE1234F1Z5.',
     ),
+  /**
+   * Which paper a receipt goes to by default (block 5).
+   *
+   * It lives in hospitals.settings rather than in a column because it is a
+   * preference about hardware, not a fact about the business -- and because
+   * the next two things Printing grows (a footer line, a second copy for the
+   * counter) belong beside it rather than as two more columns.
+   */
+  receipt_default: z.enum(PRINT_FORMATS, {
+    error: 'Choose the paper this hospital prints receipts on.',
+  }),
 });
 
 export type HospitalSettingsInput = z.infer<typeof hospitalSettingsSchema>;

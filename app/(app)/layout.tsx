@@ -1,7 +1,11 @@
+import { Suspense } from 'react';
+
 import { AppSidebar } from '@/components/shell/app-sidebar';
+import { DeniedToast } from '@/components/shell/denied-toast';
 import { QueryProvider } from '@/components/shell/query-provider';
 import { LifecycleBanner } from '@/components/shell/lifecycle-banner';
 import { requireSession } from '@/lib/auth/session';
+import { roleLabel } from '@/lib/roles';
 
 /**
  * The signed-in shell.
@@ -21,7 +25,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     <QueryProvider>
       <div className="flex min-h-svh flex-1 flex-col md:flex-row">
         <AppSidebar
-          role={session.role}
+          permissions={[...session.access.permissions]}
+          roleName={session.access.roleName ?? roleLabel(session.role)}
           hospitalName={session.hospital.name}
           logoUrl={session.hospital.logo_url}
           userName={session.staffName}
@@ -33,6 +38,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             lifecycle={session.lifecycle}
             role={session.role}
           />
+          {/* useSearchParams needs a Suspense boundary above it, or every
+              page under this layout opts out of static rendering. */}
+          <Suspense fallback={null}>
+            <DeniedToast />
+          </Suspense>
           {children}
         </main>
       </div>

@@ -1,8 +1,9 @@
 -- =============================================================================
 -- seed.sql -- demo data. Run with `npm run db:seed` (hosted project, no Docker).
 --
--- Creates: one hospital, three departments, five staff across five roles, and
--- a super_admin login that can sign in immediately.
+-- Creates: one hospital, three departments, the ten system roles, seven staff
+-- across six of them -- two of whom never sign in -- a fortnight of the
+-- cleaners' roster, and a super_admin login that can sign in immediately.
 --
 -- Safe to run repeatedly. Every row has a fixed UUID and an ON CONFLICT guard,
 -- so a second run adds nothing and overwrites nothing you have since edited in
@@ -31,10 +32,15 @@
 -- column default is 'trial', and a demo hospital that quietly expires after
 -- fourteen days would look like a bug in the seed rather than the feature
 -- working (20260825140000).
-insert into public.hospitals (id, name, address, phone, gstin, settings, plan, status)
+-- slug is spelled out rather than derived, and it is not decoration: it is the
+-- middle of every synthetic staff login address (20260828090200), so the demo
+-- hospital's usernames resolve to sunrise@sunrise-multispeciality-hospital...
+-- and stay stable across re-seeds. It is immutable once set.
+insert into public.hospitals (id, name, slug, address, phone, gstin, settings, plan, status)
 values (
   '00000000-0000-4000-8000-000000000001',
   'Sunrise Multispeciality Hospital',
+  'sunrise-multispeciality-hospital',
   '14 MG Road, Indiranagar, Bengaluru 560038',
   '+91 80 4123 5566',
   '29ABCDE1234F1Z5',
@@ -65,24 +71,92 @@ insert into public.departments (id, hospital_id, name, code) values
 on conflict (id) do nothing;
 
 -- -----------------------------------------------------------------------------
--- Staff. Five people, five roles.
+-- Roles.
+--
+-- Not written out row by row: seed_system_roles() is what a real hospital gets
+-- at provisioning (20260828090000), so the demo hospital gets exactly the same
+-- ten roles from exactly the same function. A hand-written list here would be a
+-- second definition, and the day it drifted the seed would be demonstrating
+-- something the product does not do.
+--
+-- Idempotent, like everything else in this file.
+-- -----------------------------------------------------------------------------
+select public.seed_system_roles('00000000-0000-4000-8000-000000000001');
+
+-- -----------------------------------------------------------------------------
+-- Staff. Seven people across six roles -- and two of them never sign in.
+--
+-- Sunita Devi and Ravi Naik, both Cleaners, are the point of this list. Their
+-- role has can_login = false, so the credentials half of the staff form
+-- disappears for them entirely; what they have instead is a staff record and a
+-- roster. Before the phase 1 remediation there was nowhere in this product for
+-- either of them to exist.
 --
 -- user_id stays null here: a staff record exists before a login does
 -- (CLAUDE.md 4). The block at the bottom attaches the one login this seed
 -- creates.
+--
+-- staff.role is deliberately absent from the column list. It is derived from
+-- role_id by trigger (20260828090100), so writing it would be writing a value
+-- the database is about to overwrite.
 --
 -- Only the doctors carry a consultation fee. Three different fees, because
 -- Phase 1 seeds the consultation charge_item from this column and a flat rate
 -- would hide a bug there.
 -- -----------------------------------------------------------------------------
 insert into public.staff
-  (id, hospital_id, full_name, role, department_id, phone, reg_no, consultation_fee) values
-  ('00000000-0000-4000-8000-000000000201', '00000000-0000-4000-8000-000000000001', 'Dr. Anjali Rao',    'doctor',     '00000000-0000-4000-8000-000000000101', '+91 98450 11223', 'KMC/2011/45231', 500.00),
-  ('00000000-0000-4000-8000-000000000202', '00000000-0000-4000-8000-000000000001', 'Dr. Vikram Shetty', 'doctor',     '00000000-0000-4000-8000-000000000102', '+91 98450 11224', 'KMC/2008/33110', 700.00),
-  ('00000000-0000-4000-8000-000000000203', '00000000-0000-4000-8000-000000000001', 'Dr. Meera Nair',    'doctor',     '00000000-0000-4000-8000-000000000103', '+91 98450 11225', 'KMC/2015/61802', 450.00),
-  ('00000000-0000-4000-8000-000000000204', '00000000-0000-4000-8000-000000000001', 'Lakshmi Prasad',    'front_desk', null,                                   '+91 98450 11226', null,             0),
-  ('00000000-0000-4000-8000-000000000205', '00000000-0000-4000-8000-000000000001', 'Ramesh Kumar',      'cashier',    null,                                   '+91 98450 11227', null,             0)
+  (id, hospital_id, full_name, role_id, department_id, phone, reg_no,
+   consultation_fee, employee_code, employment_type)
+select v.id, v.hospital_id, v.full_name, r.id, v.department_id, v.phone, v.reg_no,
+       v.consultation_fee, v.employee_code, v.employment_type
+from (values
+  ('00000000-0000-4000-8000-000000000201'::uuid, '00000000-0000-4000-8000-000000000001'::uuid, 'Dr. Anjali Rao',    'doctor',     '00000000-0000-4000-8000-000000000101'::uuid, '+91 98450 11223', 'KMC/2011/45231', 500.00, 'EMP0001', 'full_time'),
+  ('00000000-0000-4000-8000-000000000202'::uuid, '00000000-0000-4000-8000-000000000001'::uuid, 'Dr. Vikram Shetty', 'doctor',     '00000000-0000-4000-8000-000000000102'::uuid, '+91 98450 11224', 'KMC/2008/33110', 700.00, 'EMP0002', 'full_time'),
+  ('00000000-0000-4000-8000-000000000203'::uuid, '00000000-0000-4000-8000-000000000001'::uuid, 'Dr. Meera Nair',    'doctor',     '00000000-0000-4000-8000-000000000103'::uuid, '+91 98450 11225', 'KMC/2015/61802', 450.00, 'EMP0003', 'part_time'),
+  ('00000000-0000-4000-8000-000000000204'::uuid, '00000000-0000-4000-8000-000000000001'::uuid, 'Lakshmi Prasad',    'front_desk', null,                                         '+91 98450 11226', null,             0,      'EMP0004', 'full_time'),
+  ('00000000-0000-4000-8000-000000000205'::uuid, '00000000-0000-4000-8000-000000000001'::uuid, 'Ramesh Kumar',      'cashier',    null,                                         '+91 98450 11227', null,             0,      'EMP0005', 'full_time'),
+  ('00000000-0000-4000-8000-000000000206'::uuid, '00000000-0000-4000-8000-000000000001'::uuid, 'Sunita Devi',       'cleaner',    null,                                         '+91 98450 11228', null,             0,      'EMP0006', 'full_time'),
+  ('00000000-0000-4000-8000-000000000207'::uuid, '00000000-0000-4000-8000-000000000001'::uuid, 'Ravi Naik',         'cleaner',    null,                                         '+91 98450 11229', null,             0,      'EMP0007', 'contract')
+) as v(id, hospital_id, full_name, role_code, department_id, phone, reg_no,
+       consultation_fee, employee_code, employment_type)
+join public.roles r
+  on r.hospital_id = v.hospital_id
+ and r.code = v.role_code
+ and r.deleted_at is null
 on conflict (id) do nothing;
+
+-- -----------------------------------------------------------------------------
+-- A fortnight of the cleaners' roster, ending yesterday.
+--
+-- This is block 1's acceptance criterion written as data: two people with no
+-- credentials, and a fortnight of days somebody had to be able to record for
+-- them. Sundays are days off, and one day in the middle is an absence, so the
+-- grid shows more than one state and the hours column is not simply days x 8.
+-- -----------------------------------------------------------------------------
+insert into public.staff_shifts
+  (hospital_id, staff_id, work_date, status, start_time, end_time)
+select
+  '00000000-0000-4000-8000-000000000001',
+  s.staff_id,
+  d.work_date::date,
+  case
+    when extract(dow from d.work_date) = 0 then 'day_off'
+    when d.work_date::date = public.ist_date(now()) - 3
+     and s.staff_id = '00000000-0000-4000-8000-000000000206'::uuid then 'absent'
+    else 'present'
+  end,
+  case when extract(dow from d.work_date) = 0 then null else s.start_time end,
+  case when extract(dow from d.work_date) = 0 then null else s.end_time end
+from (values
+  ('00000000-0000-4000-8000-000000000206'::uuid, time '06:00', time '14:00'),
+  ('00000000-0000-4000-8000-000000000207'::uuid, time '14:00', time '22:00')
+) as s(staff_id, start_time, end_time)
+cross join generate_series(
+  (public.ist_date(now()) - 14)::timestamp,
+  (public.ist_date(now()) - 1)::timestamp,
+  interval '1 day'
+) as d(work_date)
+on conflict (hospital_id, staff_id, work_date) do nothing;
 
 -- =============================================================================
 -- The super_admin login
@@ -727,3 +801,119 @@ $$;
 -- stamps it on the way in, and clears it along with the reason when the
 -- hospital goes active again.
 -- =============================================================================
+
+-- =============================================================================
+-- The one-transaction register desk -- block 4.
+--
+-- Three registrations through register_patient_visit(), so the demo data
+-- covers what the new screen actually produces rather than only what the older
+-- create_visit path did:
+--
+--   * a cash registration, paid in full at the desk
+--   * a DEFERRED one, which leaves the invoice owing and writes the reason to
+--     visit_payment_deferrals -- this is what puts a PAYMENT DUE badge on the
+--     queue and on the visit header
+--   * a TRANSFER, so /front-desk/queue has a row whose token was reissued and
+--     visit_transfers has something in it
+--
+-- Guarded on "has this hospital already registered somebody this way today",
+-- for the same reason the queue block above is: the screens show TODAY, so a
+-- re-run tomorrow has to produce today's rows.
+--
+-- p_hospital_id and p_actor_id are the two arguments that exist only for
+-- callers with no JWT. A signed-in clerk supplies neither -- the tenant comes
+-- from the token and the collector from auth.uid() (CLAUDE.md 3.1, 3.2).
+-- =============================================================================
+do $$
+declare
+  v_hospital uuid := '00000000-0000-4000-8000-000000000001';
+  v_actor    uuid;
+  v_doctor_a uuid := '00000000-0000-4000-8000-000000000201';
+  v_doctor_b uuid := '00000000-0000-4000-8000-000000000202';
+  v_result   jsonb;
+begin
+  if exists (
+    select 1 from public.visit_payment_deferrals d
+    join public.visits v on v.hospital_id = d.hospital_id and v.id = d.visit_id
+    where d.hospital_id = v_hospital
+      and public.ist_date(v.visited_at) = public.ist_date(now())
+  ) then
+    raise notice 'seed: today already has a deferred registration, desk demo left alone';
+    return;
+  end if;
+
+  -- Whoever created the demo hospital. payments.collected_by is NOT NULL, so
+  -- without a login there is nobody to attribute a collection to and this
+  -- block has nothing useful to seed.
+  select m.user_id into v_actor
+  from public.memberships m
+  where m.hospital_id = v_hospital and m.is_active
+  order by m.created_at
+  limit 1;
+
+  if v_actor is null then
+    raise notice 'seed: no membership on the demo hospital, desk demo skipped';
+    return;
+  end if;
+
+  -- 1. Paid at the desk, the ordinary case.
+  v_result := public.register_patient_visit(
+    p_hospital_id  => v_hospital,
+    p_patient      => jsonb_build_object(
+                        'full_name', 'Meenakshi Sundaram',
+                        'dob',       '1979-07-14',
+                        'gender',    'female',
+                        'phone',     '+91 98861 20034',
+                        'address',   '22 Bazaar Street, Jayanagar, Bengaluru 560011'
+                      ),
+    p_doctor_id    => v_doctor_a,
+    p_payment_mode => 'upi',
+    p_actor_id     => v_actor
+  );
+  raise notice 'seed: registered % on token %',
+    v_result ->> 'mrn', v_result ->> 'token_no';
+
+  -- 2. Seen before paying. Rare, visible, auditable -- never a silent skip.
+  --    A family sharing one mobile is deliberate here too: this is the same
+  --    phone as the registration above, and nothing blocks it (defect 4).
+  v_result := public.register_patient_visit(
+    p_hospital_id  => v_hospital,
+    p_patient      => jsonb_build_object(
+                        'full_name', 'Arjun Sundaram',
+                        'dob',       '2016-03-02',
+                        'gender',    'male',
+                        'phone',     '+91 98861 20034',
+                        'address',   '22 Bazaar Street, Jayanagar, Bengaluru 560011'
+                      ),
+    p_doctor_id    => v_doctor_a,
+    p_deferred     => true,
+    p_defer_reason => 'Mother is paying for both; will settle at the counter together',
+    p_actor_id     => v_actor
+  );
+  raise notice 'seed: deferred registration on token %', v_result ->> 'token_no';
+
+  -- 3. Registered to the wrong doctor and moved. The old token is retired,
+  --    not reused, and the reason is on the record.
+  v_result := public.register_patient_visit(
+    p_hospital_id  => v_hospital,
+    p_patient      => jsonb_build_object(
+                        'full_name', 'Ganesh Pai',
+                        'dob',       '1965-11-30',
+                        'gender',    'male',
+                        'phone',     '+91 99017 45521'
+                      ),
+    p_doctor_id    => v_doctor_a,
+    p_payment_mode => 'cash',
+    p_actor_id     => v_actor
+  );
+
+  v_result := public.transfer_visit(
+    p_visit_id    => (v_result ->> 'visit_id')::uuid,
+    p_doctor_id   => v_doctor_b,
+    p_reason      => 'Chest pain, moved to the physician on duty',
+    p_hospital_id => v_hospital
+  );
+  raise notice 'seed: transferred to % on token %',
+    v_result ->> 'doctor_name', v_result ->> 'token_no';
+end;
+$$;

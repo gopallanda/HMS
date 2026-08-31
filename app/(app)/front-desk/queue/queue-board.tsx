@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CalendarClockIcon } from 'lucide-react';
 
+import { TransferDialog, type TransferDoctor } from '../incomplete/transfer-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -46,7 +47,31 @@ export type QueueEntry = {
   doctor_name: string | null;
   department_name: string | null;
   charge_total: number;
+  /** An invoice on this visit is still unpaid or part paid. */
+  payment_due: boolean;
+  /** Set when the desk deliberately let them through without paying. */
+  defer_reason: string | null;
 };
+
+/**
+ * PAYMENT DUE.
+ *
+ * Deliberately loud, and deliberately on the row rather than only on the
+ * invoice: the person who needs to see it is the one calling the next patient,
+ * and by the time anybody opens a bill the patient has already been seen. The
+ * reason is in the title attribute because "why" is the second question and
+ * the badge has no room for it.
+ */
+function PaymentDue({ reason }: { reason: string | null }) {
+  return (
+    <span
+      title={reason ?? 'No payment recorded against this visit yet.'}
+      className="inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-warning uppercase ring-1 ring-warning/40"
+    >
+      Payment due
+    </span>
+  );
+}
 
 /** Several registrations in the same second should cost one refresh, not five. */
 const REFRESH_DEBOUNCE_MS = 250;
@@ -54,9 +79,15 @@ const REFRESH_DEBOUNCE_MS = 250;
 export function QueueBoard({
   entries,
   hospitalId,
+  doctors,
+  canManage,
 }: {
   entries: QueueEntry[];
   hospitalId: string;
+  /** For the transfer dialog. Active doctors only. */
+  doctors: TransferDoctor[];
+  /** queue.manage. Without it the row has no Transfer button. */
+  canManage: boolean;
 }) {
   const router = useRouter();
   const [live, setLive] = useState(false);
@@ -185,9 +216,12 @@ export function QueueBoard({
                   >
                     {entry.patient_name}
                   </Link>
-                  <Badge variant={VISIT_STATUS_VARIANT[entry.status]} className="shrink-0">
-                    {VISIT_STATUS_LABEL[entry.status]}
-                  </Badge>
+                  <span className="flex shrink-0 items-center gap-1.5">
+                    {entry.payment_due ? <PaymentDue reason={entry.defer_reason} /> : null}
+                    <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
+                      {VISIT_STATUS_LABEL[entry.status]}
+                    </Badge>
+                  </span>
                 </div>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
                   {ageGender(entry.patient_dob, entry.patient_gender)} &middot;{' '}
@@ -231,6 +265,7 @@ export function QueueBoard({
               <TableHead className="w-24">Type</TableHead>
               <TableHead className="w-28 text-right">Charges &#8377;</TableHead>
               <TableHead className="w-28">Status</TableHead>
+              <TableHead className="w-28 text-right">Move</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -286,9 +321,27 @@ export function QueueBoard({
                   {formatAmount(entry.charge_total)}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
-                    {VISIT_STATUS_LABEL[entry.status]}
-                  </Badge>
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
+                      {VISIT_STATUS_LABEL[entry.status]}
+                    </Badge>
+                    {entry.payment_due ? <PaymentDue reason={entry.defer_reason} /> : null}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right">
+                  {/* The ONLY way a visit's doctor changes after registration
+                      (block 7.1). Closed visits are left alone: moving somebody
+                      who has already been seen would retire a token for no
+                      reason and misattribute the consultation. */}
+                  {canManage &&
+                  (entry.status === 'waiting' || entry.status === 'in_consultation') ? (
+                    <TransferDialog
+                      visitId={entry.id}
+                      patientName={entry.patient_name}
+                      currentDoctor={entry.doctor_name}
+                      doctors={doctors}
+                    />
+                  ) : null}
                 </TableCell>
               </TableRow>
             ))}

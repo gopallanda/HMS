@@ -3,8 +3,7 @@
 import { refresh } from 'next/cache';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
-import { requireSessionForAction } from '@/lib/auth/session';
-import { isClinicalRole } from '@/lib/roles';
+import { checkPermission } from '@/lib/auth/session';
 import { saveConsultation } from '@/lib/rpc/consultations';
 import { consultationSchema } from '@/lib/schemas/consultation';
 import { describeDatabaseError } from '@/lib/supabase/errors';
@@ -32,10 +31,9 @@ export async function saveConsultationAction(
   _previous: SaveConsultationState,
   formData: FormData,
 ): Promise<SaveConsultationState> {
-  const session = await requireSessionForAction();
-  if (!isClinicalRole(session.role)) {
-    return failure('Only clinical staff can record a consultation.');
-  }
+  const gate = await checkPermission('consultation.write');
+  if (!gate.ok) return failure(gate.message);
+  const session = gate.session;
 
   const parsed = consultationSchema.safeParse({
     id: formData.get('id'),

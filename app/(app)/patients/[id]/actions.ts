@@ -4,8 +4,7 @@ import { refresh } from 'next/cache';
 import { z } from 'zod';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
-import { requireSessionForAction } from '@/lib/auth/session';
-import { isAdminRole, isFrontDeskRole } from '@/lib/roles';
+import { checkPermission } from '@/lib/auth/session';
 import { patientEditSchema } from '@/lib/schemas/patient';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -28,10 +27,9 @@ export async function updatePatient(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const session = await requireSessionForAction();
-  if (!isFrontDeskRole(session.role)) {
-    return failure('Only the front desk can change a patient record.');
-  }
+  const gate = await checkPermission('patients.update');
+  if (!gate.ok) return failure(gate.message);
+  const session = gate.session;
 
   const parsed = patientEditSchema.safeParse({
     id: formData.get('id'),
@@ -109,10 +107,9 @@ export async function setPatientRemoved(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  const session = await requireSessionForAction();
-  if (!isAdminRole(session.role)) {
-    return failure('Only an administrator can remove or restore a patient record.');
-  }
+  const gate = await checkPermission('patients.update');
+  if (!gate.ok) return failure(gate.message);
+  const session = gate.session;
 
   const parsed = removalSchema.safeParse({
     id: formData.get('id'),

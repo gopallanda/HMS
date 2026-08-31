@@ -16,11 +16,13 @@ import {
   BuildingIcon,
   Building2Icon,
   CalendarClockIcon,
+  CalendarRangeIcon,
   ContactRoundIcon,
   CreditCardIcon,
   LayoutDashboardIcon,
   ReceiptIcon,
   ReceiptIndianRupeeIcon,
+  ShieldIcon,
   SlidersHorizontalIcon,
   StethoscopeIcon,
   UserRoundPlusIcon,
@@ -28,14 +30,26 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 
-import { isAdminRole, type AppRole } from '@/lib/roles';
+import type { Permission, PermissionSet } from '@/lib/rbac/permissions';
+import { roleHome } from '@/lib/rbac/routes';
 
 export type NavItem = {
   href: string;
   label: string;
   icon: LucideIcon;
-  /** Empty means every signed-in member of the hospital. */
-  roles: readonly AppRole[];
+  /**
+   * What the viewer must hold to see this row. ANY one of them is enough --
+   * the billing section is one link per screen and a cashier who may collect
+   * but not report should still see the section.
+   *
+   * Empty means every signed-in member of the hospital.
+   *
+   * These are the SAME keys ROUTE_PERMISSIONS guards the route with, and they
+   * have to stay that way: a row the nav shows and the proxy bounces is worse
+   * than no row at all. Where a screen needs a narrower permission than its
+   * section, the narrow one goes here.
+   */
+  permissions: readonly Permission[];
   /** 'planned' items are visible but not clickable. */
   status: 'ready' | 'planned';
   phase: 0 | 1 | 2 | 3;
@@ -46,10 +60,6 @@ export type NavSection = {
   items: readonly NavItem[];
 };
 
-const DESK: readonly AppRole[] = ['super_admin', 'admin', 'front_desk'];
-const MONEY: readonly AppRole[] = ['super_admin', 'admin', 'cashier'];
-const CLINICAL: readonly AppRole[] = ['super_admin', 'admin', 'doctor'];
-const ADMIN: readonly AppRole[] = ['super_admin', 'admin'];
 
 export const NAV: readonly NavSection[] = [
   {
@@ -59,7 +69,16 @@ export const NAV: readonly NavSection[] = [
         href: '/',
         label: 'Overview',
         icon: LayoutDashboardIcon,
-        roles: [],
+        /**
+         * The hospital dashboard, and NOT a screen for everybody.
+         *
+         * It carries the setup checklist, the day's takings and the tenant's
+         * lifecycle banner -- a manager's view of the business, which is why
+         * reports.view is the right key for it. A doctor holding no
+         * reports.view neither sees this row nor reaches `/`: the proxy sends
+         * them to their queue instead. That is the whole of defect 1.
+         */
+        permissions: ['reports.view'],
         status: 'ready',
         phase: 0,
       },
@@ -72,7 +91,7 @@ export const NAV: readonly NavSection[] = [
         href: '/front-desk/register',
         label: 'Register patient',
         icon: UserRoundPlusIcon,
-        roles: DESK,
+        permissions: ['visits.create'],
         status: 'ready',
         phase: 1,
       },
@@ -80,7 +99,7 @@ export const NAV: readonly NavSection[] = [
         href: '/front-desk/queue',
         label: 'Queue',
         icon: CalendarClockIcon,
-        roles: DESK,
+        permissions: ['queue.read'],
         status: 'ready',
         phase: 1,
       },
@@ -93,7 +112,7 @@ export const NAV: readonly NavSection[] = [
         href: '/billing/collect',
         label: 'Collect payment',
         icon: CreditCardIcon,
-        roles: MONEY,
+        permissions: ['billing.collect'],
         status: 'ready',
         phase: 1,
       },
@@ -101,7 +120,7 @@ export const NAV: readonly NavSection[] = [
         href: '/billing/invoices',
         label: 'Invoices',
         icon: ReceiptIcon,
-        roles: MONEY,
+        permissions: ['billing.read'],
         status: 'ready',
         phase: 1,
       },
@@ -109,7 +128,7 @@ export const NAV: readonly NavSection[] = [
         href: '/billing/day-close',
         label: 'Day close',
         icon: SlidersHorizontalIcon,
-        roles: MONEY,
+        permissions: ['reports.view'],
         status: 'ready',
         phase: 1,
       },
@@ -122,25 +141,25 @@ export const NAV: readonly NavSection[] = [
         href: '/doctor/queue',
         label: 'My queue',
         icon: StethoscopeIcon,
-        roles: CLINICAL,
+        permissions: ['consultation.read'],
         status: 'ready',
         phase: 1,
       },
     ],
   },
   /**
-   * Deliberately AFTER Clinical, and deliberately `roles: []`.
+   * Deliberately AFTER Clinical.
    *
-   * Everybody looks a patient up: the cashier chasing a balance, the doctor
-   * checking what was written last month, the lab matching a sample to a name.
-   * What each of them SEES on the record differs by role -- the money and the
+   * Almost everybody looks a patient up: the cashier chasing a balance, the
+   * doctor checking what was written last month, the lab matching a sample to
+   * a name. What each of them SEES on the record differs -- the money and the
    * clinical panels are gated on the page itself -- but the door is the same
-   * one.
+   * one, and patients.read is what opens it.
    *
-   * The position matters beyond tidiness: landingFor() drops a user on the
-   * first ready item they can see, so a section carrying an everyone-item
-   * placed above Front desk or Billing would quietly move reception and the
-   * cashier off the screen they open all day.
+   * The position matters beyond tidiness: roleHome() falls through this list
+   * for a role it does not recognise, so a broadly-held screen placed above
+   * Front desk or Billing would quietly move a custom receptionist role off
+   * the screen they open all day.
    */
   {
     label: 'Records',
@@ -149,7 +168,7 @@ export const NAV: readonly NavSection[] = [
         href: '/patients',
         label: 'Patients',
         icon: ContactRoundIcon,
-        roles: [],
+        permissions: ['patients.read'],
         status: 'ready',
         phase: 1,
       },
@@ -162,7 +181,7 @@ export const NAV: readonly NavSection[] = [
         href: '/admin/settings',
         label: 'Hospital settings',
         icon: BuildingIcon,
-        roles: ADMIN,
+        permissions: ['settings.manage'],
         status: 'ready',
         phase: 0,
       },
@@ -170,7 +189,7 @@ export const NAV: readonly NavSection[] = [
         href: '/admin/departments',
         label: 'Departments',
         icon: Building2Icon,
-        roles: ADMIN,
+        permissions: ['departments.manage'],
         status: 'ready',
         phase: 0,
       },
@@ -178,15 +197,39 @@ export const NAV: readonly NavSection[] = [
         href: '/admin/staff',
         label: 'Staff',
         icon: UsersIcon,
-        roles: ADMIN,
+        permissions: ['staff.read'],
         status: 'ready',
         phase: 0,
+      },
+      /**
+       * Roles and the roster, from the phase 1 remediation.
+       *
+       * roster.read rather than settings.manage is the point of the whole
+       * section being permission-keyed: a Manager holds the roster and the
+       * staff list and holds neither the settings nor the roles, and until
+       * block 3 this table could not express that.
+       */
+      {
+        href: '/admin/roles',
+        label: 'Roles',
+        icon: ShieldIcon,
+        permissions: ['roles.manage'],
+        status: 'ready',
+        phase: 1,
+      },
+      {
+        href: '/admin/roster',
+        label: 'Roster',
+        icon: CalendarRangeIcon,
+        permissions: ['roster.read'],
+        status: 'ready',
+        phase: 1,
       },
       {
         href: '/admin/services',
         label: 'Price list',
         icon: ReceiptIndianRupeeIcon,
-        roles: ADMIN,
+        permissions: ['settings.manage'],
         status: 'ready',
         phase: 1,
       },
@@ -194,35 +237,41 @@ export const NAV: readonly NavSection[] = [
   },
 ];
 
-function visibleTo(item: NavItem, role: AppRole | null): boolean {
-  if (item.roles.length === 0) return true;
-  return role !== null && item.roles.includes(role);
-}
-
-/** The sections a role may see, with empty sections dropped. */
-export function navFor(role: AppRole | null): NavSection[] {
-  return NAV.map((section) => ({
-    ...section,
-    items: section.items.filter((item) => visibleTo(item, role)),
-  })).filter((section) => section.items.length > 0);
+function visibleTo(item: NavItem, held: PermissionSet): boolean {
+  if (item.permissions.length === 0) return true;
+  return item.permissions.some((permission) => held.has(permission));
 }
 
 /**
- * Where to send someone after they sign in: their first module that actually
- * exists. Everyone can see the overview, so this always resolves.
+ * The sections this permission set may see, with empty sections dropped.
  *
- * Administrators are the exception and land on the overview itself. It carries
- * the setup checklist, which is the only useful screen in a hospital that has
- * just been created and has no departments, doctors or patients yet -- and for
- * an established admin the overview is still the right home, because
- * /front-desk/register is a receptionist's screen, not theirs.
+ * Filtering here is COSMETIC and nothing else (CLAUDE.md 3.6). It stops a
+ * nurse being shown "Add staff"; what stops her using it is
+ * requirePermission() in the action and the RLS policy under that. A nav
+ * filter is a courtesy to the person, not a control on them.
  */
-export function landingFor(role: AppRole | null): string {
-  if (role !== null && isAdminRole(role)) return '/';
+export function navFor(held: PermissionSet): NavSection[] {
+  return NAV.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => visibleTo(item, held)),
+  })).filter((section) => section.items.length > 0);
+}
 
-  for (const section of navFor(role)) {
-    const ready = section.items.find((item) => item.status === 'ready' && item.href !== '/');
-    if (ready) return ready.href;
-  }
-  return '/';
+/** Every ready destination, in nav order. What roleHome() falls through. */
+export function navLandings(held: PermissionSet): string[] {
+  return navFor(held)
+    .flatMap((section) => section.items)
+    .filter((item) => item.status === 'ready')
+    .map((item) => item.href);
+}
+
+/**
+ * Where to send someone after they sign in.
+ *
+ * The role's own home when their permissions allow it, then the first screen
+ * in their own nav, then the overview. `/` is last on purpose: it is the
+ * hospital dashboard, and dropping a doctor there was defect 1.
+ */
+export function landingFor(roleCode: string | null, held: PermissionSet): string {
+  return roleHome(roleCode, held, navLandings(held));
 }

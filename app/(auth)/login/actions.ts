@@ -3,11 +3,38 @@
 import { redirect } from 'next/navigation';
 
 import { failure, invalid, type ActionState } from '@/lib/action-state';
-import { landingFor } from '@/lib/nav';
+import {
+  isLockedOut,
+  recordFailedSignIn,
+  recordSuccessfulSignIn,
+  resolveUsername,
+  COOLDOWN_MINUTES,
+} from '@/lib/accounts/sign-in';
+import { landingForCaller } from '@/lib/rbac/landing';
 import type { AppRole } from '@/lib/roles';
 import { provisionHospital } from '@/lib/rpc/onboarding';
-import { loginSchema } from '@/lib/schemas/auth';
+import { asUsername, looksLikeEmail, signInSchema } from '@/lib/schemas/account';
 import { createClient } from '@/lib/supabase/server';
+
+/**
+ * Signing in.
+ *
+ * The person types a USERNAME. There is no invitation email in this product any
+ * more, so there is no address for them to remember -- they were handed
+ * "pavan.kumar" and a temporary password at the desk, and the synthetic
+ * address that username resolves to is never shown to them.
+ *
+ * An email address still works, for exactly one population: whoever created
+ * the hospital through /signup, before there was a staff record to build a
+ * username from.
+ *
+ * EVERY failure returns the SAME sentence. Distinguishing "no such username"
+ * from "wrong password" turns this form into a staff directory for anyone who
+ * can reach it.
+ */
+
+/** The one thing this form ever says about a failure. */
+const BLENDED_FAILURE = 'Incorrect username or password.';
 
 /**
  * Only same-origin absolute paths may be followed after login. Without this a
@@ -24,30 +51,99 @@ function safeNext(value: FormDataEntryValue | null): string | null {
 }
 
 export async function signIn(_previous: ActionState, formData: FormData): Promise<ActionState> {
-  const parsed = loginSchema.safeParse({
-    email: formData.get('email'),
+  const parsed = signInSchema.safeParse({
+    identifier: formData.get('identifier'),
     password: formData.get('password'),
   });
   if (!parsed.success) return invalid(parsed.error);
 
   const supabase = await createClient();
+  const next = safeNext(formData.get('next'));
 
-  const { data, error } = await supabase.auth.signInWithPassword(parsed.data);
+  // ---- The founder path: an email, no staff_accounts row ------------------
+  if (looksLikeEmail(parsed.data.identifier)) {
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: parsed.data.identifier,
+      password: parsed.data.password,
+    });
 
-  if (error) {
-    // One message for a wrong email and a wrong password. Telling them apart
-    // would confirm which addresses have accounts here.
-    if (error.status === 400) {
-      return failure('Email or password is incorrect.', {
-        password: ['Check the address and password and try again.'],
+    if (error) {
+      return failure(BLENDED_FAILURE, {
+        identifier: ['Check what you typed and try again.'],
       });
     }
-    return failure(error.message);
+
+    return finishSignIn(supabase, data.user.id, next);
   }
 
-  // Signing in is not the same as having somewhere to go. The claims below are
-  // what RLS will enforce on the next request, so resolve them now and fail
-  // here, where there is a form to explain it on.
+  // ---- The staff path: a username -----------------------------------------
+  const username = asUsername(parsed.data.identifier);
+  const account = await resolveUsername(username);
+
+  // No such username. Same sentence, and deliberately no throttle record --
+  // there is no account to throttle, and inventing one would leak which
+  // usernames exist through timing.
+  if (!account) {
+    return failure(BLENDED_FAILURE, { identifier: ['Check what you typed and try again.'] });
+  }
+
+  if (isLockedOut(account)) {
+    // This one IS specific, and on purpose: it is not a hint about whether the
+    // password was right, and the alternative is somebody typing the correct
+    // password five more times while the software says nothing useful.
+    return failure(
+      `Too many attempts. This account is locked for ${COOLDOWN_MINUTES} minutes. ` +
+        'An administrator can reset the password to unlock it sooner.',
+    );
+  }
+
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email: account.loginEmail,
+    password: parsed.data.password,
+  });
+
+  if (error) {
+    await recordFailedSignIn(account.id);
+    return failure(BLENDED_FAILURE, { identifier: ['Check what you typed and try again.'] });
+  }
+
+  // Re-read rather than trusting what was resolved a moment ago: revoking
+  // access is one write, and it has to take effect on the very next sign-in
+  // even if it landed in between.
+  const current = await resolveUsername(username);
+
+  if (!current || current.disabledAt) {
+    await supabase.auth.signOut({ scope: 'local' });
+    redirect('/access-denied?reason=revoked');
+  }
+
+  await recordSuccessfulSignIn(current.id);
+
+  if (current.mustChangePassword) {
+    // Not a courtesy redirect -- the proxy enforces this on every route, so a
+    // deep link past it comes straight back. This is just the polite version.
+    redirect('/change-password');
+  }
+
+  return finishSignIn(supabase, data.user.id, next);
+}
+
+/**
+ * The part both paths share: make sure the token actually carries a hospital,
+ * and send the person somewhere they can work.
+ *
+ * A signup whose email needed confirming had no session at the moment it was
+ * created, so its hospital could not be provisioned then. The details were
+ * parked on the auth.users row, and this is the first moment there is an
+ * authenticated caller to act on them. provision_hospital returns null for
+ * anybody not in that situation and is idempotent, so a repeated sign-in
+ * cannot mint a second hospital.
+ */
+async function finishSignIn(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  userId: string,
+  next: string | null,
+): Promise<ActionState> {
   const { data: claimsData } = await supabase.auth.getClaims();
   const appMetadata = (claimsData?.claims?.app_metadata ?? {}) as Record<string, unknown>;
   const hospitalId =
@@ -55,14 +151,6 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
   const role = typeof appMetadata.role === 'string' ? (appMetadata.role as AppRole) : null;
 
   if (!hospitalId || !role) {
-    // Before treating this as a failure: a signup whose email needed confirming
-    // had no session at the moment it was created, so its hospital could not be
-    // provisioned then. The details were parked on the auth.users row, and this
-    // is the first moment there is an authenticated caller to act on them.
-    //
-    // provision_hospital returns null for anyone not in that situation, which
-    // leaves the diagnosis below exactly as it was. It is idempotent, so a
-    // repeated sign-in cannot mint a second hospital.
     const { data: provisionedId, error: provisionError } = await provisionHospital(supabase);
 
     if (provisionError) {
@@ -71,8 +159,8 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
     }
 
     if (provisionedId) {
-      // Same reason as in the signup action: the token in hand was issued
-      // before the membership existed and still says hospital_id null.
+      // The token in hand was issued before the membership existed and still
+      // says hospital_id null.
       const { error: refreshError } = await supabase.auth.refreshSession();
       if (refreshError) {
         await supabase.auth.signOut({ scope: 'local' });
@@ -80,8 +168,7 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
           `Your hospital was set up, but this session did not pick it up: ${refreshError.message} Sign in again.`,
         );
       }
-      // A founder's first sign-in. The overview carries the setup checklist.
-      redirect(safeNext(formData.get('next')) ?? '/');
+      redirect(next ?? '/');
     }
 
     // Two very different causes, and the fix for one is useless for the other,
@@ -90,7 +177,7 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
     const { data: memberships } = await supabase
       .from('memberships')
       .select('hospital_id')
-      .eq('user_id', data.user.id)
+      .eq('user_id', userId)
       .eq('is_active', true)
       .limit(1);
 
@@ -110,5 +197,5 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
   }
 
   // Outside any try/catch: redirect() signals by throwing.
-  redirect(safeNext(formData.get('next')) ?? landingFor(role));
+  redirect(next ?? (await landingForCaller(supabase, role)));
 }

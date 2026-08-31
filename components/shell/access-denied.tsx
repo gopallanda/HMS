@@ -3,7 +3,6 @@ import Link from 'next/link';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
-import { roleLabel, type AppRole } from '@/lib/roles';
 
 /**
  * Shown instead of redirecting.
@@ -11,13 +10,21 @@ import { roleLabel, type AppRole } from '@/lib/roles';
  * A silent bounce to the overview reads as a broken link; a nurse who lands
  * here needs to know it is a permission, not a bug, and which role they are
  * currently signed in as -- on a shared machine that is usually the answer.
+ *
+ * From block 3 the proxy turns most of these away before the page renders, so
+ * this card is the second layer rather than the first: it is what somebody
+ * sees when they reach a screen the route guard has no entry for, or when a
+ * page gates a panel more finely than the route.
+ *
+ * The role shown is the STAFF role's name, not the app_role -- "Ward sister"
+ * is what the person will recognise and what an administrator will search for.
  */
 export function AccessDenied({
-  role,
+  roleName,
   area,
   audience = 'administrators',
 }: {
-  role: AppRole;
+  roleName: string;
   area: string;
   /** Who the area IS for, in the plural: 'administrators', 'the front desk'. */
   audience?: string;
@@ -33,7 +40,7 @@ export function AccessDenied({
             {area} is for {audience}
           </p>
           <p className="text-sm leading-relaxed text-muted-foreground">
-            You are signed in as {roleLabel(role)}. Ask an administrator if you need access, or
+            You are signed in as {roleName}. Ask an administrator if you need access, or
             sign in with an account that has it.
           </p>
         </div>

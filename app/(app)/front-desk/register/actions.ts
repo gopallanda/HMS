@@ -2,143 +2,113 @@
 
 import { refresh } from 'next/cache';
 
+import { checkPermission } from '@/lib/auth/session';
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
-import { requireSessionForAction } from '@/lib/auth/session';
-import { isFrontDeskRole } from '@/lib/roles';
-import { DUPLICATE_PHONE, registerPatient } from '@/lib/rpc/patients';
-import { createVisit } from '@/lib/rpc/visits';
-import { patientSchema } from '@/lib/schemas/patient';
-import { visitSchema } from '@/lib/schemas/visit';
+import { registerPatientVisit, type RegistrationResult } from '@/lib/rpc/registration';
+import { registrationSchema } from '@/lib/schemas/registration';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
 
 /**
- * Both actions here return the row they created alongside the usual
- * ActionState, because the desk flow is a chain: registering a patient opens
- * the visit dialog for that patient, and creating a visit prints a token. The
- * client would otherwise have to re-query for something it just wrote.
+ * Registration. One action, one RPC, one transaction (block 4.2).
+ *
+ * What this replaces: registerPatientAction and startVisitAction, which were
+ * two posts with a dialog between them. A clerk could complete the first and
+ * abandon the second, and the result was a patient with no visit -- or, worse,
+ * a visit with no doctor, no token and no money asked for, which is invisible
+ * to every screen in the product. Making it one call is the fix; making the
+ * form required fields was not, because the shape allowed the bad state.
+ *
+ * The DUPLICATE_PHONE branch is gone with them (defect 4). A phone number
+ * identifies a household. The screen still shows who else is on the number --
+ * as information, with a "use this patient" button, which is what actually
+ * prevents a duplicate MRN -- and it never blocks.
  */
-export type RegisteredPatient = {
-  id: string;
-  mrn: string;
-  full_name: string;
-  dob: string;
-  phone: string | null;
-};
 
-export type RegisterPatientState = ActionState & {
-  patient?: RegisteredPatient;
-  /** The phone is already on file. Not a failure -- a question for the desk. */
-  duplicate?: boolean;
-};
+export type RegisterState = ActionState & { result?: RegistrationResult };
 
-export type StartedVisit = {
-  id: string;
-  visit_no: string;
-  token_no: number;
-};
-
-export type StartVisitState = ActionState & { visit?: StartedVisit };
-
-export async function registerPatientAction(
-  _previous: RegisterPatientState,
+export async function registerAction(
+  _previous: RegisterState,
   formData: FormData,
-): Promise<RegisterPatientState> {
-  const session = await requireSessionForAction();
-  if (!isFrontDeskRole(session.role)) {
-    return failure('Only the front desk can register patients.');
-  }
+): Promise<RegisterState> {
+  // checkPermission, not requirePermission: a refusal belongs on the form as a
+  // sentence, and Next.js masks thrown errors in production builds.
+  const gate = await checkPermission('visits.create');
+  if (!gate.ok) return failure(gate.message);
 
-  const parsed = patientSchema.safeParse({
-    id: formData.get('id'),
+  const parsed = registrationSchema.safeParse({
+    patient_new_id: formData.get('patient_new_id'),
+    visit_id: formData.get('visit_id'),
+    invoice_id: formData.get('invoice_id'),
+    patient_id: formData.get('patient_id'),
     full_name: formData.get('full_name'),
     dob: formData.get('dob'),
     age_years: formData.get('age_years'),
     gender: formData.get('gender'),
     phone: formData.get('phone'),
     address: formData.get('address'),
-    force_create: formData.get('force_create'),
-  });
-  if (!parsed.success) return invalid(parsed.error);
-
-  const supabase = await createClient();
-
-  // hospital_id is deliberately not sent: register_patient reads it from the
-  // JWT and refuses a payload that disagrees (CLAUDE.md 3.1).
-  const { data, error } = await registerPatient(supabase, {
-    id: parsed.data.id,
-    full_name: parsed.data.full_name,
-    dob: parsed.data.dob,
-    gender: parsed.data.gender,
-    phone: parsed.data.phone,
-    address: parsed.data.address,
-    force_create: parsed.data.force_create,
-  });
-
-  if (error) {
-    if (error.code === DUPLICATE_PHONE) {
-      return {
-        status: 'error',
-        message: error.message,
-        fieldErrors: { phone: ['Already on file here.'] },
-        duplicate: true,
-      };
-    }
-    return failure(describeDatabaseError(error));
-  }
-
-  if (!data) return failure('The patient could not be registered. Try again.');
-
-  return {
-    ...success(`${data.full_name} registered as ${data.mrn}.`),
-    patient: {
-      id: data.id,
-      mrn: data.mrn,
-      full_name: data.full_name,
-      dob: data.dob,
-      phone: data.phone,
-    },
-  };
-}
-
-export async function startVisitAction(
-  _previous: StartVisitState,
-  formData: FormData,
-): Promise<StartVisitState> {
-  const session = await requireSessionForAction();
-  if (!isFrontDeskRole(session.role)) {
-    return failure('Only the front desk can start a visit.');
-  }
-
-  const parsed = visitSchema.safeParse({
-    id: formData.get('id'),
-    patient_id: formData.get('patient_id'),
     doctor_id: formData.get('doctor_id'),
     department_id: formData.get('department_id'),
-    visit_type: formData.get('visit_type'),
+    fee: formData.get('fee'),
+    payment_mode: formData.get('payment_mode'),
+    deferred: formData.get('deferred'),
+    defer_reason: formData.get('defer_reason'),
   });
   if (!parsed.success) return invalid(parsed.error);
 
+  const input = parsed.data;
+
+  /**
+   * The two permissions the FORM offers but does not decide.
+   *
+   * Editing the fee and deferring payment are both money decisions, and both
+   * are hidden in the UI from anybody without the permission -- but a POST
+   * arrives without passing through the UI, so this is where it is settled
+   * (CLAUDE.md 3.6).
+   *
+   * Deferral is refused outright. An edited fee is not: refusing it would
+   * leave a clerk staring at a form they cannot submit for a reason they
+   * cannot see, so the doctor's own fee is used instead and the RPC recomputes
+   * it from the staff row.
+   */
+  if (input.deferred) {
+    const defer = await checkPermission('billing.defer');
+    if (!defer.ok) {
+      return failure(
+        'You are not allowed to let a patient be seen before paying. Ask a manager.',
+      );
+    }
+  }
+
+  const collect = await checkPermission('billing.collect');
+  const fee = collect.ok ? input.fee : null;
+
   const supabase = await createClient();
 
-  const { data, error } = await createVisit(supabase, {
-    id: parsed.data.id,
-    patient_id: parsed.data.patient_id,
-    doctor_id: parsed.data.doctor_id,
-    department_id: parsed.data.department_id,
-    visit_type: parsed.data.visit_type,
+  const { data, error } = await registerPatientVisit(supabase, {
+    visitId: input.visit_id,
+    invoiceId: input.invoice_id,
+    patientId: input.patient_id,
+    patient: input.patient,
+    doctorId: input.doctor_id,
+    departmentId: input.department_id,
+    // null lets the function fall back to the doctor's consultation_fee.
+    fee,
+    paymentMode: input.payment_mode,
+    deferred: input.deferred,
+    deferReason: input.defer_reason,
   });
 
   if (error) return failure(describeDatabaseError(error));
-  if (!data) return failure('The visit could not be created. Try again.');
+  if (!data) return failure('The registration could not be completed. Try again.');
 
-  // The queue is a server component; this is what makes it current for anyone
+  // The queue is a Server Component; this is what makes it current for anyone
   // who navigates to it next in this tab. Other people's browsers find out
   // through Realtime instead.
   refresh();
 
   return {
-    ...success(`Token ${data.token_no} - ${data.visit_no}`),
-    visit: { id: data.id, visit_no: data.visit_no, token_no: data.token_no },
+    ...success(`Token ${data.token_no} - ${data.patient_name} (${data.mrn})`),
+    result: data,
   };
 }

@@ -17,7 +17,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { requireSession } from '@/lib/auth/session';
 import { navFor } from '@/lib/nav';
-import { isAdminRole, roleLabel } from '@/lib/roles';
+import { roleLabel } from '@/lib/roles';
 import { createClient } from '@/lib/supabase/server';
 import { cn } from '@/lib/cn';
 import { formatLongDate, greetingIst } from '@/lib/utils/dates';
@@ -55,7 +55,9 @@ export default async function OverviewPage() {
   ]);
 
   const doctorRows = doctors.data ?? [];
-  const admin = isAdminRole(session.role);
+  // The setup checklist is for whoever can act on it. settings.manage is the
+  // permission behind every link in it.
+  const admin = session.access.permissions.has('settings.manage');
 
   const setup = [
     { done: Boolean(session.hospital.logo_url), label: 'Upload a logo', href: '/admin/settings' },
@@ -66,14 +68,14 @@ export default async function OverviewPage() {
   ];
   const completed = setup.filter((step) => step.done).length;
 
-  const planned = navFor(session.role)
+  const planned = navFor(session.access.permissions)
     .flatMap((section) => section.items)
     .filter((item) => item.status === 'planned');
 
   // The quick actions are drawn from the same nav table the sidebar reads, so
   // a cashier is never offered a shortcut to a screen they cannot open.
   const reachable = new Set(
-    navFor(session.role)
+    navFor(session.access.permissions)
       .flatMap((section) => section.items)
       .filter((item) => item.status === 'ready')
       .map((item) => item.href),

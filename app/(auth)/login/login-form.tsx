@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useActionState } from 'react';
 
 import { signIn } from './actions';
@@ -18,17 +19,31 @@ export function LoginForm({ next }: { next?: string }) {
 
       <FormMessage state={state} />
 
-      <Field label="Email" htmlFor="email" error={fieldError(state, 'email')} required>
+      {/*
+        A username, not an email. Staff are handed one at the desk on a slip of
+        paper -- there is no invitation email in this product, because in a
+        40-bed hospital most of the people who need to sign in do not have a
+        work mailbox to invite.
+
+        Email is still accepted for whoever created the hospital through
+        /signup, which is why the label says both.
+      */}
+      <Field
+        label="Username"
+        htmlFor="identifier"
+        error={fieldError(state, 'identifier')}
+        hint="The name on the slip your administrator gave you."
+        required
+      >
         <Input
-          id="email"
-          name="email"
-          type="email"
-          inputMode="email"
+          id="identifier"
+          name="identifier"
           autoComplete="username"
           autoCapitalize="none"
+          autoCorrect="off"
           spellCheck={false}
-          placeholder="you@hospital.in"
-          aria-invalid={fieldError(state, 'email') !== undefined}
+          placeholder="pavan.kumar"
+          aria-invalid={fieldError(state, 'identifier') !== undefined}
           required
           // Focus lands here on load: this screen is the first keystroke of
           // every shift (CLAUDE.md 7).
@@ -50,6 +65,13 @@ export function LoginForm({ next }: { next?: string }) {
       <SubmitButton className="mt-2 w-full" size="lg" pendingLabel="Signing in...">
         Sign in
       </SubmitButton>
+
+      <Link
+        href="/forgot-password"
+        className="text-center text-xs text-muted-foreground underline-offset-4 hover:underline"
+      >
+        Forgotten your password?
+      </Link>
     </form>
   );
 }

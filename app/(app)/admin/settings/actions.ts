@@ -3,8 +3,7 @@
 import { refresh } from 'next/cache';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
-import { requireSessionForAction } from '@/lib/auth/session';
-import { isAdminRole } from '@/lib/roles';
+import { checkPermission } from '@/lib/auth/session';
 import { checkLogoFile, hospitalSettingsSchema } from '@/lib/schemas/hospital';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -30,18 +29,18 @@ export async function saveHospitalSettings(
   _previous: ActionState,
   formData: FormData,
 ): Promise<ActionState> {
-  // Server Actions answer POSTs directly, so the layout's role check is not in
-  // the way here. Re-check.
-  const session = await requireSessionForAction();
-  if (!isAdminRole(session.role)) {
-    return failure('Only an administrator can change hospital settings.');
-  }
+  // Server Actions answer POSTs directly, so neither the layout nor the proxy
+  // is in the way here. This is the real boundary (CLAUDE.md 3.6).
+  const gate = await checkPermission('settings.manage');
+  if (!gate.ok) return failure(gate.message);
+  const session = gate.session;
 
   const parsed = hospitalSettingsSchema.safeParse({
     name: formData.get('name'),
     address: formData.get('address'),
     phone: formData.get('phone'),
     gstin: formData.get('gstin'),
+    receipt_default: formData.get('receipt_default'),
   });
   if (!parsed.success) return invalid(parsed.error);
 
@@ -84,6 +83,12 @@ export async function saveHospitalSettings(
       phone: parsed.data.phone,
       gstin: parsed.data.gstin,
       logo_url: logoUrl,
+      // Merged, never replaced: settings is a shared jsonb bag and this form
+      // owns exactly one key in it.
+      settings: {
+        ...(session.hospital.settings as Record<string, unknown> | null ?? {}),
+        receipt_default: parsed.data.receipt_default,
+      },
     })
     .eq('id', session.hospitalId);
 
@@ -107,10 +112,9 @@ export async function removeHospitalLogo(
   _previous: ActionState,
   _formData: FormData,
 ): Promise<ActionState> {
-  const session = await requireSessionForAction();
-  if (!isAdminRole(session.role)) {
-    return failure('Only an administrator can change hospital settings.');
-  }
+  const gate = await checkPermission('settings.manage');
+  if (!gate.ok) return failure(gate.message);
+  const session = gate.session;
 
   const supabase = await createClient();
   const path = objectPath(session.hospital.logo_url);

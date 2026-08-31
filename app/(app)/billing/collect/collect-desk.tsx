@@ -275,7 +275,7 @@ export function CollectDesk({
       // The receipt is the last step of the job, not an optional extra: the
       // patient is still standing there. autoprint opens the browser's print
       // dialog on arrival.
-      router.push(`/print/invoice/${state.invoice.id}?autoprint=1`);
+      router.push(`/print/receipt/${state.invoice.id}`);
     }
   }, [state, router]);
 
@@ -390,7 +390,7 @@ export function CollectDesk({
             }}
             onKeyDown={onSearchKeyDown}
             placeholder="Token, name, MRN or phone"
-            className="h-11 rounded-xl border-transparent bg-muted/60 pr-10 pl-10 shadow-none transition-all focus-visible:border-primary focus-visible:bg-background focus-visible:shadow-md md:h-11"
+            className="h-11 rounded-xl border-transparent bg-muted/60 pr-10 pl-10 shadow-none md:pr-10 md:pl-10 transition-all focus-visible:border-primary focus-visible:bg-background focus-visible:shadow-md md:h-11"
             aria-label="Find a visit to bill"
             autoComplete="off"
             spellCheck={false}

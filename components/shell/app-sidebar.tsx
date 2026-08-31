@@ -16,7 +16,7 @@ import {
 } from '@/components/ui/sheet';
 import { cn } from '@/lib/cn';
 import { navFor, type NavItem } from '@/lib/nav';
-import type { AppRole } from '@/lib/roles';
+import { toPermissionSet } from '@/lib/rbac/permissions';
 
 function isCurrent(pathname: string, href: string): boolean {
   if (href === '/') return pathname === '/';
@@ -97,7 +97,8 @@ function NavRow({
  * one and not the other.
  */
 function SidebarBody({
-  role,
+  permissions,
+  roleName,
   hospitalName,
   logoUrl,
   userName,
@@ -105,7 +106,8 @@ function SidebarBody({
   showLabels,
   onNavigate,
 }: {
-  role: AppRole;
+  permissions: readonly string[];
+  roleName: string;
   hospitalName: string;
   logoUrl: string | null;
   userName: string | null;
@@ -114,7 +116,9 @@ function SidebarBody({
   onNavigate?: () => void;
 }) {
   const pathname = usePathname();
-  const sections = navFor(role);
+  // Rebuilt from the array the server sent: a Set does not survive the RSC
+  // boundary as cheaply as a string list, and this runs once per render.
+  const sections = navFor(toPermissionSet(permissions));
 
   return (
     <>
@@ -171,14 +175,22 @@ function SidebarBody({
       </nav>
 
       <div className={cn('border-t border-sidebar-border p-2', showLabels ? '' : 'px-1.5')}>
-        <UserMenu name={userName} email={userEmail} role={role} showLabels={showLabels} />
+        <UserMenu name={userName} email={userEmail} roleName={roleName} showLabels={showLabels} />
       </div>
     </>
   );
 }
 
 export function AppSidebar(props: {
-  role: AppRole;
+  /**
+   * What the viewer holds, as plain strings.
+   *
+   * COSMETIC (CLAUDE.md 3.6). Shipping the permission set to the browser
+   * discloses nothing -- the holder already knows what they can do, and the
+   * proxy and every Server Action re-derive it server-side regardless.
+   */
+  permissions: readonly string[];
+  roleName: string;
   hospitalName: string;
   logoUrl: string | null;
   userName: string | null;
