@@ -6,6 +6,7 @@ import { ConsultationScreen } from './consultation-screen';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { requireSession } from '@/lib/auth/session';
+import { toPrescriptionLines } from '@/lib/consultations';
 import { createClient } from '@/lib/supabase/server';
 import { formatDate, formatTime } from '@/lib/utils/dates';
 
@@ -127,6 +128,12 @@ export default async function ConsultationPage({
            from this list. */
         history={history.error ? null : (history.data ?? [])}
         consultation={consultation.data ?? null}
+        /* Parsed on the server, once. The column is jsonb, so the shape is a
+           promise the CHECK constraint keeps and not one the type system does
+           -- toPrescriptionLines is where that gets checked, and a print
+           template is the wrong place to discover a malformed line. */
+        prescription={toPrescriptionLines(consultation.data?.prescription)}
+        canPrescribe={session.access.permissions.has('prescription.create')}
         /**
          * Whether the doctor is looking at their own patient. The rule is
          * enforced in save_consultation, which is what makes it true; this

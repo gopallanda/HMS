@@ -10,7 +10,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-import type { Vitals } from '@/lib/consultations';
+import type { PrescriptionLine, Vitals } from '@/lib/consultations';
 import type { Database, Json } from '@/types/database';
 
 type Client = SupabaseClient<Database>;
@@ -24,6 +24,14 @@ export type SaveConsultationPayload = Vitals & {
   notes: string | null;
   /** null leaves the visit's status alone. */
   visit_status: 'in_consultation' | 'completed' | null;
+  /**
+   * The whole prescription, or the key omitted entirely.
+   *
+   * save_consultation tells those two apart on purpose: absent means "leave
+   * what is there", an array means "this is the list now, including empty". A
+   * caller that does not know about prescriptions must not erase one.
+   */
+  prescription?: PrescriptionLine[];
 };
 
 export async function saveConsultation(supabase: Client, payload: SaveConsultationPayload) {

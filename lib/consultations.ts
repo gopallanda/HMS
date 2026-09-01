@@ -126,3 +126,72 @@ export function hasVitals(vitals: Vitals): boolean {
 export function vitalToInput(value: number | null | undefined): string {
   return value === null || value === undefined ? '' : String(value);
 }
+
+/**
+ * One line of a prescription.
+ *
+ * Free text in every field, deliberately (item 7). There is no drug master in
+ * Phase 1 and no stock behind it -- those are Phase 2 -- so a doctor writes
+ * "Paracetamol", "650 mg", "1 tab", "TDS", "3 days" the way they would on a
+ * pad, and the paper the patient walks out with says exactly that.
+ *
+ * `drug` is the only field the form and the database both insist on: a line
+ * with a dose and no drug is a line nobody can read back.
+ */
+export type PrescriptionLine = {
+  drug: string;
+  strength: string | null;
+  dose: string | null;
+  frequency: string | null;
+  duration: string | null;
+  notes: string | null;
+};
+
+/**
+ * The frequency abbreviations an Indian OPD actually writes, offered through a
+ * datalist so the common case is not typing. Free text stays allowed: the
+ * field is an input with suggestions, not a select.
+ */
+export const FREQUENCY_SUGGESTIONS = [
+  'OD',
+  'BD',
+  'TDS',
+  'QID',
+  'HS',
+  'SOS',
+  'STAT',
+] as const;
+
+/**
+ * Whatever came out of the jsonb column, as lines a screen can render.
+ *
+ * Defensive because the column is jsonb: the constraint guarantees an array of
+ * objects each naming a drug and nothing else, and a print template is the
+ * wrong place to discover that.
+ */
+export function toPrescriptionLines(value: unknown): PrescriptionLine[] {
+  if (!Array.isArray(value)) return [];
+
+  const text = (raw: unknown): string | null => {
+    if (typeof raw !== 'string') return null;
+    const trimmed = raw.trim();
+    return trimmed === '' ? null : trimmed;
+  };
+
+  return value.flatMap((entry) => {
+    if (entry === null || typeof entry !== 'object') return [];
+    const line = entry as Record<string, unknown>;
+    const drug = text(line.drug);
+    if (drug === null) return [];
+    return [
+      {
+        drug,
+        strength: text(line.strength),
+        dose: text(line.dose),
+        frequency: text(line.frequency),
+        duration: text(line.duration),
+        notes: text(line.notes),
+      },
+    ];
+  });
+}

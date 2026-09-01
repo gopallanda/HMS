@@ -13,7 +13,60 @@
 import { z } from 'zod';
 
 import { VITALS, type VitalKey } from '@/lib/consultations';
-import { clientId } from '@/lib/schemas/form';
+import { clientId, optionalText } from '@/lib/schemas/form';
+
+/**
+ * One prescription line.
+ *
+ * Only `drug` is required, matching the CHECK constraint: everything else on a
+ * line is genuinely optional, because "Paracetamol 650, SOS" is a real
+ * prescription and a form that demanded a duration for it would be filled in
+ * with a full stop.
+ */
+export const prescriptionLineSchema = z.object({
+  drug: z
+    .string({ error: 'Name the drug.' })
+    .trim()
+    .min(1, 'Name the drug.')
+    .max(120, 'That drug name is too long.'),
+  strength: optionalText('Strength', 60),
+  dose: optionalText('Dose', 60),
+  frequency: optionalText('Frequency', 60),
+  duration: optionalText('Duration', 60),
+  notes: optionalText('Instructions', 200),
+});
+
+export type PrescriptionLineInput = z.infer<typeof prescriptionLineSchema>;
+
+/**
+ * The prescription travels as one JSON string in a hidden field, the same way
+ * the bill lines do on the collect desk: a list of a list does not fit flat
+ * FormData, and this keeps the form a plain <form action={...}>.
+ *
+ * Blank rows are dropped in the browser before this sees them. A row with no
+ * drug that reaches here is a bug, and it is REFUSED rather than quietly
+ * skipped -- silently dropping a line off a prescription is the worst thing
+ * this file could do.
+ */
+const prescriptionLines = z
+  .string()
+  .transform((raw, ctx) => {
+    if (raw.trim() === '') return [] as unknown;
+    try {
+      return JSON.parse(raw) as unknown;
+    } catch {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'The prescription could not be read. Nothing was saved -- reload the visit.',
+      });
+      return z.NEVER;
+    }
+  })
+  .pipe(
+    z
+      .array(prescriptionLineSchema)
+      .max(20, 'A prescription can carry twenty lines. Split it if you need more.'),
+  );
 
 /**
  * An empty box means "not taken", not zero. Anything else must be a number
@@ -71,6 +124,12 @@ export const consultationSchema = z
     visit_status: z
       .union([z.literal('in_consultation'), z.literal('completed'), z.literal(''), z.null()])
       .transform((value) => (value === '' || value == null ? null : value)),
+    /**
+     * The prescription, as written. Always posted whole -- save_consultation
+     * replaces the list rather than merging it, so a line the doctor deleted
+     * has to be able to disappear.
+     */
+    prescription: prescriptionLines,
   })
   /**
    * A blood pressure is a pair, and the database says so

@@ -1,22 +1,29 @@
 'use client';
 
-import { LockIcon } from 'lucide-react';
+import { LockIcon, PrinterIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
 import { saveConsultationAction, type SaveConsultationState } from './actions';
+import { PrescriptionEditor } from './prescription-editor';
 import { Field } from '@/components/shared/field';
 import { FormMessage } from '@/components/shared/form-message';
 import { KbdHint } from '@/components/shared/kbd';
 import { SubmitButton } from '@/components/shared/submit-button';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { fieldError, IDLE } from '@/lib/action-state';
-import { VITALS, vitalToInput, type Consultation } from '@/lib/consultations';
+import {
+  VITALS,
+  vitalToInput,
+  type Consultation,
+  type PrescriptionLine,
+} from '@/lib/consultations';
 import { GENDER_LABEL, type Gender } from '@/lib/patients';
 import { formatAge } from '@/lib/utils/age-from-dob';
 import { formatDate, formatDateTime, formatTime } from '@/lib/utils/dates';
@@ -61,25 +68,39 @@ export type PastVisit = {
 };
 
 /**
- * The consultation screen: who the patient is, what their numbers are, and
- * what the doctor wants to write down.
+ * The consultation screen: who the patient is, what their numbers are, what
+ * the doctor wants to write down, and what the patient walks out holding.
  *
- * Deliberately three things and no more. Prescriptions and structured history
- * are a later phase (CLAUDE.md 1), and a half-built version of either would be
- * worse than none: staff would start using it and then have to be migrated off
- * it.
+ * The prescription is the fourth thing and the reason the screen gets opened
+ * at all in an OPD (item 7). Structured history and diagnosis coding are still
+ * a later phase (CLAUDE.md 1); the prescription is free text with no drug
+ * master behind it precisely so it does not become a half-built pharmacy
+ * module.
  */
 export function ConsultationScreen({
   visit,
   history,
   consultation,
   readOnly,
+  canPrescribe,
+  prescription,
 }: {
   visit: ConsultationVisit;
   /** null when the history could not be read -- not the same as "none". */
   history: PastVisit[] | null;
   consultation: Consultation | null;
   readOnly: boolean;
+  /**
+   * prescription.create.
+   *
+   * A prop rather than <Can>, for the same reason the collect desk takes one:
+   * this is a Client Component and <Can> is a Server Component. It is
+   * decoration either way -- saveConsultationAction re-checks the permission
+   * whenever a non-empty list arrives, which is the real boundary.
+   */
+  canPrescribe: boolean;
+  /** What was written last time, already parsed out of the jsonb column. */
+  prescription: PrescriptionLine[];
 }) {
   const router = useRouter();
   const [state, action] = useActionState<SaveConsultationState, FormData>(
@@ -344,6 +365,44 @@ export function ConsultationScreen({
             ) : null}
           </CardContent>
         </Card>
+
+        {/* The prescription.
+            Hidden entirely from a role that may not write one -- a nurse
+            recording vitals has no use for the rows, and the action refuses
+            the list anyway if a POST arrives carrying it. A read-only visit
+            still SHOWS what was prescribed: that is the record. */}
+        {canPrescribe || prescription.length > 0 ? (
+          <Card>
+            <CardContent className="grid gap-3">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-lg font-medium">Prescription</h2>
+                {prescription.length > 0 ? (
+                  <Button asChild variant="outline" size="sm">
+                    <Link href={`/print/prescription/${visit.id}?autoprint=0`}>
+                      <PrinterIcon data-icon="inline-start" />
+                      Print
+                    </Link>
+                  </Button>
+                ) : (
+                  <p className="text-xs text-muted-foreground">
+                    Save the visit, then print
+                  </p>
+                )}
+              </div>
+
+              <PrescriptionEditor
+                initial={prescription}
+                readOnly={readOnly || !canPrescribe}
+              />
+
+              {fieldError(state, 'prescription') ? (
+                <p className="text-xs font-medium text-destructive">
+                  {fieldError(state, 'prescription')}
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+        ) : null}
 
         {readOnly ? null : (
           // Sticky at the bottom of a phone screen: the notes box is taller

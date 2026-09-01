@@ -46,8 +46,18 @@ export async function saveConsultationAction(
     spo2: formData.get('spo2'),
     notes: formData.get('notes'),
     visit_status: formData.get('visit_status'),
+    prescription: formData.get('prescription') ?? '',
   });
   if (!parsed.success) return invalid(parsed.error);
+
+  // prescription.create is checked separately, and only when a script is
+  // actually being written: a doctor who may record notes but not prescribe
+  // still saves vitals. The <Can> around the editor is decoration; this is the
+  // gate (CLAUDE.md 3.6).
+  if (parsed.data.prescription.length > 0) {
+    const scriptGate = await checkPermission('prescription.create');
+    if (!scriptGate.ok) return failure(scriptGate.message);
+  }
 
   const supabase = await createClient();
   const { error } = await saveConsultation(supabase, parsed.data);

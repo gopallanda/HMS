@@ -662,6 +662,12 @@ export type Database = {
           weight_kg: number | null;
           spo2: number | null;
           notes: string | null;
+          /**
+           * The prescription as written: an array of
+           * {drug, strength, dose, frequency, duration, notes}. Free text
+           * throughout -- no drug master, no stock (Phase 2).
+           */
+          prescription: Json;
           created_by: string | null;
           created_at: string;
           updated_by: string | null;
@@ -1072,6 +1078,15 @@ export type Database = {
           status: VisitStatus;
           doctor_id: string | null;
         };
+      };
+      /** Records that a clinical document went to the printer. */
+      log_document_print: {
+        Args: {
+          p_visit_id: string;
+          p_kind?: string;
+          p_format?: string | null;
+        };
+        Returns: undefined;
       };
       /**
        * Records that a day was counted, with the variance between the cash

@@ -1117,3 +1117,95 @@ begin
     v_date, v_closure.system_cash, v_closure.declared_cash, v_closure.variance;
 end;
 $$;
+
+-- =============================================================================
+-- A prescription -- item 7.
+--
+-- For OPD the prescription IS the deliverable: the patient walks out holding
+-- paper. Seeded on the consultations the block above wrote, so
+-- /print/prescription/[visitId] has something real to render and the doctor
+-- screen opens with rows in the editor rather than an empty card.
+--
+-- Free text throughout, exactly as the column is meant to be used: no drug
+-- master, no stock, no dispensing -- those are Phase 2 (CLAUDE.md 1).
+--
+-- Through save_consultation, not an UPDATE, because that function is the only
+-- writer of this table and its `prescription absent means leave it alone` rule
+-- is the thing worth exercising here.
+-- =============================================================================
+do $$
+declare
+  v_hospital uuid := '00000000-0000-4000-8000-000000000001';
+  v_row      record;
+  v_seq      int := 0;
+  v_script   jsonb;
+begin
+  if exists (
+    select 1 from public.consultations c
+    where c.hospital_id = v_hospital
+      and jsonb_array_length(c.prescription) > 0
+      and public.ist_date(c.created_at) = public.ist_date(now())
+  ) then
+    raise notice 'seed: today already has a prescription, left alone';
+    return;
+  end if;
+
+  -- The whole row, not just the visit id: save_consultation REPLACES the
+  -- vitals and the notes rather than merging them (20260820120000), so a
+  -- payload carrying only a prescription would blank the readings the block
+  -- above wrote. The prescription key is the one exception to that rule; the
+  -- rest have to be sent back.
+  for v_row in
+    select c.*
+    from public.consultations c
+    where c.hospital_id = v_hospital
+      and public.ist_date(c.created_at) = public.ist_date(now())
+    order by c.created_at
+    limit 2
+  loop
+    v_seq := v_seq + 1;
+
+    v_script := case v_seq
+      when 1 then jsonb_build_array(
+        jsonb_build_object(
+          'drug', 'Paracetamol', 'strength', '650 mg', 'dose', '1 tab',
+          'frequency', 'TDS', 'duration', '3 days',
+          'notes', 'After food. Stop when the fever settles.'),
+        jsonb_build_object(
+          'drug', 'Pantoprazole', 'strength', '40 mg', 'dose', '1 tab',
+          'frequency', 'OD', 'duration', '5 days',
+          'notes', 'Before breakfast, on an empty stomach.'),
+        jsonb_build_object(
+          'drug', 'ORS sachet', 'strength', '', 'dose', '1 sachet in 1 L water',
+          'frequency', 'SOS', 'duration', '', 'notes', 'Sip through the day.')
+      )
+      else jsonb_build_array(
+        jsonb_build_object(
+          'drug', 'Amoxicillin + Clavulanic acid', 'strength', '625 mg',
+          'dose', '1 tab', 'frequency', 'BD', 'duration', '5 days',
+          'notes', 'Complete the full course even if better.')
+      )
+    end;
+
+    perform public.save_consultation(jsonb_build_object(
+      'hospital_id',   v_hospital,
+      'visit_id',      v_row.visit_id,
+      'bp_systolic',   v_row.bp_systolic,
+      'bp_diastolic',  v_row.bp_diastolic,
+      'pulse',         v_row.pulse,
+      'temperature_f', v_row.temperature_f,
+      'weight_kg',     v_row.weight_kg,
+      'spo2',          v_row.spo2,
+      'notes',         v_row.notes,
+      'prescription',  v_script
+    ));
+
+    raise notice 'seed: prescription of % line(s) written on visit %',
+      jsonb_array_length(v_script), v_row.visit_id;
+  end loop;
+
+  if v_seq = 0 then
+    raise notice 'seed: no consultations today, so no prescriptions';
+  end if;
+end;
+$$;

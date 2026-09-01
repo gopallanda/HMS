@@ -93,6 +93,11 @@ export const ROUTE_PERMISSIONS: readonly (readonly [string, Permission])[] = [
 
   // Printing. A receipt is a billing document even when reception prints it,
   // and front desk holds billing.read for exactly this.
+  //
+  // A prescription is not: it is a clinical document, and the person who
+  // reprints it for a patient who lost theirs is whoever may READ the note.
+  // Longest prefix wins, so this narrows /print without touching the receipt.
+  ['/print/prescription', 'consultation.read'],
   ['/print', 'billing.read'],
 
   ['/reports', 'reports.view'],

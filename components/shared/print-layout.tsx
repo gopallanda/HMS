@@ -109,6 +109,7 @@ export function PrintLayout({
   backHref,
   documentHref,
   title,
+  formats = PRINT_FORMATS,
   children,
 }: {
   format: PrintFormat;
@@ -127,6 +128,14 @@ export function PrintLayout({
    */
   documentHref: string;
   title: string;
+  /**
+   * Which papers this document offers. Defaults to all three.
+   *
+   * A prescription passes [a5, a4] and nothing else: 80mm is the roll bolted
+   * to the billing counter, and a drug list printed on a till receipt is not
+   * something a patient can hand to a pharmacist.
+   */
+  formats?: readonly PrintFormat[];
   children: React.ReactNode;
 }) {
   const printed = useRef(false);
@@ -157,7 +166,7 @@ export function PrintLayout({
           {/* Paper size as a segmented control: it is one choice out of two,
               not two competing actions. */}
           <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
-            {PRINT_FORMATS.map((option) => (
+            {formats.map((option) => (
               <Link
                 key={option}
                 href={`${documentHref}?format=${option}`}
