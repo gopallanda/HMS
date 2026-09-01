@@ -101,6 +101,24 @@ export async function addPayment(supabase: Client, payload: AddPaymentPayload) {
 }
 
 /**
+ * Reverse ONE payment, with a typed reason, leaving the invoice standing.
+ *
+ * Not a smaller void: voiding retires the whole bill, releases its lines and
+ * reverses every payment on it. This corrects a single row -- a cash
+ * collection keyed as UPI, a reference typed against the wrong bill -- and
+ * recomputes the invoice status from what is left.
+ *
+ * It records a correction and moves no cash. The refund happens at the
+ * counter, and the screen that offers this says so.
+ */
+export async function reversePayment(supabase: Client, paymentId: string, reason: string) {
+  return supabase.rpc('reverse_payment', {
+    p_payment_id: paymentId,
+    p_reason: reason,
+  });
+}
+
+/**
  * Voids an invoice with a typed reason: the lines go back to pending, the
  * payments are reversed, the number stays consumed. Nothing is deleted.
  */

@@ -1003,5 +1003,54 @@ begin
   );
   raise notice 'seed: cancelled % (token %, % invoice(s) voided)',
     v_result ->> 'visit_no', v_result ->> 'token_no', v_result ->> 'invoices_voided';
+
+  -- 6. Taken in cash, keyed as UPI, corrected. The whole point of
+  --    reverse_payment (20260902090200): before it, the only way to fix one
+  --    wrong word on one payment row was to void an otherwise correct bill --
+  --    a consumed number, a void reason that describes nothing that happened,
+  --    and a second invoice for the same treatment.
+  --
+  --    The full cycle is seeded, not just the reversal: registered and paid,
+  --    the payment reversed with a reason, then re-collected in the right
+  --    mode. The invoice ends up `paid` again, which is what the counter
+  --    actually looks like once somebody has fixed their mistake.
+  v_result := public.register_patient_visit(
+    p_hospital_id  => v_hospital,
+    p_patient      => jsonb_build_object(
+                        'full_name', 'Shabnam Begum',
+                        'dob',       '1992-12-05',
+                        'gender',    'female',
+                        'phone',     '+91 97400 33812'
+                      ),
+    p_doctor_id    => v_doctor_a,
+    p_payment_mode => 'upi',
+    p_actor_id     => v_actor
+  );
+
+  perform public.reverse_payment(
+    p_payment_id  => (
+      select pm.id from public.payments pm
+      where pm.hospital_id = v_hospital
+        and pm.invoice_id = (v_result ->> 'invoice_id')::uuid
+        and not pm.is_reversed
+      order by pm.paid_at
+      limit 1
+    ),
+    p_reason      => 'Taken in cash at the counter, recorded as UPI by mistake',
+    p_hospital_id => v_hospital
+  );
+
+  perform public.add_payment(
+    p_invoice_id   => (v_result ->> 'invoice_id')::uuid,
+    p_amount       => (v_result ->> 'grand_total')::numeric,
+    p_mode         => 'cash',
+    p_reference    => null,
+    p_hospital_id  => v_hospital,
+    p_payment_id   => null,
+    p_collected_by => v_actor
+  );
+
+  raise notice 'seed: payment on % reversed and re-collected in cash',
+    v_result ->> 'invoice_no';
 end;
 $$;

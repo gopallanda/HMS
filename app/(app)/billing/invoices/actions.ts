@@ -4,8 +4,8 @@ import { refresh } from 'next/cache';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
-import { voidInvoice } from '@/lib/rpc/billing';
-import { voidInvoiceSchema } from '@/lib/schemas/billing';
+import { reversePayment, voidInvoice } from '@/lib/rpc/billing';
+import { reversePaymentSchema, voidInvoiceSchema } from '@/lib/schemas/billing';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
 
@@ -43,4 +43,45 @@ export async function voidInvoiceAction(
   refresh();
 
   return success('The invoice was voided and its charges returned to the visit.');
+}
+
+/**
+ * Reverse ONE payment, leaving the invoice standing.
+ *
+ * billing.void, not billing.collect (item 3). Undoing a collection is the same
+ * class of act as voiding a bill: it changes what the day-close report says
+ * the hospital took, and a hospital that keeps one behind a supervisor will
+ * want to keep the other there too.
+ *
+ * It records a correction and moves no cash. The dialog says so; this action
+ * only writes it down.
+ */
+export async function reversePaymentAction(
+  _previous: ActionState,
+  formData: FormData,
+): Promise<ActionState> {
+  const gate = await checkPermission('billing.void');
+  if (!gate.ok) return failure(gate.message);
+
+  const parsed = reversePaymentSchema.safeParse({
+    payment_id: formData.get('payment_id'),
+    reason: formData.get('reason'),
+  });
+  if (!parsed.success) return invalid(parsed.error);
+
+  const supabase = await createClient();
+
+  const { data, error } = await reversePayment(
+    supabase,
+    parsed.data.payment_id,
+    parsed.data.reason,
+  );
+  if (error) return failure(describeDatabaseError(error));
+  if (!data) return failure('The payment could not be reversed. Nothing was changed.');
+
+  refresh();
+
+  return success(
+    `Reversed. ${data.invoice_no} is now ${data.status === 'unpaid' ? 'unpaid' : data.status === 'partial' ? 'part paid' : data.status}. Hand the money back at the counter.`,
+  );
 }

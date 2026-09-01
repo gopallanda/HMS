@@ -1099,6 +1099,19 @@ export type Database = {
         };
         Returns: Database['public']['Tables']['invoices']['Row'];
       };
+      /**
+       * Marks one payment reversed and recomputes the invoice status.
+       * Records a correction; it does not move cash.
+       */
+      reverse_payment: {
+        Args: {
+          p_payment_id: string;
+          p_reason: string;
+          /** Service-role callers only; a session takes its tenant from the JWT. */
+          p_hospital_id?: string | null;
+        };
+        Returns: Database['public']['Tables']['invoices']['Row'];
+      };
       void_invoice: {
         Args: {
           p_invoice_id: string;

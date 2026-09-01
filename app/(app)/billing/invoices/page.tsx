@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { InvoiceTable, type InvoiceRowData } from './invoice-table';
+import type { InvoicePayment } from './payments-dialog';
 import { Notice } from '@/components/shared/form-message';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
@@ -80,6 +81,61 @@ export default async function InvoicesPage({
   const fetched: InvoiceRowData[] = data ?? [];
   const capped = fetched.length > LIST_LIMIT;
   const invoices: InvoiceRowData[] = capped ? fetched.slice(0, LIST_LIMIT) : fetched;
+
+  // ---------------------------------------------------------------------------
+  // The payments behind each bill.
+  //
+  // Fetched here rather than joined into invoice_summary, which aggregates
+  // them: reversing needs a payment ID, a mode and a reference per ROW, and
+  // the view deliberately hands back a total and a set of mode labels. Only
+  // for the invoices on screen, and only when the viewer may read money at
+  // all -- for anyone else the policies return nothing and the row simply has
+  // no Payments button.
+  //
+  // Collector names come from a second small read rather than a join, because
+  // payments.collected_by points at auth.users and the name lives on staff.
+  // ---------------------------------------------------------------------------
+  const payments: Record<string, InvoicePayment[]> = {};
+
+  if (invoices.length > 0) {
+    const { data: rows } = await supabase
+      .from('payments')
+      .select('id, invoice_id, amount, mode, reference, paid_at, is_reversed, reversal_reason, collected_by')
+      .eq('hospital_id', session.hospitalId)
+      .in(
+        'invoice_id',
+        invoices.map((invoice) => invoice.id),
+      )
+      .order('paid_at', { ascending: true });
+
+    const collectorIds = [...new Set((rows ?? []).map((row) => row.collected_by))];
+    const names = new Map<string, string>();
+
+    if (collectorIds.length > 0) {
+      const { data: staff } = await supabase
+        .from('staff')
+        .select('user_id, full_name')
+        .eq('hospital_id', session.hospitalId)
+        .in('user_id', collectorIds);
+
+      for (const person of staff ?? []) {
+        if (person.user_id) names.set(person.user_id, person.full_name);
+      }
+    }
+
+    for (const row of rows ?? []) {
+      (payments[row.invoice_id] ??= []).push({
+        id: row.id,
+        amount: row.amount,
+        mode: row.mode,
+        reference: row.reference,
+        paid_at: row.paid_at,
+        is_reversed: row.is_reversed,
+        reversal_reason: row.reversal_reason,
+        collected_by_name: names.get(row.collected_by) ?? null,
+      });
+    }
+  }
 
   // Totals for what is on screen, not for the hospital. The day-close report is
   // the authority on a day; this is an orientation line.
@@ -171,6 +227,8 @@ export default async function InvoicesPage({
       <InvoiceTable
         invoices={invoices}
         canCollect={session.access.permissions.has('billing.collect')}
+        canVoid={session.access.permissions.has('billing.void')}
+        payments={payments}
       />
     </div>
   );

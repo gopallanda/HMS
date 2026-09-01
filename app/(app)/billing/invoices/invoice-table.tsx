@@ -1,11 +1,12 @@
 'use client';
 
-import { BanIcon, IndianRupeeIcon, PrinterIcon, ReceiptIcon } from 'lucide-react';
+import { BanIcon, IndianRupeeIcon, PrinterIcon, ReceiptIcon, WalletIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useActionState, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { voidInvoiceAction } from './actions';
+import { PaymentsDialog, type InvoicePayment } from './payments-dialog';
 import {
   CollectBalanceDialog,
   type CollectBalanceTarget,
@@ -84,6 +85,8 @@ function targetFor(invoice: InvoiceRowData): CollectBalanceTarget {
 export function InvoiceTable({
   invoices,
   canCollect,
+  canVoid,
+  payments,
 }: {
   invoices: InvoiceRowData[];
   /**
@@ -92,9 +95,14 @@ export function InvoiceTable({
    * The action re-checks: this only decides whether a button is drawn.
    */
   canCollect: boolean;
+  /** billing.void. Gates both Void and Reverse -- the same class of act. */
+  canVoid: boolean;
+  /** invoice id -> its payments, reversed ones included. */
+  payments: Record<string, InvoicePayment[]>;
 }) {
   const [voiding, setVoiding] = useState<InvoiceRowData | null>(null);
   const [collecting, setCollecting] = useState<InvoiceRowData | null>(null);
+  const [showingPayments, setShowingPayments] = useState<InvoiceRowData | null>(null);
 
   if (invoices.length === 0) {
     return (
@@ -178,6 +186,17 @@ export function InvoiceTable({
                 {formatDateTime(invoice.invoice_date)}
               </span>
               <div className="ml-auto flex items-center gap-1">
+                {(payments[invoice.id]?.length ?? 0) > 0 ? (
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    title="Payments"
+                    onClick={() => setShowingPayments(invoice)}
+                  >
+                    <WalletIcon />
+                    <span className="sr-only">Payments on {invoice.invoice_no}</span>
+                  </Button>
+                ) : null}
                 {canCollect && isCollectable(invoice) ? (
                   <Button
                     variant="outline"
@@ -194,7 +213,7 @@ export function InvoiceTable({
                     <span className="sr-only">Print {invoice.invoice_no}</span>
                   </Link>
                 </Button>
-                {invoice.status === 'void' ? null : (
+                {invoice.status === 'void' || !canVoid ? null : (
                   <Button
                     variant="ghost"
                     size="icon-sm"
@@ -309,6 +328,19 @@ export function InvoiceTable({
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-1">
+                    {(payments[invoice.id]?.length ?? 0) > 0 ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        title="Payments taken against this invoice"
+                        onClick={() => setShowingPayments(invoice)}
+                      >
+                        <WalletIcon />
+                        <span className="sr-only">
+                          Payments on {invoice.invoice_no}
+                        </span>
+                      </Button>
+                    ) : null}
                     {canCollect && isCollectable(invoice) ? (
                       <Button
                         variant="ghost"
@@ -328,7 +360,7 @@ export function InvoiceTable({
                         <span className="sr-only">Print {invoice.invoice_no}</span>
                       </Link>
                     </Button>
-                    {invoice.status === 'void' ? null : (
+                    {invoice.status === 'void' || !canVoid ? null : (
                       <Button
                         variant="ghost"
                         size="icon-sm"
@@ -351,6 +383,8 @@ export function InvoiceTable({
         Invoices are never deleted. Voiding keeps the number, records the reason, returns the
         charges to the visit so it can be billed again, and reverses any payment against it.
         Collecting adds a payment to a bill that already exists; it never raises a second one.
+        Reversing a single payment corrects how it was recorded and leaves the invoice standing.
+        Neither moves cash -- that happens at the counter.
       </p>
 
       {voiding ? (
@@ -361,6 +395,16 @@ export function InvoiceTable({
         <CollectBalanceDialog
           target={targetFor(collecting)}
           onClose={() => setCollecting(null)}
+        />
+      ) : null}
+
+      {showingPayments ? (
+        <PaymentsDialog
+          invoiceNo={showingPayments.invoice_no}
+          grandTotal={showingPayments.grand_total}
+          payments={payments[showingPayments.id] ?? []}
+          canReverse={canVoid}
+          onClose={() => setShowingPayments(null)}
         />
       ) : null}
     </>

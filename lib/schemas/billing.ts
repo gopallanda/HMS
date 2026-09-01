@@ -128,6 +128,20 @@ export const voidInvoiceSchema = z.object({
 
 export type VoidInvoiceInput = z.infer<typeof voidInvoiceSchema>;
 
+/**
+ * Reversing one payment.
+ *
+ * The same typed-reason rule as voiding, and the same minimum, because the two
+ * records are read side by side: "why is this bill void" and "why is this
+ * collection not counted" are the same question asked of different rows.
+ */
+export const reversePaymentSchema = z.object({
+  payment_id: z.uuid('That payment is no longer valid.'),
+  reason: text('Reason', 4, 200),
+});
+
+export type ReversePaymentInput = z.infer<typeof reversePaymentSchema>;
+
 /** The day-close date picker. IST calendar day, as YYYY-MM-DD. */
 export const dayCloseSchema = z.object({
   date: z
