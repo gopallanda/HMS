@@ -1,11 +1,11 @@
 'use client';
 
 import Link from 'next/link';
-import { PencilIcon, PlusIcon, ReceiptIndianRupeeIcon } from 'lucide-react';
+import { PencilIcon, PlusIcon, ReceiptIndianRupeeIcon, SparklesIcon } from 'lucide-react';
 import { Fragment, useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 
-import { saveService, setServiceActive } from './actions';
+import { loadStarterCatalogue, saveService, setServiceActive } from './actions';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Field } from '@/components/shared/field';
 import { KbdHint } from '@/components/shared/kbd';
@@ -42,11 +42,18 @@ import {
 import { fieldError, IDLE, type ActionState } from '@/lib/action-state';
 import { cn } from '@/lib/cn';
 import {
+  categoryOptions,
+  defaultUnitFor,
   expectsTax,
   priceIsAdvisory,
   SERVICE_CATEGORIES,
+  SERVICE_CATEGORY_HINT,
   SERVICE_CATEGORY_LABEL,
+  SERVICE_UNITS,
+  SERVICE_UNIT_LABEL,
+  SERVICE_UNIT_SUFFIX,
   type ServiceCategory,
+  type ServiceUnit,
 } from '@/lib/services';
 import { formatAmount } from '@/lib/utils/money';
 
@@ -54,34 +61,61 @@ export type ServiceRow = {
   id: string;
   name: string;
   category: ServiceCategory;
+  unit: ServiceUnit;
   price: number;
   tax_rate: number;
   is_active: boolean;
+};
+
+/**
+ * The fee that is actually charged on a visit, per doctor.
+ *
+ * Not a price-list row and never editable here -- it lives on the staff record.
+ * It is on this screen only because the consultation rows are meaningless
+ * without it.
+ */
+export type DoctorFee = {
+  id: string;
+  full_name: string;
+  consultation_fee: number;
 };
 
 /** The chip that means "no category filter". */
 const ALL = '__all__';
 
 function blankService(category: ServiceCategory | null): ServiceRow {
+  // A new row lands in whichever category is being looked at -- filtering to
+  // Lab and pressing N almost always means "another lab test". Pharmacy is the
+  // one category that cannot be created into, so a new row started from that
+  // filter falls back rather than opening a form that refuses its own default.
+  const chosen: ServiceCategory =
+    category && category !== 'pharmacy' ? category : 'consultation';
+
   // Minted here, not in Postgres: a resubmitted form then updates the row it
   // already created instead of adding a second one (CLAUDE.md 7).
   return {
     id: crypto.randomUUID(),
     name: '',
-    // A new row lands in whichever category is being looked at -- filtering to
-    // Lab and pressing N almost always means "another lab test".
-    category: category ?? 'consultation',
+    category: chosen,
+    unit: defaultUnitFor(chosen),
     price: 0,
     tax_rate: 0,
     is_active: true,
   };
 }
 
-export function ServicesTable({ services }: { services: ServiceRow[] }) {
+export function ServicesTable({
+  services,
+  doctors,
+}: {
+  services: ServiceRow[];
+  doctors: DoctorFee[];
+}) {
   const [query, setQuery] = useState('');
   const [category, setCategory] = useState<ServiceCategory | typeof ALL>(ALL);
   const [editing, setEditing] = useState<ServiceRow | null>(null);
   const [deactivating, setDeactivating] = useState<ServiceRow | null>(null);
+  const [starter, setStarter] = useState(false);
   const searchInput = useRef<HTMLInputElement>(null);
 
   const countByCategory = useMemo(() => {
@@ -161,6 +195,13 @@ export function ServicesTable({ services }: { services: ServiceRow[] }) {
           <KbdHint keys="/">search</KbdHint>
           <KbdHint keys="N">new</KbdHint>
         </span>
+        {/* Always offered, not only on an empty list: it adds what is missing
+            and touches nothing that exists, so a hospital three months in can
+            still pull the eleven lab tests it never got round to typing. */}
+        <Button variant="outline" onClick={() => setStarter(true)}>
+          <SparklesIcon data-icon="inline-start" />
+          Standard list
+        </Button>
         <Button onClick={() => setEditing(blankService(category === ALL ? null : category))}>
           <PlusIcon data-icon="inline-start" />
           New service
@@ -214,15 +255,24 @@ export function ServicesTable({ services }: { services: ServiceRow[] }) {
                     }
                     description={
                       services.length === 0
-                        ? 'Nothing can be billed until this list exists. Start with the OPD consultation — it is the charge the counter raises most.'
+                        ? 'Nothing can be billed until this list exists. One row is one billable thing — a consultation, a dressing, one lab test, one ward class per night. The categories are only how they are filed. Load the standard list and edit the prices to your own rates.'
                         : undefined
                     }
                     action={
                       services.length === 0 ? (
-                        <Button onClick={() => setEditing(blankService('consultation'))}>
-                          <PlusIcon data-icon="inline-start" />
-                          Add a consultation charge
-                        </Button>
+                        <div className="flex flex-wrap justify-center gap-2">
+                          <Button onClick={() => setStarter(true)}>
+                            <SparklesIcon data-icon="inline-start" />
+                            Load the standard list
+                          </Button>
+                          <Button
+                            variant="outline"
+                            onClick={() => setEditing(blankService('consultation'))}
+                          >
+                            <PlusIcon data-icon="inline-start" />
+                            Add one myself
+                          </Button>
+                        </div>
                       ) : undefined
                     }
                   />
@@ -249,10 +299,21 @@ export function ServicesTable({ services }: { services: ServiceRow[] }) {
                     >
                       <TableCell className="font-medium">
                         {service.name}
-                        {priceIsAdvisory(service.category) ? <ConsultationNote /> : null}
+                        {priceIsAdvisory(service.category) ? (
+                          <ConsultationNote doctors={doctors} />
+                        ) : null}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">
                         {formatAmount(service.price)}
+                        {/* The unit sits with the number, not in a column of
+                            its own: "3,000.00 / day" is one fact, and `each`
+                            prints nothing so the four rows where the unit
+                            matters are the four that stand out. */}
+                        {SERVICE_UNIT_SUFFIX[service.unit] ? (
+                          <span className="ml-1 text-xs font-normal text-muted-foreground">
+                            {SERVICE_UNIT_SUFFIX[service.unit]}
+                          </span>
+                        ) : null}
                       </TableCell>
                       <TableCell
                         className={cn(
@@ -300,9 +361,14 @@ export function ServicesTable({ services }: { services: ServiceRow[] }) {
         <ServiceDialog
           key={editing.id}
           service={editing}
+          doctors={doctors}
           isNew={!services.some((row) => row.id === editing.id)}
           onClose={() => setEditing(null)}
         />
+      ) : null}
+
+      {starter ? (
+        <StarterDialog hasServices={services.length > 0} onClose={() => setStarter(false)} />
       ) : null}
 
       {deactivating ? (
@@ -346,21 +412,109 @@ function CategoryChip({
 }
 
 /**
- * The one line that prevents a support call on day one.
+ * The one line that prevents a support call on day one -- now with the numbers
+ * in it.
  *
- * create_visit seeds the consultation charge from staff.consultation_fee, so an
- * admin who edits this price and sees bills unchanged has found the documented
- * behaviour, not a bug (services.price carries the same note in SQL).
+ * register_patient_visit charges staff.consultation_fee, not this row's price,
+ * so an admin who edits the price and sees bills unchanged has found documented
+ * behaviour rather than a bug. Saying so was already here; saying so while
+ * showing the fees that ARE charged is what makes it believable, and it catches
+ * the failure nobody goes looking for -- a doctor whose fee is still zero, who
+ * has been seen free of charge since the day they were added.
  */
-function ConsultationNote() {
+function ConsultationNote({ doctors }: { doctors: DoctorFee[] }) {
+  if (doctors.length === 0) {
+    return (
+      <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+        No active doctor yet. A visit charges the doctor&rsquo;s own fee, so{' '}
+        <Link href="/admin/staff" className="underline underline-offset-2 hover:text-foreground">
+          add one and set their fee
+        </Link>
+        .
+      </span>
+    );
+  }
+
+  // Four names, then a count. A hospital with fifteen doctors would otherwise
+  // push every other row off the screen, and the point of the line is made by
+  // the first two.
+  const shown = doctors.slice(0, 4);
+  const rest = doctors.length - shown.length;
+
   return (
     <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-      The doctor&rsquo;s own fee wins on a visit &mdash;{' '}
+      Charged on a visit:{' '}
+      {shown.map((doctor, index) => (
+        <Fragment key={doctor.id}>
+          {index > 0 ? <span aria-hidden> &middot; </span> : null}
+          <span className={cn(doctor.consultation_fee === 0 && 'text-destructive')}>
+            {doctor.full_name} {formatAmount(doctor.consultation_fee)}
+          </span>
+        </Fragment>
+      ))}
+      {rest > 0 ? ` and ${rest} more` : null}
+      {' — '}
       <Link href="/admin/staff" className="underline underline-offset-2 hover:text-foreground">
-        set it on the staff record
+        set on the staff record
       </Link>
       .
     </span>
+  );
+}
+
+/**
+ * Load the standard tariff.
+ *
+ * A confirmation rather than a bare button, because the honest description of
+ * what it does is the whole reassurance: it only ADDS, and only names that are
+ * missing. Nothing here is destructive, so there is no typed reason
+ * (CLAUDE.md 7) -- and the prices are said to be placeholders twice, here and
+ * in the toast, because an owner who trusts them is the one real risk.
+ */
+function StarterDialog({ hasServices, onClose }: { hasServices: boolean; onClose: () => void }) {
+  const [state, action] = useActionState(loadStarterCatalogue, IDLE);
+
+  useEffect(() => {
+    if (state.status === 'success') {
+      toast.success(state.message);
+      onClose();
+    }
+  }, [state, onClose]);
+
+  return (
+    <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Load the standard price list?</DialogTitle>
+          <DialogDescription>
+            About thirty rows a small hospital bills every day: three consultation lines, nine
+            procedures, eleven lab tests, four ward classes per night, and the non-clinical charges.
+            No medicines &mdash; a drug&rsquo;s price belongs to the batch it came in on.
+          </DialogDescription>
+        </DialogHeader>
+
+        <form action={action} className="grid gap-4">
+          <FormMessage state={state} />
+
+          <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+            The prices are placeholders. Edit every one of them to your own rates before the counter
+            opens.
+            {hasServices
+              ? ' Anything you already have is skipped by name, so no price of yours is touched.'
+              : ''}
+          </p>
+
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <SubmitButton pendingLabel="Adding..." autoFocus>
+              Add the standard list
+            </SubmitButton>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -382,18 +536,37 @@ function ReactivateButton({ service }: { service: ServiceRow }) {
 
 function ServiceDialog({
   service,
+  doctors,
   isNew,
   onClose,
 }: {
   service: ServiceRow;
+  doctors: DoctorFee[];
   isNew: boolean;
   onClose: () => void;
 }) {
   const [state, action] = useActionState(saveService, IDLE);
   const [category, setCategory] = useState<ServiceCategory>(service.category);
+  const [unit, setUnit] = useState<ServiceUnit>(service.unit);
+  const [unitTouched, setUnitTouched] = useState(false);
   const [taxDraft, setTaxDraft] = useState(
     service.tax_rate ? String(service.tax_rate) : '',
   );
+
+  /**
+   * The unit follows the category until somebody sets it by hand.
+   *
+   * Picking Bed and leaving the unit on `each` is how a ward rate silently
+   * becomes a one-off charge, and the person picking Bed has already said what
+   * they mean. One deliberate change to the field ends the tracking for good --
+   * a ward billed per hour is unusual, not wrong.
+   */
+  const options = categoryOptions(service.category);
+
+  function chooseCategory(next: ServiceCategory) {
+    setCategory(next);
+    if (!unitTouched) setUnit(defaultUnitFor(next));
+  }
 
   useEffect(() => {
     if (state.status === 'success') {
@@ -413,14 +586,16 @@ function ServiceDialog({
         <DialogHeader>
           <DialogTitle>{isNew ? 'New service' : service.name}</DialogTitle>
           <DialogDescription>
-            Changing a price moves what the counter is offered next. Bills already raised keep the
-            price they were raised at.
+            {isNew
+              ? 'One row is one billable thing — a single test, a single procedure, one ward class. Changing a price later moves what the counter is offered next; bills already raised keep the price they were raised at.'
+              : 'Changing a price moves what the counter is offered next. Bills already raised keep the price they were raised at.'}
           </DialogDescription>
         </DialogHeader>
 
         <form action={action} className="grid gap-4">
           <input type="hidden" name="id" value={service.id} />
           <input type="hidden" name="category" value={category} />
+          <input type="hidden" name="unit" value={unit} />
 
           <FormMessage state={state} />
 
@@ -437,11 +612,12 @@ function ServiceDialog({
             />
           </Field>
 
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field
               label="Category"
               htmlFor="service-category"
               error={fieldError(state, 'category')}
+              hint={SERVICE_CATEGORY_HINT[category]}
               required
             >
               {/* The Select posts nothing of its own here; the hidden input
@@ -449,13 +625,13 @@ function ServiceDialog({
                   uses for its department picker. */}
               <Select
                 value={category}
-                onValueChange={(value) => setCategory(value as ServiceCategory)}
+                onValueChange={(value) => chooseCategory(value as ServiceCategory)}
               >
                 <SelectTrigger id="service-category" className="w-full">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  {SERVICE_CATEGORIES.map((option) => (
+                  {options.map((option) => (
                     <SelectItem key={option} value={option}>
                       {SERVICE_CATEGORY_LABEL[option]}
                     </SelectItem>
@@ -464,6 +640,38 @@ function ServiceDialog({
               </Select>
             </Field>
 
+            {/* Beside the category, because the two are read together: "Bed,
+                per day" is the whole sentence. Nothing enforces it yet -- Phase
+                3 is what multiplies a bed rate by nights stayed -- but the name
+                field is where this meaning used to live, and free text cannot
+                be multiplied by anything. */}
+            <Field
+              label="Charged"
+              htmlFor="service-unit"
+              hint={unit === 'each' ? 'A one-off charge.' : `Quantity is counted in ${SERVICE_UNIT_LABEL[unit].toLowerCase().replace('per ', '')}s.`}
+            >
+              <Select
+                value={unit}
+                onValueChange={(value) => {
+                  setUnit(value as ServiceUnit);
+                  setUnitTouched(true);
+                }}
+              >
+                <SelectTrigger id="service-unit" className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {SERVICE_UNITS.map((option) => (
+                    <SelectItem key={option} value={option}>
+                      {SERVICE_UNIT_LABEL[option]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
             <Field label="Price" htmlFor="service-price" error={fieldError(state, 'price')} required>
               <MoneyInput
                 id="service-price"
@@ -502,13 +710,42 @@ function ServiceDialog({
           ) : null}
 
           {priceIsAdvisory(category) ? (
+            <div className="grid gap-1.5 rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
+              <p>
+                On a visit, the doctor&rsquo;s own consultation fee is charged instead of this
+                price. This price is only what the counter offers when a consultation is added by
+                hand.
+              </p>
+              {doctors.length === 0 ? (
+                <p>
+                  No active doctor has a fee yet &mdash;{' '}
+                  <Link href="/admin/staff" className="underline underline-offset-2">
+                    add one on the staff record
+                  </Link>
+                  .
+                </p>
+              ) : (
+                <ul className="grid gap-0.5">
+                  {doctors.map((doctor) => (
+                    <li key={doctor.id} className="flex justify-between gap-4 tabular-nums">
+                      <span>{doctor.full_name}</span>
+                      {/* Zero is the case worth shouting about: it bills a
+                          consultation at nothing, every time, quietly. */}
+                      <span className={cn(doctor.consultation_fee === 0 && 'text-destructive')}>
+                        {formatAmount(doctor.consultation_fee)}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          ) : null}
+
+          {category === 'pharmacy' ? (
             <p className="rounded-lg bg-muted px-3 py-2 text-xs text-muted-foreground">
-              On a visit, the doctor&rsquo;s consultation fee is charged instead of this price. Set
-              that on the{' '}
-              <Link href="/admin/staff" className="underline underline-offset-2">
-                staff record
-              </Link>
-              . This price is what the counter offers when a consultation is added by hand.
+              Pharmacy is no longer offered on new rows. A drug&rsquo;s price belongs to the batch it
+              was bought in, so it will come from stock when the pharmacy module lands
+              &mdash; this row still edits and still bills until then.
             </p>
           ) : null}
 

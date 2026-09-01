@@ -281,19 +281,19 @@ $$;
 -- Tax rates are per service, never per invoice (CLAUDE.md 8): every clinical
 -- service here is GST-exempt at 0, and the one pharmacy line is not.
 -- =============================================================================
-insert into public.services (id, hospital_id, name, category, price, tax_rate, created_at) values
-  ('00000000-0000-4000-8000-000000000401', '00000000-0000-4000-8000-000000000001', 'Consultation - OPD',          'consultation',  500.00,  0.00, now() - interval '60 minutes'),
-  ('00000000-0000-4000-8000-000000000402', '00000000-0000-4000-8000-000000000001', 'Consultation - Follow up',    'consultation',  200.00,  0.00, now() - interval '59 minutes'),
-  ('00000000-0000-4000-8000-000000000403', '00000000-0000-4000-8000-000000000001', 'Dressing',                    'procedure',     300.00,  0.00, now() - interval '58 minutes'),
-  ('00000000-0000-4000-8000-000000000404', '00000000-0000-4000-8000-000000000001', 'Nebulisation',                'procedure',     250.00,  0.00, now() - interval '57 minutes'),
-  ('00000000-0000-4000-8000-000000000405', '00000000-0000-4000-8000-000000000001', 'ECG',                         'procedure',     400.00,  0.00, now() - interval '56 minutes'),
-  ('00000000-0000-4000-8000-000000000406', '00000000-0000-4000-8000-000000000001', 'Complete Blood Count',        'lab',           350.00,  0.00, now() - interval '55 minutes'),
-  ('00000000-0000-4000-8000-000000000407', '00000000-0000-4000-8000-000000000001', 'Blood Sugar - Fasting',       'lab',           120.00,  0.00, now() - interval '54 minutes'),
-  ('00000000-0000-4000-8000-000000000408', '00000000-0000-4000-8000-000000000001', 'Urine Routine',               'lab',           200.00,  0.00, now() - interval '53 minutes'),
-  ('00000000-0000-4000-8000-000000000409', '00000000-0000-4000-8000-000000000001', 'General Ward - per day',      'bed',          1500.00,  0.00, now() - interval '52 minutes'),
-  ('00000000-0000-4000-8000-00000000040a', '00000000-0000-4000-8000-000000000001', 'Semi-private Room - per day', 'bed',          3000.00,  0.00, now() - interval '51 minutes'),
-  ('00000000-0000-4000-8000-00000000040b', '00000000-0000-4000-8000-000000000001', 'Paracetamol 650mg - strip',   'pharmacy',       30.00, 12.00, now() - interval '50 minutes'),
-  ('00000000-0000-4000-8000-00000000040c', '00000000-0000-4000-8000-000000000001', 'Ambulance - local',           'other',         800.00,  0.00, now() - interval '49 minutes')
+insert into public.services (id, hospital_id, name, category, unit, price, tax_rate, created_at) values
+  ('00000000-0000-4000-8000-000000000401', '00000000-0000-4000-8000-000000000001', 'Consultation - OPD',          'consultation', 'each',  500.00,  0.00, now() - interval '60 minutes'),
+  ('00000000-0000-4000-8000-000000000402', '00000000-0000-4000-8000-000000000001', 'Consultation - Follow up',    'consultation', 'each',  200.00,  0.00, now() - interval '59 minutes'),
+  ('00000000-0000-4000-8000-000000000403', '00000000-0000-4000-8000-000000000001', 'Dressing',                    'procedure', 'each',     300.00,  0.00, now() - interval '58 minutes'),
+  ('00000000-0000-4000-8000-000000000404', '00000000-0000-4000-8000-000000000001', 'Nebulisation',                'procedure', 'per_session',     250.00,  0.00, now() - interval '57 minutes'),
+  ('00000000-0000-4000-8000-000000000405', '00000000-0000-4000-8000-000000000001', 'ECG',                         'procedure', 'each',     400.00,  0.00, now() - interval '56 minutes'),
+  ('00000000-0000-4000-8000-000000000406', '00000000-0000-4000-8000-000000000001', 'Complete Blood Count',        'lab', 'per_test',           350.00,  0.00, now() - interval '55 minutes'),
+  ('00000000-0000-4000-8000-000000000407', '00000000-0000-4000-8000-000000000001', 'Blood Sugar - Fasting',       'lab', 'per_test',           120.00,  0.00, now() - interval '54 minutes'),
+  ('00000000-0000-4000-8000-000000000408', '00000000-0000-4000-8000-000000000001', 'Urine Routine',               'lab', 'per_test',           200.00,  0.00, now() - interval '53 minutes'),
+  ('00000000-0000-4000-8000-000000000409', '00000000-0000-4000-8000-000000000001', 'General Ward - per day',      'bed', 'per_day',          1500.00,  0.00, now() - interval '52 minutes'),
+  ('00000000-0000-4000-8000-00000000040a', '00000000-0000-4000-8000-000000000001', 'Semi-private Room - per day', 'bed', 'per_day',          3000.00,  0.00, now() - interval '51 minutes'),
+  ('00000000-0000-4000-8000-00000000040b', '00000000-0000-4000-8000-000000000001', 'Paracetamol 650mg - strip',   'pharmacy', 'each',       30.00, 12.00, now() - interval '50 minutes'),
+  ('00000000-0000-4000-8000-00000000040c', '00000000-0000-4000-8000-000000000001', 'Ambulance - local',           'other', 'each',         800.00,  0.00, now() - interval '49 minutes')
 on conflict (id) do nothing;
 
 -- =============================================================================

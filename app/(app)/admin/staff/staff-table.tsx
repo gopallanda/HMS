@@ -20,7 +20,7 @@ import {
   setStaffAccountEnabled,
   setStaffActive,
 } from './actions';
-import { CREDENTIALS_IDLE } from './credential-state';
+import { CREDENTIALS_IDLE, type StaffSaveState } from './credential-state';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Field } from '@/components/shared/field';
 import { KbdHint } from '@/components/shared/kbd';
@@ -368,6 +368,7 @@ export function StaffTable({
           roles={roles}
           departments={departments}
           hasAccount={accountByStaff.has(editing.id)}
+          canProvision={can.provision}
           onClose={() => setEditing(null)}
         />
       ) : null}
@@ -462,6 +463,7 @@ function StaffDialog({
   roles,
   departments,
   hasAccount,
+  canProvision,
   onClose,
 }: {
   person: StaffRow;
@@ -469,12 +471,14 @@ function StaffDialog({
   roles: RoleOption[];
   departments: DepartmentOption[];
   hasAccount: boolean;
+  canProvision: boolean;
   onClose: () => void;
 }) {
-  const [state, action] = useActionState(saveStaff, IDLE);
+  const [state, action] = useActionState<StaffSaveState, FormData>(saveStaff, IDLE);
   const [roleId, setRoleId] = useState<string>(person.role_id);
   const [departmentId, setDepartmentId] = useState<string>(person.department_id ?? NO_DEPARTMENT);
   const [deniedLogin, setDeniedLogin] = useState(person.can_login === false);
+  const [issueLogin, setIssueLogin] = useState(true);
 
   useEffect(() => {
     if (state.status === 'success') {
@@ -485,6 +489,71 @@ function StaffDialog({
 
   const role = roles.find((option) => option.id === roleId);
   const isDoctor = chargesConsultationFee(role?.code);
+
+  // Whether THIS submission also mints a login. New records only: an existing
+  // person's credentials are the Login dialog's business, and reissuing them
+  // from an edit form is how somebody loses their password by having their
+  // phone number corrected.
+  const canIssueNow = isNew && canProvision && (role?.can_login ?? false) && !deniedLogin;
+
+  /*
+    The credentials, once, on the way out of the create form.
+
+    This replaces the whole dialog rather than sitting above it: the record is
+    already saved, there is nothing left to edit, and the only thing left to do
+    is copy three lines before closing. There is no way back to this screen
+    anywhere in the product -- if it is closed too early, the answer is Reset
+    password on their row, not a hunt.
+  */
+  if (state.status === 'issued') {
+    const { credentials } = state;
+    return (
+      <Dialog open onOpenChange={(open) => (open ? undefined : onClose())}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Credentials for {credentials.staffName}</DialogTitle>
+            <DialogDescription>
+              Hand these over now. They are not shown again anywhere -- if they are lost, reset the
+              password and issue new ones.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="grid gap-3">
+            <CopyRow label="Sign in at" value={credentials.loginUrl} />
+            <CopyRow label="Username" value={credentials.username} />
+            <CopyRow label="Temporary password" value={credentials.password} mono />
+          </div>
+
+          <p className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground">
+            {credentials.staffName} has to choose their own password before they can reach any
+            screen, so nobody else -- you included -- can open their pages afterwards.
+          </p>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                const lines = [
+                  `Sign in at: ${credentials.loginUrl}`,
+                  `Username: ${credentials.username}`,
+                  `Temporary password: ${credentials.password}`,
+                ].join('\n');
+                navigator.clipboard.writeText(lines).then(
+                  () => toast.success('All three copied.'),
+                  () => toast.error('Could not copy. Copy the three lines by hand.'),
+                );
+              }}
+            >
+              <CopyIcon />
+              Copy all three
+            </Button>
+            <Button onClick={onClose}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   // An inactive department should not be offered for new assignments, but a
   // person already sitting in one keeps showing it -- otherwise editing their
@@ -499,8 +568,9 @@ function StaffDialog({
         <DialogHeader>
           <DialogTitle>{isNew ? 'New staff record' : person.full_name}</DialogTitle>
           <DialogDescription>
-            A staff record is a person who works here. Credentials are a separate, deliberate step
-            afterwards -- and some roles never get any.
+            {isNew
+              ? 'A staff record is a person who works here. If their role signs in, their credentials are issued as you save and shown once -- and some roles never get any.'
+              : 'Their staff record. Credentials are handled from the Login dialog on their row.'}
           </DialogDescription>
         </DialogHeader>
 
@@ -680,23 +750,76 @@ function StaffDialog({
             answer is that it does not apply to this person at all.
           */}
           {role?.can_login ? (
-            <label className="flex items-start gap-2.5 rounded-lg border border-border/60 p-3 text-sm">
-              <Checkbox
-                name="denied_login"
-                checked={deniedLogin}
-                onCheckedChange={(value) => setDeniedLogin(value === true)}
-                disabled={hasAccount}
-                className="mt-0.5"
-              />
-              <span className="grid gap-0.5">
-                <span className="font-medium">This person does not use the software</span>
-                <span className="text-xs text-muted-foreground">
-                  {hasAccount
-                    ? 'They already have a login. Revoke it from the Login dialog first.'
-                    : 'Their role allows credentials, but this person will not be given any.'}
+            <div className="grid gap-3 rounded-lg border border-border/60 p-3">
+              <label className="flex items-start gap-2.5 text-sm">
+                <Checkbox
+                  name="denied_login"
+                  checked={deniedLogin}
+                  onCheckedChange={(value) => setDeniedLogin(value === true)}
+                  disabled={hasAccount}
+                  className="mt-0.5"
+                />
+                <span className="grid gap-0.5">
+                  <span className="font-medium">This person does not use the software</span>
+                  <span className="text-xs text-muted-foreground">
+                    {hasAccount
+                      ? 'They already have a login. Revoke it from the Login dialog first.'
+                      : 'Their role allows credentials, but this person will not be given any.'}
+                  </span>
                 </span>
-              </span>
-            </label>
+              </label>
+
+              {/*
+                Issuing is DEFAULTED ON and can be turned off, because the case
+                the default gets wrong -- a record entered a week before somebody
+                starts -- is real, and Issue login on their row still covers it.
+                What it must never be is the other way round: an admin who does
+                not notice an optional step ends up with a staff member who
+                cannot sign in and nothing on screen saying so.
+              */}
+              {canIssueNow ? (
+                <>
+                  <label className="flex items-start gap-2.5 border-t border-border/60 pt-3 text-sm">
+                    <Checkbox
+                      name="issue_login"
+                      checked={issueLogin}
+                      onCheckedChange={(value) => setIssueLogin(value === true)}
+                      className="mt-0.5"
+                    />
+                    <span className="grid gap-0.5">
+                      <span className="font-medium">Issue their login now</span>
+                      <span className="text-xs text-muted-foreground">
+                        A username and a temporary password, shown once when you save. Hand them
+                        over; they choose their own password before they reach any screen.
+                      </span>
+                    </span>
+                  </label>
+
+                  {issueLogin ? (
+                    <Field
+                      label="Contact email"
+                      htmlFor="staff-contact-email"
+                      error={fieldError(state, 'contact_email')}
+                      hint="Their real mailbox. Only ever used to send a password reset."
+                      required
+                    >
+                      <Input
+                        id="staff-contact-email"
+                        name="contact_email"
+                        type="email"
+                        inputMode="email"
+                        autoComplete="off"
+                        autoCapitalize="none"
+                        spellCheck={false}
+                        placeholder="anjali.rao@gmail.com"
+                        required
+                        aria-invalid={fieldError(state, 'contact_email') !== undefined}
+                      />
+                    </Field>
+                  ) : null}
+                </>
+              ) : null}
+            </div>
           ) : (
             <p className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground">
               This role does not use the software. The staff record and roster still apply.
@@ -712,8 +835,12 @@ function StaffDialog({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <SubmitButton pendingLabel="Saving...">
-              {isNew ? 'Create staff record' : 'Save changes'}
+            <SubmitButton pendingLabel={canIssueNow && issueLogin ? 'Creating login...' : 'Saving...'}>
+              {isNew
+                ? canIssueNow && issueLogin
+                  ? 'Create and issue login'
+                  : 'Create staff record'
+                : 'Save changes'}
             </SubmitButton>
           </DialogFooter>
         </form>

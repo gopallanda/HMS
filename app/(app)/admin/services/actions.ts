@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
 import { serviceSchema } from '@/lib/schemas/service';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { describeDatabaseError, violates } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
 
@@ -36,6 +37,7 @@ export async function saveService(
     id: formData.get('id'),
     name: formData.get('name'),
     category: formData.get('category'),
+    unit: formData.get('unit'),
     price: formData.get('price'),
     tax_rate: formData.get('tax_rate'),
     is_active: formData.get('is_active'),
@@ -50,6 +52,7 @@ export async function saveService(
       hospital_id: session.hospitalId,
       name: parsed.data.name,
       category: parsed.data.category,
+      unit: parsed.data.unit,
       price: parsed.data.price,
       tax_rate: parsed.data.tax_rate,
       is_active: parsed.data.is_active,
@@ -70,6 +73,53 @@ export async function saveService(
 
   refresh();
   return success(`${parsed.data.name} saved.`);
+}
+
+/**
+ * Put the standard Indian OPD tariff on the price list.
+ *
+ * This exists because of what an EMPTY price list teaches. An owner who opens
+ * this screen with nothing on it, presses New service and reads a six-item
+ * category dropdown concludes that the categories are the thing being priced --
+ * that "Lab" takes one number. It does not: `category` is a folder and every
+ * row is one billable line. Thirty named rows say that in a way no help text
+ * does.
+ *
+ * seed_starter_services adds only names that are missing, so this is safe to
+ * press twice and safe to press on a catalogue somebody has already started.
+ * It never re-prices, never reactivates and never deletes.
+ *
+ * The service role, not the session client, for one reason: the function is
+ * revoked from `authenticated` (it takes a hospital_id rather than reading the
+ * JWT, because provision_hospital calls it before the caller has a claim).
+ * settings.manage above is the real boundary (CLAUDE.md 3.6), and the
+ * hospital_id passed below is the session's own -- never one from the form.
+ */
+export async function loadStarterCatalogue(
+  _previous: ActionState,
+  _formData: FormData,
+): Promise<ActionState> {
+  const gate = await checkPermission('settings.manage');
+  if (!gate.ok) return failure(gate.message);
+  const session = gate.session;
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.rpc('seed_starter_services', {
+    p_hospital_id: session.hospitalId,
+    p_only_when_empty: false,
+  });
+
+  if (error) return failure(describeDatabaseError(error));
+
+  const added = Number(data ?? 0);
+  refresh();
+
+  if (added === 0) {
+    return success('Every service on the standard list is already here. Nothing was changed.');
+  }
+  return success(
+    `${added} ${added === 1 ? 'service' : 'services'} added. The prices are placeholders — edit them to your own rates.`,
+  );
 }
 
 const activeSchema = z.object({

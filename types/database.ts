@@ -19,6 +19,9 @@
  * password_reset_tokens -- were written from migrations 20260828090000,
  * 090100 and 090200 after all three were pushed successfully.
  *
+ * services.unit, the service_unit enum and seed_starter_services come from
+ * 20260901090000_service_units_and_starter_catalogue.sql.
+ *
  * EmploymentType and ShiftStatus are unions over CHECK constraints rather than
  * Postgres enums, so they are absent from Enums below on purpose: generated
  * output would type those columns as plain `string`, and narrowing them here
@@ -72,6 +75,13 @@ export type ServiceCategory =
   | 'bed'
   | 'pharmacy'
   | 'other';
+
+export type ServiceUnit =
+  | 'each'
+  | 'per_day'
+  | 'per_test'
+  | 'per_session'
+  | 'per_hour';
 
 export type ChargeStatus = 'pending' | 'invoiced' | 'cancelled';
 
@@ -540,6 +550,7 @@ export type Database = {
           hospital_id: string;
           name: string;
           category: ServiceCategory;
+          unit: ServiceUnit;
           price: number;
           tax_rate: number;
           is_active: boolean;
@@ -550,6 +561,7 @@ export type Database = {
           hospital_id: string;
           name: string;
           category: ServiceCategory;
+          unit?: ServiceUnit;
           price?: number;
           tax_rate?: number;
           is_active?: boolean;
@@ -560,6 +572,7 @@ export type Database = {
           hospital_id?: string;
           name?: string;
           category?: ServiceCategory;
+          unit?: ServiceUnit;
           price?: number;
           tax_rate?: number;
           is_active?: boolean;
@@ -1087,6 +1100,10 @@ export type Database = {
         Args: { p_role_id: string; p_keys: string[] };
         Returns: undefined;
       };
+      seed_starter_services: {
+        Args: { p_hospital_id: string; p_only_when_empty?: boolean };
+        Returns: number;
+      };
       day_close_report: {
         Args: { p_hospital_id: string; p_date?: string | null };
         Returns: {
@@ -1106,6 +1123,7 @@ export type Database = {
       visit_type: VisitType;
       visit_status: VisitStatus;
       service_category: ServiceCategory;
+      service_unit: ServiceUnit;
       charge_status: ChargeStatus;
       charge_source: ChargeSource;
       invoice_status: InvoiceStatus;

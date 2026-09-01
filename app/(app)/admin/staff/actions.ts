@@ -9,10 +9,11 @@ import {
   resetStaffPassword as resetPassword,
   setAccountEnabled,
 } from '@/lib/accounts/provision';
-import type { CredentialState } from './credential-state';
+import type { CredentialState, StaffSaveState } from './credential-state';
 import { appBaseUrl } from '@/lib/env';
 import { checkPermission } from '@/lib/auth/session';
 import {
+  contactEmail as contactEmailSchema,
   provisionAccountSchema,
   resetStaffPasswordSchema,
   setAccountEnabledSchema,
@@ -24,10 +25,18 @@ import { createClient } from '@/lib/supabase/server';
 /**
  * Staff records and the logins attached to them.
  *
- * Note what saveStaff still does NOT do: it never issues credentials. A staff
- * record is the hospital's record of a person and exists whether or not that
- * person ever opens the software -- which is the whole point of block 1, and
- * the reason a cleaner now has somewhere to live.
+ * saveStaff issues credentials in the SAME submission that creates the record,
+ * for a person whose role signs in. It is one act at the desk -- an admin adds
+ * somebody and turns round with a username, a temporary password and the URL
+ * to hand over -- and splitting it in two is how a hospital ends up with staff
+ * rows nobody can log in as. The password is minted by the action and shown
+ * once; the admin never learns what the person's real password becomes,
+ * because the forced change on first sign-in makes it theirs.
+ *
+ * A staff record is still the hospital's record of a person and still exists
+ * whether or not that person ever opens the software: a role with
+ * can_login = false, or a person ticked as not using the software, is created
+ * exactly as before with no credentials section on the form at all.
  *
  * Every action here checks a PERMISSION from the session, not a role name. A
  * hospital that invents "Ward sister" and gives it staff.update gets a working
@@ -36,9 +45,9 @@ import { createClient } from '@/lib/supabase/server';
  */
 
 export async function saveStaff(
-  _previous: ActionState,
+  _previous: StaffSaveState,
   formData: FormData,
-): Promise<ActionState> {
+): Promise<StaffSaveState> {
   const id = formData.get('id')?.toString() ?? '';
   const supabase = await createClient();
 
@@ -60,7 +69,7 @@ export async function saveStaff(
   const roleId = formData.get('role_id')?.toString() ?? '';
   const { data: role } = await supabase
     .from('roles')
-    .select('id, code, name')
+    .select('id, code, name, can_login')
     .eq('id', roleId)
     .eq('hospital_id', session.hospitalId)
     .is('deleted_at', null)
@@ -84,6 +93,32 @@ export async function saveStaff(
     is_active: formData.get('is_active'),
   });
   if (!parsed.success) return invalid(parsed.error);
+
+  // -- Does this submission also mint a login? ------------------------------
+  //
+  // Settled BEFORE the staff row is written, permission and email included, so
+  // a rejected email costs nothing. The reverse order would leave a saved staff
+  // record behind every typo in an address.
+  const isNew = !existing.data;
+  const wantsLogin =
+    isNew &&
+    formData.get('issue_login') === 'on' &&
+    role.can_login &&
+    parsed.data.can_login !== false;
+
+  let newContactEmail = '';
+  if (wantsLogin) {
+    const canProvision = await checkPermission('accounts.provision');
+    if (!canProvision.ok) return failure(canProvision.message);
+
+    const email = contactEmailSchema.safeParse(formData.get('contact_email') ?? '');
+    if (!email.success) {
+      return failure('Check the contact email.', {
+        contact_email: [email.error.issues[0]?.message ?? 'Enter a valid email address.'],
+      });
+    }
+    newContactEmail = email.data;
+  }
 
   const { error } = await supabase.from('staff').upsert(
     {
@@ -115,8 +150,44 @@ export async function saveStaff(
     return failure(describeDatabaseError(error));
   }
 
+  if (!wantsLogin) {
+    refresh();
+    return success(`${parsed.data.full_name} saved.`);
+  }
+
+  const issued = await provisionAccount({
+    hospitalId: session.hospitalId,
+    hospitalSlug: session.hospital.slug,
+    actorId: session.userId,
+    staffId: parsed.data.id,
+    contactEmail: newContactEmail,
+  });
+
+  // The record IS saved either way, and saying so is the difference between an
+  // admin retrying the login and an admin retyping the whole person. The row is
+  // on the page by the time they read this, with Issue login sitting on it.
   refresh();
-  return success(`${parsed.data.full_name} saved.`);
+
+  if (!issued.ok) {
+    return failure(
+      `${parsed.data.full_name} was saved, but the login could not be created: ` +
+        `${issued.error.message} Use Issue login on their row to try again.`,
+      issued.error.field === 'contact_email'
+        ? { contact_email: [issued.error.message] }
+        : undefined,
+    );
+  }
+
+  return {
+    status: 'issued',
+    message: `${issued.account.staffName} can sign in now.`,
+    credentials: {
+      staffName: issued.account.staffName,
+      username: issued.account.username,
+      password: issued.account.password,
+      loginUrl: issued.account.loginUrl,
+    },
+  };
 }
 
 /**

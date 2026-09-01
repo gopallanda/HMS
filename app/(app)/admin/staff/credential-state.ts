@@ -1,3 +1,5 @@
+import type { ActionState } from '@/lib/action-state';
+
 /**
  * The result shape of the two actions whose OUTPUT is the point.
  *
@@ -26,3 +28,30 @@ export type CredentialState =
     };
 
 export const CREDENTIALS_IDLE: CredentialState = { status: 'idle' };
+
+/**
+ * The credentials handed over at the desk, in the shape both the provisioning
+ * dialog and the create-staff form show them.
+ */
+export type IssuedCredentials = {
+  staffName: string;
+  username: string;
+  password: string;
+  loginUrl: string;
+};
+
+/**
+ * What saveStaff hands back.
+ *
+ * Wider than ActionState by exactly one case, because creating a staff member
+ * who uses the software now ISSUES their login in the same submission. The
+ * credentials exist nowhere else afterwards, so the action that mints them is
+ * the only thing that can show them -- a success message and a second trip
+ * through "Issue login" would leave the admin holding nothing to hand over.
+ *
+ * Editing an existing record, or creating one for a role that never signs in,
+ * still returns a plain ActionState.
+ */
+export type StaffSaveState =
+  | ActionState
+  | { status: 'issued'; message: string; credentials: IssuedCredentials };
