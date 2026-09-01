@@ -5,6 +5,7 @@ import { refresh } from 'next/cache';
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
 import { cancelVisit } from '@/lib/rpc/visits';
+import { reportActionError } from '@/lib/report-error';
 import { cancelVisitSchema } from '@/lib/schemas/visit';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -48,7 +49,10 @@ export async function cancelVisitAction(
 
   const { data, error } = await cancelVisit(supabase, parsed.data.visit_id, parsed.data.reason);
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('cancelVisitAction', error);
+    return failure(describeDatabaseError(error));
+  }
   if (!data) return failure('The visit could not be cancelled. Nothing was changed.');
 
   refresh();

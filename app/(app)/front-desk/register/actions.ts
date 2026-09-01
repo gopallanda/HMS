@@ -5,6 +5,7 @@ import { refresh } from 'next/cache';
 import { checkPermission } from '@/lib/auth/session';
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { registerPatientVisit, type RegistrationResult } from '@/lib/rpc/registration';
+import { reportActionError } from '@/lib/report-error';
 import { registrationSchema } from '@/lib/schemas/registration';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -99,7 +100,10 @@ export async function registerAction(
     deferReason: input.defer_reason,
   });
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('registerAction', error);
+    return failure(describeDatabaseError(error));
+  }
   if (!data) return failure('The registration could not be completed. Try again.');
 
   // The queue is a Server Component; this is what makes it current for anyone

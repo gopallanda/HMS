@@ -4,6 +4,7 @@ import { refresh } from 'next/cache';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
+import { reportActionError } from '@/lib/report-error';
 import { checkLogoFile, hospitalSettingsSchema } from '@/lib/schemas/hospital';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -95,6 +96,7 @@ export async function saveHospitalSettings(
   if (error) {
     // Do not leave the new file behind if the row it belongs to never changed.
     if (uploadedPath) await supabase.storage.from(BUCKET).remove([uploadedPath]);
+    await reportActionError('saveHospitalSettings', error);
     return failure(describeDatabaseError(error));
   }
 
@@ -124,7 +126,10 @@ export async function removeHospitalLogo(
     .update({ logo_url: null })
     .eq('id', session.hospitalId);
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('removeHospitalLogo', error);
+    return failure(describeDatabaseError(error));
+  }
 
   if (path) await supabase.storage.from(BUCKET).remove([path]);
 

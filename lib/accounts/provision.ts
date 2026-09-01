@@ -6,6 +6,7 @@ import {
   usernameStem,
   type ContactEmailProblem,
 } from '@/lib/credentials';
+import { reportError } from '@/lib/report-error';
 import { generateTempPassword } from '@/lib/credentials.server';
 import { appBaseUrl } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -202,6 +203,13 @@ export async function provisionStaffAccount(input: {
   });
 
   if (created.error || !created.data.user) {
+    // No password in the report, ever: `input` carries a generated one and
+    // this file is the only place it exists in plaintext.
+    reportError('provisionStaffAccount', created.error ?? new Error('no user returned'), {
+      hospitalId: input.hospitalId,
+      userId: input.actorId,
+      extra: { stage: 'create_login', staff_id: input.staffId },
+    });
     return fail(
       null,
       'auth',
@@ -223,6 +231,11 @@ export async function provisionStaffAccount(input: {
     .eq('hospital_id', input.hospitalId);
 
   if (linked.error) {
+    reportError('provisionStaffAccount', linked.error, {
+      hospitalId: input.hospitalId,
+      userId: input.actorId,
+      extra: { stage: 'link_staff', staff_id: input.staffId },
+    });
     await rollbackAuth();
     return fail(null, 'link', `The login could not be linked: ${linked.error.message}`);
   }
@@ -251,6 +264,11 @@ export async function provisionStaffAccount(input: {
   );
 
   if (membership.error) {
+    reportError('provisionStaffAccount', membership.error, {
+      hospitalId: input.hospitalId,
+      userId: input.actorId,
+      extra: { stage: 'membership', staff_id: input.staffId },
+    });
     await rollbackLink();
     await rollbackAuth();
     return fail(null, 'link', `The membership could not be created: ${membership.error.message}`);
@@ -281,6 +299,11 @@ export async function provisionStaffAccount(input: {
   });
 
   if (account.error) {
+    reportError('provisionStaffAccount', account.error, {
+      hospitalId: input.hospitalId,
+      userId: input.actorId,
+      extra: { stage: 'staff_account', staff_id: input.staffId },
+    });
     await rollbackMembership();
     await rollbackLink();
     await rollbackAuth();

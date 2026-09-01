@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
+import { reportActionError } from '@/lib/report-error';
 import { patientEditSchema } from '@/lib/schemas/patient';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -55,7 +56,10 @@ export async function updatePatient(
     .eq('id', parsed.data.id)
     .maybeSingle();
 
-  if (readError) return failure(describeDatabaseError(readError));
+  if (readError) {
+    await reportActionError('updatePatient', readError);
+    return failure(describeDatabaseError(readError));
+  }
   if (!existing) return failure('That patient record no longer exists.');
   if (existing.deleted_at !== null) {
     return failure('That record has been removed. Restore it before correcting it.');
@@ -73,7 +77,10 @@ export async function updatePatient(
     .eq('hospital_id', session.hospitalId)
     .eq('id', parsed.data.id);
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('updatePatient', error);
+    return failure(describeDatabaseError(error));
+  }
 
   refresh();
   return success(`${parsed.data.full_name} saved. Invoices already raised keep the old name.`);
@@ -128,7 +135,10 @@ export async function setPatientRemoved(
     .eq('id', parsed.data.id)
     .maybeSingle();
 
-  if (readError) return failure(describeDatabaseError(readError));
+  if (readError) {
+    await reportActionError('setPatientRemoved', readError);
+    return failure(describeDatabaseError(readError));
+  }
   if (!patient) return failure('That patient record no longer exists.');
 
   if (!restore && parsed.data.confirm.toUpperCase() !== patient.mrn.toUpperCase()) {
@@ -143,7 +153,10 @@ export async function setPatientRemoved(
     .eq('hospital_id', session.hospitalId)
     .eq('id', parsed.data.id);
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('setPatientRemoved', error);
+    return failure(describeDatabaseError(error));
+  }
 
   refresh();
   return success(

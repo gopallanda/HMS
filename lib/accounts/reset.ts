@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { reportError } from '@/lib/report-error';
 import { generateResetToken, hashResetToken } from '@/lib/credentials.server';
 import { appBaseUrl } from '@/lib/env';
 import { resetPasswordMail, sendMail } from '@/lib/mailer';
@@ -92,7 +93,13 @@ export async function requestPasswordReset(input: {
   });
 
   if (inserted.error) {
-    console.error('[reset] could not store token:', inserted.error.message);
+    // Structured, and deliberately WITHOUT the token: only its sha256 is
+    // ever stored, and a reset link in a log file is an account takeover
+    // waiting for whoever can read the log.
+    reportError('requestPasswordReset', inserted.error, {
+      hospitalId: account.hospital_id,
+      extra: { stage: 'store_token', account_id: account.id },
+    });
     return;
   }
 
@@ -112,7 +119,14 @@ export async function requestPasswordReset(input: {
     }),
   );
 
-  if (!result.ok) console.error('[reset] mail failed:', result.error);
+  if (!result.ok) {
+    // The address is not logged either. It is a real mailbox belonging to a
+    // member of staff, and the account id identifies them well enough.
+    reportError('requestPasswordReset', new Error(result.error), {
+      hospitalId: account.hospital_id,
+      extra: { stage: 'send_mail', account_id: account.id },
+    });
+  }
 }
 
 export type RedeemResult =

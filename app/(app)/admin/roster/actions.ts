@@ -4,6 +4,7 @@ import { refresh } from 'next/cache';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
+import { reportActionError } from '@/lib/report-error';
 import { shiftClearSchema, shiftSchema } from '@/lib/schemas/shift';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -64,7 +65,10 @@ export async function saveShift(
     { onConflict: 'hospital_id,staff_id,work_date' },
   );
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('saveShift', error);
+    return failure(describeDatabaseError(error));
+  }
 
   refresh();
   return success('Shift saved.');
@@ -101,7 +105,10 @@ export async function clearShift(
     .eq('staff_id', parsed.data.staff_id)
     .eq('work_date', parsed.data.work_date);
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('clearShift', error);
+    return failure(describeDatabaseError(error));
+  }
 
   refresh();
   return success('Shift cleared.');

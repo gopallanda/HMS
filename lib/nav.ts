@@ -17,6 +17,7 @@ import {
   Building2Icon,
   CalendarClockIcon,
   CalendarRangeIcon,
+  ChartNoAxesColumnIcon,
   ContactRoundIcon,
   CreditCardIcon,
   LayoutDashboardIcon,
@@ -137,6 +138,22 @@ export const NAV: readonly NavSection[] = [
         href: '/billing/day-close',
         label: 'Day close',
         icon: SlidersHorizontalIcon,
+        permissions: ['reports.view'],
+        status: 'ready',
+        phase: 1,
+      },
+      /**
+       * The reports index (item 9).
+       *
+       * ROUTE_PERMISSIONS guarded /reports from block 3 and there was no
+       * directory behind it. It is a door now, and it belongs in the nav for
+       * the same reason it belongs in the route map: an owner looking for
+       * "the reports" should not have to know they live under Billing.
+       */
+      {
+        href: '/reports',
+        label: 'Reports',
+        icon: ChartNoAxesColumnIcon,
         permissions: ['reports.view'],
         status: 'ready',
         phase: 1,

@@ -5,6 +5,7 @@ import { refresh } from 'next/cache';
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
 import { addPayment } from '@/lib/rpc/billing';
+import { reportActionError } from '@/lib/report-error';
 import { addPaymentSchema } from '@/lib/schemas/billing';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -66,7 +67,10 @@ export async function addPaymentAction(
     reference: parsed.data.reference,
   });
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('addPaymentAction', error);
+    return failure(describeDatabaseError(error));
+  }
   if (!data) return failure('The payment could not be recorded. Nothing was collected.');
 
   // The queue badge, the invoice row and the patient balance are all rendered

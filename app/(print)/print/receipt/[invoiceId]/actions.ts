@@ -1,5 +1,6 @@
 'use server';
 
+import { reportActionError } from '@/lib/report-error';
 import { checkPermission } from '@/lib/auth/session';
 import { isPrintFormat } from '@/lib/billing';
 import { createClient } from '@/lib/supabase/server';
@@ -28,6 +29,10 @@ export async function recordReceiptPrint(invoiceId: string, format: string): Pro
   });
 
   if (error) {
-    console.error('receipt print audit failed', { invoiceId, message: error.message });
+    reportActionError('recordReceiptPrint', error, {
+      hospitalId: gate.session.hospitalId,
+      userId: gate.session.userId,
+      extra: { invoice_id: invoiceId, format },
+    });
   }
 }

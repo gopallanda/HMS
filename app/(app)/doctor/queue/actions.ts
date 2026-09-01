@@ -5,6 +5,7 @@ import { refresh } from 'next/cache';
 import { failure, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
 import { setVisitStatus, type QueueStatus } from '@/lib/rpc/visits';
+import { reportActionError } from '@/lib/report-error';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
 
@@ -49,7 +50,10 @@ export async function setVisitStatusAction(
   const supabase = await createClient();
   const { data, error } = await setVisitStatus(supabase, visitId, status);
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('setVisitStatusAction', error);
+    return failure(describeDatabaseError(error));
+  }
   if (!data) return failure('The queue could not be updated. Try again.');
 
   // The board is a Server Component. This makes it current in this tab; the

@@ -9,6 +9,7 @@ import {
   collectPayment,
   type CollectPaymentItem,
 } from '@/lib/rpc/billing';
+import { reportActionError } from '@/lib/report-error';
 import { collectPaymentSchema } from '@/lib/schemas/billing';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -103,6 +104,7 @@ export async function collectPaymentAction(
         stale: true,
       };
     }
+    await reportActionError('collectPaymentAction', error);
     return failure(describeDatabaseError(error));
   }
 

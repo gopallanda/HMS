@@ -4,6 +4,7 @@ import { refresh } from 'next/cache';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
+import { reportActionError } from '@/lib/report-error';
 import { roleDeleteSchema, roleSchema, systemRoleSchema } from '@/lib/schemas/role';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -61,7 +62,10 @@ export async function saveRole(
       .eq('hospital_id', session.hospitalId)
       .is('deleted_at', null);
 
-    if (error) return failure(describeDatabaseError(error));
+    if (error) {
+      await reportActionError('saveRole', error);
+      return failure(describeDatabaseError(error));
+    }
 
     const applied = await applyPermissions(supabase, parsed.data.id, parsed.data.permissions);
     if (applied) return failure(applied);
@@ -104,6 +108,7 @@ export async function saveRole(
         code: ['That code is taken.'],
       });
     }
+    await reportActionError('saveRole', error);
     return failure(describeDatabaseError(error));
   }
 
@@ -167,7 +172,10 @@ export async function deleteRole(
     .is('deleted_at', null)
     .maybeSingle();
 
-  if (readError) return failure(describeDatabaseError(readError));
+  if (readError) {
+    await reportActionError('deleteRole', readError);
+    return failure(describeDatabaseError(readError));
+  }
   if (!role) return failure('That role no longer exists.');
   if (role.is_system) {
     return failure(`${role.name} is a built-in role and cannot be deleted. Rename it instead.`);
@@ -199,7 +207,10 @@ export async function deleteRole(
     .eq('id', role.id)
     .eq('hospital_id', session.hospitalId);
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('deleteRole', error);
+    return failure(describeDatabaseError(error));
+  }
 
   refresh();
   return success(`${role.name} deleted.`);

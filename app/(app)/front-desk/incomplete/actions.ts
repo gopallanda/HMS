@@ -4,6 +4,7 @@ import { refresh } from 'next/cache';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
+import { reportActionError } from '@/lib/report-error';
 import { transferSchema } from '@/lib/schemas/transfer';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -44,7 +45,10 @@ export async function transferVisitAction(
     p_department_id: parsed.data.department_id,
   });
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('transferVisitAction', error);
+    return failure(describeDatabaseError(error));
+  }
   if (!data) return failure('The visit could not be moved. Try again.');
 
   refresh();

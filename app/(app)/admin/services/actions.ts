@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
+import { reportActionError } from '@/lib/report-error';
 import { serviceSchema } from '@/lib/schemas/service';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { describeDatabaseError, violates } from '@/lib/supabase/errors';
@@ -68,6 +69,7 @@ export async function saveService(
         name: [`A service called ${parsed.data.name} already exists.`],
       });
     }
+    await reportActionError('saveService', error);
     return failure(describeDatabaseError(error));
   }
 
@@ -109,7 +111,10 @@ export async function loadStarterCatalogue(
     p_only_when_empty: false,
   });
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('loadStarterCatalogue', error);
+    return failure(describeDatabaseError(error));
+  }
 
   const added = Number(data ?? 0);
   refresh();
@@ -159,7 +164,10 @@ export async function setServiceActive(
     .eq('id', parsed.data.id)
     .maybeSingle();
 
-  if (readError) return failure(describeDatabaseError(readError));
+  if (readError) {
+    await reportActionError('setServiceActive', readError);
+    return failure(describeDatabaseError(readError));
+  }
   if (!service) return failure('That service no longer exists.');
 
   const { error } = await supabase
@@ -167,7 +175,10 @@ export async function setServiceActive(
     .update({ is_active: activate })
     .eq('id', parsed.data.id);
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('setServiceActive', error);
+    return failure(describeDatabaseError(error));
+  }
 
   refresh();
   return success(`${service.name} ${activate ? 'is back on the price list' : 'removed from the price list'}.`);

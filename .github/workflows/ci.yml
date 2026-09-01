@@ -1,0 +1,107 @@
+# =============================================================================
+# CI -- typecheck, lint and the money tests, on every push and pull request.
+#
+# The tests in tests/ talk to a REAL Postgres on purpose: what they prove is a
+# property of Postgres -- row locks, transaction visibility, the invoice book
+# having no holes in it -- and a mocked database would only prove the mock
+# behaves. There is no Docker here and there is not going to be (CLAUDE.md 2):
+# this project targets the hosted Supabase project in Mumbai, and a shimmed
+# local Postgres is not the database this code runs on.
+#
+# So the DB-backed suite needs SUPABASE_DB_URL, which comes from a repository
+# secret. When the secret is absent -- which is every pull request from a fork,
+# because GitHub does not hand secrets to forked workflows -- the suite SKIPS
+# with a sentence saying why, rather than failing red on somebody's first
+# contribution. tests/support/fixture.mjs returns null from databaseUrl() and
+# every describe() carries { skip }.
+#
+# Typecheck and lint have no such dependency and run on every fork PR.
+# =============================================================================
+
+name: CI
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+# A second push to the same branch cancels the first. CI is a signal, not a
+# queue of stale answers.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: typecheck, lint, tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # The engine the app is built and run on. `cache: npm` keys on
+          # package-lock.json, which is committed.
+          node-version: '22'
+          cache: npm
+
+      # `npm ci` and not `npm install`: it installs exactly the lockfile and
+      # fails if package.json and the lock disagree, which is the whole point
+      # of running it here rather than on a laptop.
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      # Whether the DB-backed suite can run at all, decided once and reported
+      # in the log rather than discovered as a wall of skipped tests.
+      - name: Check for a database
+        id: db
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: |
+          if [ -n "$SUPABASE_DB_URL" ]; then
+            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "SUPABASE_DB_URL is set: the money tests will run against the hosted project."
+          else
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Database tests skipped::SUPABASE_DB_URL is not set for this run."
+            echo
+            echo "  The tests in tests/ need a Postgres to run against and there is no"
+            echo "  local one -- this project targets the hosted Supabase project"
+            echo "  (CLAUDE.md 2, no Docker). Typecheck and lint above still cover this"
+            echo "  change."
+            echo
+            echo "  This is EXPECTED on a pull request from a fork: GitHub does not give"
+            echo "  forked workflows access to repository secrets. A maintainer running"
+            echo "  the same branch in this repository will get the full suite."
+            echo
+            echo "  To enable it here: Settings -> Secrets and variables -> Actions ->"
+            echo "  New repository secret, named SUPABASE_DB_URL, holding the Direct"
+            echo "  connection string from Supabase -> Connect."
+          fi
+
+      # The suite reads SUPABASE_DB_URL from the environment first and falls
+      # back to .env.local, which does not exist here. It is passed even when
+      # empty so the skip message inside the tests is the one that prints.
+      - name: Tests
+        env:
+          SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+        run: npm test
+
+      - name: Note the skip
+        if: steps.db.outputs.available == 'false'
+        run: |
+          echo "### Database tests were skipped" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`SUPABASE_DB_URL\` was not available to this run, so the tests in" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`tests/\` reported as skipped rather than failing. Typecheck and lint ran." >> "$GITHUB_STEP_SUMMARY"

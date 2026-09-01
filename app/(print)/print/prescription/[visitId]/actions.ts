@@ -1,5 +1,6 @@
 'use server';
 
+import { reportActionError } from '@/lib/report-error';
 import { checkPermission } from '@/lib/auth/session';
 import { isPrintFormat } from '@/lib/billing';
 import { createClient } from '@/lib/supabase/server';
@@ -35,6 +36,10 @@ export async function recordPrescriptionPrint(visitId: string, format: string): 
   if (error) {
     // Logged and swallowed on purpose: a patient is waiting for the paper and
     // the paper matters more than the log line.
-    console.error('prescription print audit failed', { visitId, message: error.message });
+    reportActionError('recordPrescriptionPrint', error, {
+      hospitalId: gate.session.hospitalId,
+      userId: gate.session.userId,
+      extra: { visit_id: visitId, format },
+    });
   }
 }

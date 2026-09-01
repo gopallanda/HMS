@@ -5,6 +5,7 @@ import { z } from 'zod';
 
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
+import { reportActionError } from '@/lib/report-error';
 import { departmentSchema } from '@/lib/schemas/department';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -45,7 +46,10 @@ export async function saveDepartment(
     { onConflict: 'id' },
   );
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('saveDepartment', error);
+    return failure(describeDatabaseError(error));
+  }
 
   refresh();
   return success(`${parsed.data.name} saved.`);
@@ -92,7 +96,10 @@ export async function setDepartmentActive(
     .eq('id', parsed.data.id)
     .maybeSingle();
 
-  if (readError) return failure(describeDatabaseError(readError));
+  if (readError) {
+    await reportActionError('setDepartmentActive', readError);
+    return failure(describeDatabaseError(readError));
+  }
   if (!department) return failure('That department no longer exists.');
 
   if (!activate && parsed.data.confirm.toUpperCase() !== department.code.toUpperCase()) {
@@ -106,7 +113,10 @@ export async function setDepartmentActive(
     .update({ is_active: activate })
     .eq('id', parsed.data.id);
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('setDepartmentActive', error);
+    return failure(describeDatabaseError(error));
+  }
 
   refresh();
   return success(`${department.name} ${activate ? 'reactivated' : 'deactivated'}.`);

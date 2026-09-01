@@ -5,6 +5,7 @@ import { refresh } from 'next/cache';
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
 import { closeDay } from '@/lib/rpc/billing';
+import { reportActionError } from '@/lib/report-error';
 import { closeDaySchema } from '@/lib/schemas/billing';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -44,7 +45,10 @@ export async function closeDayAction(
     parsed.data.notes,
   );
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('closeDayAction', error);
+    return failure(describeDatabaseError(error));
+  }
   if (!data) return failure('The day could not be closed. Nothing was recorded.');
 
   refresh();

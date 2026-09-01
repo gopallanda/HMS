@@ -18,6 +18,7 @@ import {
   resetStaffPasswordSchema,
   setAccountEnabledSchema,
 } from '@/lib/schemas/account';
+import { reportActionError } from '@/lib/report-error';
 import { staffActivationSchema, staffSchema } from '@/lib/schemas/staff';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -147,6 +148,7 @@ export async function saveStaff(
         employee_code: ['That code is taken.'],
       });
     }
+    await reportActionError('saveStaff', error);
     return failure(describeDatabaseError(error));
   }
 
@@ -223,7 +225,10 @@ export async function setStaffActive(
     .eq('hospital_id', session.hospitalId)
     .maybeSingle();
 
-  if (readError) return failure(describeDatabaseError(readError));
+  if (readError) {
+    await reportActionError('setStaffActive', readError);
+    return failure(describeDatabaseError(readError));
+  }
   if (!staff) return failure('That staff record no longer exists.');
 
   const normalise = (value: string) => value.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -239,7 +244,10 @@ export async function setStaffActive(
     .eq('id', parsed.data.id)
     .eq('hospital_id', session.hospitalId);
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('setStaffActive', error);
+    return failure(describeDatabaseError(error));
+  }
 
   refresh();
   return success(`${staff.full_name} ${activate ? 'reactivated' : 'deactivated'}.`);

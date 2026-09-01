@@ -5,6 +5,7 @@ import { refresh } from 'next/cache';
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
 import { saveConsultation } from '@/lib/rpc/consultations';
+import { reportActionError } from '@/lib/report-error';
 import { consultationSchema } from '@/lib/schemas/consultation';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -62,7 +63,10 @@ export async function saveConsultationAction(
   const supabase = await createClient();
   const { error } = await saveConsultation(supabase, parsed.data);
 
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('saveConsultationAction', error);
+    return failure(describeDatabaseError(error));
+  }
 
   // The queue behind this screen, the status badge above the form and the
   // "notes started" marker are all rendered on the server.

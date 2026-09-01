@@ -1,5 +1,7 @@
 import 'server-only';
 
+import { reportError } from '@/lib/report-error';
+
 /**
  * The one email this product sends.
  *
@@ -37,12 +39,12 @@ export async function sendMail(mail: Mail): Promise<MailResult> {
     // development setting into a broken reset flow, and -- worse -- would make
     // the response differ depending on whether mail is configured.
     if (process.env.NODE_ENV === 'production') {
-      console.error(
-        '[mailer] RESEND_API_KEY is not set, so this message was not sent:',
-        mail.subject,
-        '->',
-        mail.to,
-      );
+      // Through the one reporting helper, and WITHOUT mail.to: a recipient
+      // address is a member of staff, and their mailbox does not belong in a
+      // production log line about a missing environment variable.
+      reportError('sendMail', new Error('RESEND_API_KEY is not set, so nothing was sent'), {
+        extra: { subject: mail.subject },
+      });
     } else {
       console.info(`[mailer] no RESEND_API_KEY -- not sending. Message body:\n${mail.text}`);
     }

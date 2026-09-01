@@ -5,6 +5,7 @@ import { refresh } from 'next/cache';
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { checkPermission } from '@/lib/auth/session';
 import { reversePayment, voidInvoice } from '@/lib/rpc/billing';
+import { reportActionError } from '@/lib/report-error';
 import { reversePaymentSchema, voidInvoiceSchema } from '@/lib/schemas/billing';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
@@ -38,7 +39,10 @@ export async function voidInvoiceAction(
   const supabase = await createClient();
 
   const { error } = await voidInvoice(supabase, parsed.data.invoice_id, parsed.data.reason);
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('voidInvoiceAction', error);
+    return failure(describeDatabaseError(error));
+  }
 
   refresh();
 
@@ -76,7 +80,10 @@ export async function reversePaymentAction(
     parsed.data.payment_id,
     parsed.data.reason,
   );
-  if (error) return failure(describeDatabaseError(error));
+  if (error) {
+    await reportActionError('reversePaymentAction', error);
+    return failure(describeDatabaseError(error));
+  }
   if (!data) return failure('The payment could not be reversed. Nothing was changed.');
 
   refresh();
