@@ -61,7 +61,7 @@ export default async function ReceiptPrintPage({
     supabase
       .from('invoice_summary')
       .select(
-        'id, invoice_no, invoice_date, status, void_reason, subtotal, tax_total, grand_total, paid_total, balance, patient_name_snapshot, patient_mrn, patient_phone, visit_no, token_no, doctor_name, department_name, created_by_name',
+        'id, invoice_no, invoice_date, status, void_reason, subtotal, tax_total, discount_amount, discount_reason, grand_total, paid_total, balance, patient_name_snapshot, patient_mrn, patient_phone, visit_no, token_no, doctor_name, department_name, created_by_name',
       )
       .eq('hospital_id', session.hospitalId)
       .eq('id', invoiceId)

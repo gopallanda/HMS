@@ -123,12 +123,26 @@ export function ReceiptSheet({ document }: { document: InvoiceDocument }) {
               <td className="num">{formatAmount(invoice.tax_total)}</td>
             </tr>
           ) : null}
+          {/* The concession prints. A bill that quietly shows a smaller total
+              than the lines add up to is the thing a patient queries at the
+              counter, and the answer has to be on the paper they are holding
+              (CLAUDE.md 7 -- no colour, no fill: a thermal head prints neither). */}
+          {invoice.discount_amount > 0 ? (
+            <tr>
+              <td>Concession</td>
+              <td className="num">-{formatAmount(invoice.discount_amount)}</td>
+            </tr>
+          ) : null}
           <tr style={{ fontSize: '13px', fontWeight: 700 }}>
             <td>TOTAL</td>
             <td className="num">{formatAmount(invoice.grand_total)}</td>
           </tr>
         </tbody>
       </table>
+
+      {invoice.discount_amount > 0 && invoice.discount_reason ? (
+        <div style={{ fontSize: '10px' }}>Concession: {invoice.discount_reason}</div>
+      ) : null}
 
       <div className="rule" />
 

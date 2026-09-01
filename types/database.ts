@@ -732,6 +732,9 @@ export type Database = {
           invoice_date: string;
           subtotal: number;
           tax_total: number;
+          /** A concession, applied AFTER tax. Zero on almost every bill. */
+          discount_amount: number;
+          discount_reason: string | null;
           grand_total: number;
           status: InvoiceStatus;
           void_reason: string | null;
@@ -855,6 +858,8 @@ export type Database = {
           void_reason: string | null;
           subtotal: number;
           tax_total: number;
+          discount_amount: number;
+          discount_reason: string | null;
           grand_total: number;
           patient_id: string;
           patient_name_snapshot: string;
@@ -1096,6 +1101,9 @@ export type Database = {
           p_payment_id?: string | null;
           /** Service-role callers only; a session records auth.uid(). */
           p_collected_by?: string | null;
+          /** A concession, applied AFTER tax. Needs p_discount_reason. */
+          p_discount?: number;
+          p_discount_reason?: string | null;
         };
         Returns: Database['public']['Tables']['invoices']['Row'];
       };

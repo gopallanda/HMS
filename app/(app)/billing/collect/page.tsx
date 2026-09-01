@@ -95,7 +95,8 @@ export default async function CollectPage({
         visits={visits}
         services={services}
         hospitalId={session.hospitalId}
-        selectedVisitId={visit ?? null}
+        canDiscount={session.access.permissions.has('billing.discount')}
+      selectedVisitId={visit ?? null}
       />
     </div>
   );

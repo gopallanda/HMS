@@ -53,8 +53,20 @@ export async function collectPaymentAction(
     mode: formData.get('mode'),
     amount: formData.get('amount'),
     reference: formData.get('reference'),
+    discount: formData.get('discount'),
+    discount_reason: formData.get('discount_reason'),
   });
   if (!parsed.success) return invalid(parsed.error);
+
+  // The discount fields are wrapped in <Can permission="billing.discount"> on
+  // the desk, and that is decoration. THIS is the check (CLAUDE.md 3.6): a
+  // POST reaches this action without passing through the component that hid
+  // the boxes, so a concession from somebody who may not give one is refused
+  // here rather than banked and explained later.
+  if (parsed.data.discount > 0) {
+    const discountGate = await checkPermission('billing.discount');
+    if (!discountGate.ok) return failure(discountGate.message);
+  }
 
   // The `kind` discriminator is a form concern. What crosses the wire is the
   // shape collect_payment reads -- and notably NOT the tax rate, which the RPC
@@ -79,6 +91,8 @@ export async function collectPaymentAction(
     mode: parsed.data.mode,
     amount: parsed.data.amount,
     reference: parsed.data.reference,
+    discount: parsed.data.discount,
+    discountReason: parsed.data.discount_reason,
   });
 
   if (error) {

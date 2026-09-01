@@ -588,6 +588,8 @@ declare
   v_items    jsonb;
   v_total    numeric(12,2);
   v_paid     numeric(12,2);
+  v_discount numeric(12,2);
+  v_discount_reason text;
   v_mode     public.payment_mode;
   v_ref      text;
   v_invoice  public.invoices;
@@ -681,18 +683,34 @@ begin
       when 3 then 'AUTH 553120'
       else null
     end;
+    -- A concession on one bill (20260902090300). Every Indian clinic gives
+    -- them, and until the discount columns existed the only way to record one
+    -- was to edit a price -- which hides the fact that it WAS a concession and
+    -- makes "how much are we giving away" unanswerable. Applied AFTER tax,
+    -- with the reason that prints on the bill.
+    v_discount := case v_seq when 3 then least(100, v_total) else 0 end;
+    v_discount_reason := case v_seq
+      when 3 then 'Hospital staff family - approved by the medical director'
+      else null
+    end;
+
     -- One bill is deliberately left part paid, so a balance exists on the
     -- invoice list and the day-close numbers do not all agree by accident.
-    v_paid := case v_seq when 4 then round(v_total / 2, 2) else v_total end;
+    v_paid := case v_seq
+      when 4 then round((v_total - v_discount) / 2, 2)
+      else v_total - v_discount
+    end;
 
     v_invoice := public.collect_payment(
-      p_visit_id     => v_visit.id,
-      p_items        => v_items,
-      p_mode         => v_mode,
-      p_amount       => v_paid,
-      p_reference    => v_ref,
-      p_hospital_id  => v_hospital,
-      p_collected_by => v_user
+      p_visit_id        => v_visit.id,
+      p_items           => v_items,
+      p_mode            => v_mode,
+      p_amount          => v_paid,
+      p_reference       => v_ref,
+      p_hospital_id     => v_hospital,
+      p_collected_by    => v_user,
+      p_discount        => v_discount,
+      p_discount_reason => v_discount_reason
     );
 
     if v_seq = 5 then
@@ -703,8 +721,9 @@ begin
       );
       raise notice 'seed: % voided (charges returned to the visit)', v_invoice.invoice_no;
     else
-      raise notice 'seed: % for token % -- % of %',
-        v_invoice.invoice_no, v_visit.token_no, v_paid, v_total;
+      raise notice 'seed: % for token % -- % of % (concession %)',
+        v_invoice.invoice_no, v_visit.token_no, v_paid,
+        v_total - v_discount, v_discount;
     end if;
   end loop;
 

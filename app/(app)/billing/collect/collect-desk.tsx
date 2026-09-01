@@ -90,11 +90,23 @@ export function CollectDesk({
   services,
   hospitalId,
   selectedVisitId,
+  canDiscount,
 }: {
   visits: BillingVisit[];
   services: ServiceOption[];
   hospitalId: string;
   selectedVisitId: string | null;
+  /**
+   * billing.discount.
+   *
+   * Passed as a prop rather than wrapping the fields in <Can>: this is a
+   * Client Component and <Can> is a Server Component that reads the session.
+   * The value comes from the same permission set <Can> would have consulted,
+   * and it is decoration either way -- collectPaymentAction re-checks the
+   * permission whenever a non-zero discount arrives, which is the real
+   * boundary (CLAUDE.md 3.6).
+   */
+  canDiscount: boolean;
 }) {
   const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
@@ -120,6 +132,13 @@ export function CollectDesk({
   const [reference, setReference] = useState('');
   const [amountDraft, setAmountDraft] = useState('');
   const [amountEdited, setAmountEdited] = useState(false);
+  /**
+   * The concession. Invoice level, applied AFTER tax, with a reason (item 4).
+   * Kept as the typed string like the amount, so a half-typed "1" is not a
+   * discount of one rupee the moment the second digit is on its way.
+   */
+  const [discountDraft, setDiscountDraft] = useState('');
+  const [discountReason, setDiscountReason] = useState('');
   /** Bumped to remount the service picker after each pick. */
   const [picker, setPicker] = useState(0);
 
@@ -248,7 +267,16 @@ export function CollectDesk({
    * render the old total once before correcting itself, and the value it is
    * correcting is the one on the button the cashier is about to press.
    */
-  const amount = amountEdited ? amountDraft : totals.grandTotal.toFixed(2);
+  /**
+   * What is actually owed once the concession is taken off.
+   *
+   * A preview, like `totals`. collect_payment recomputes all of this inside
+   * the transaction from the lines it locked, and its answer is the invoice.
+   */
+  const discountValue = Math.max(0, parseMoney(discountDraft) ?? 0);
+  const netTotal = Math.max(0, Math.round((totals.grandTotal - discountValue) * 100) / 100);
+
+  const amount = amountEdited ? amountDraft : netTotal.toFixed(2);
 
   const selectVisit = useCallback((visitId: string | null) => {
     setSelectedId(visitId);
@@ -257,6 +285,8 @@ export function CollectDesk({
     setReference('');
     setAmountDraft('');
     setAmountEdited(false);
+    setDiscountDraft('');
+    setDiscountReason('');
     setInvoiceId(crypto.randomUUID());
   }, []);
 
@@ -371,7 +401,7 @@ export function CollectDesk({
 
   const canSubmit = lines.length > 0 && selected !== null;
   const amountValue = parseMoney(amount) ?? 0;
-  const balance = totals.grandTotal - amountValue;
+  const balance = netTotal - amountValue;
 
   return (
     <div className="grid gap-4 lg:grid-cols-[22rem_minmax(0,1fr)]">
@@ -758,10 +788,26 @@ export function CollectDesk({
                 </dt>
                 <dd className="tabular-nums">{formatMoney(totals.taxTotal)}</dd>
               </div>
+              {discountValue > 0 ? (
+                <div className="flex justify-between">
+                  <dt className="text-muted-foreground">
+                    Concession
+                    {discountReason.trim() !== '' ? (
+                      <span className="ml-1 text-xs" title={discountReason}>
+                        ({discountReason.trim().slice(0, 28)}
+                        {discountReason.trim().length > 28 ? '...' : ''})
+                      </span>
+                    ) : null}
+                  </dt>
+                  <dd className="tabular-nums text-warning">
+                    -{formatMoney(discountValue)}
+                  </dd>
+                </div>
+              ) : null}
               <div className="mt-1 flex items-baseline justify-between border-t border-border/60 pt-2.5">
                 <dt className="text-sm font-medium">Total</dt>
                 <dd className="text-xl font-bold text-primary tabular-nums">
-                  {formatMoney(totals.grandTotal)}
+                  {formatMoney(netTotal)}
                 </dd>
               </div>
               {Math.abs(balance) >= 0.005 ? (
@@ -782,6 +828,62 @@ export function CollectDesk({
             </dl>
 
             <div className="grid content-start gap-4">
+              {/* The concession.
+                  Two boxes rather than a percentage picker: an Indian clinic
+                  gives "fifty rupees off" and "make it four hundred", not
+                  "twelve per cent". The reason is beside the amount and not
+                  behind a dialog, because it is required the moment the amount
+                  is -- and a required field somebody has to go looking for is
+                  a required field that gets filled in with a full stop. */}
+              {canDiscount ? (
+                <div className="grid gap-4 sm:grid-cols-[10rem_minmax(0,1fr)]">
+                  <Field
+                    label="Concession"
+                    htmlFor="payment-discount"
+                    error={fieldError(state, 'discount')}
+                    hint="After tax. Leave blank."
+                  >
+                    <MoneyInput
+                      id="payment-discount"
+                      name="discount"
+                      value={discountDraft}
+                      onChange={(event) => setDiscountDraft(event.target.value)}
+                      placeholder="0.00"
+                      aria-invalid={fieldError(state, 'discount') !== undefined}
+                    />
+                  </Field>
+
+                  <Field
+                    label="Why"
+                    htmlFor="payment-discount-reason"
+                    error={fieldError(state, 'discount_reason')}
+                    hint={
+                      discountValue > 0
+                        ? 'Required. Printed on the bill and counted on the day close.'
+                        : 'Only needed when a concession is given.'
+                    }
+                    required={discountValue > 0}
+                  >
+                    <Input
+                      id="payment-discount-reason"
+                      name="discount_reason"
+                      value={discountReason}
+                      onChange={(event) => setDiscountReason(event.target.value)}
+                      maxLength={200}
+                      autoComplete="off"
+                      placeholder="Hospital staff family"
+                      aria-invalid={fieldError(state, 'discount_reason') !== undefined}
+                    />
+                  </Field>
+                </div>
+              ) : (
+                /* No permission, no fields -- and no silent zero either: the
+                   action reads these names off the form, and a bill from a
+                   cashier who may not give concessions has to post nothing
+                   rather than an empty string the schema has to interpret. */
+                null
+              )}
+
               <Field label="Payment mode" htmlFor="payment-mode" error={fieldError(state, 'mode')}>
                 {/* A segmented control rather than four buttons: the mode is one
                     choice out of four, and four equally weighted outline buttons

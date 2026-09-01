@@ -85,6 +85,28 @@ export const collectPaymentSchema = z.object({
    */
   amount: money('Amount'),
   reference: optionalText('Reference', 80),
+  /**
+   * A concession at the counter, applied AFTER tax (item 4).
+   *
+   * Zero on almost every bill. The reason is conditionally required, checked
+   * by the superRefine below rather than by making the field required -- the
+   * common case is a form that never touches either box, and a schema that
+   * demands a reason for a discount of nothing would fail every ordinary bill.
+   *
+   * The upper bound against the total is NOT enforced here. The browser knows
+   * lines; collect_payment knows the totals it computed under a lock, and it
+   * names both figures when it refuses.
+   */
+  discount: money('Discount'),
+  discount_reason: optionalText('Discount reason', 200),
+}).superRefine((value, ctx) => {
+  if (value.discount > 0 && (value.discount_reason ?? '').trim().length < 4) {
+    ctx.addIssue({
+      code: 'custom',
+      path: ['discount_reason'],
+      message: 'Say why this concession is being given.',
+    });
+  }
 });
 
 export type CollectPaymentInput = z.infer<typeof collectPaymentSchema>;

@@ -46,6 +46,13 @@ export type CollectPaymentPayload = {
   mode: PaymentMode;
   amount: number;
   reference: string | null;
+  /**
+   * A concession, applied AFTER tax (item 4). Zero on almost every bill, and
+   * the reason is required whenever it is not: a discount with no reason is
+   * indistinguishable from a mis-key by the time anybody asks.
+   */
+  discount: number;
+  discountReason: string | null;
 };
 
 /**
@@ -66,6 +73,8 @@ export async function collectPayment(supabase: Client, payload: CollectPaymentPa
     p_amount: payload.amount,
     p_reference: payload.reference,
     p_invoice_id: payload.invoiceId,
+    p_discount: payload.discount,
+    p_discount_reason: payload.discountReason,
   });
 }
 

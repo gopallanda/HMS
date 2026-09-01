@@ -176,6 +176,12 @@ export function A4Invoice({ document }: { document: InvoiceDocument }) {
                 <td>GST</td>
                 <td className="num">{formatAmount(invoice.tax_total)}</td>
               </tr>
+              {invoice.discount_amount > 0 ? (
+                <tr>
+                  <td>Concession</td>
+                  <td className="num">-{formatAmount(invoice.discount_amount)}</td>
+                </tr>
+              ) : null}
               <tr style={{ borderTop: '1px solid #000', fontSize: '14px', fontWeight: 700 }}>
                 <td style={{ padding: '1.5mm 0' }}>Total</td>
                 <td className="num" style={{ padding: '1.5mm 0' }}>
@@ -205,6 +211,15 @@ export function A4Invoice({ document }: { document: InvoiceDocument }) {
           {invoice.tax_total === 0
             ? 'Healthcare services are exempt from GST. No tax has been charged on this invoice.'
             : 'GST is charged per line at the rate applicable to that item.'}
+          {/* The concession and its reason. On the invoice that LEAVES the
+              building (insurance, a company account, reimbursement) the
+              difference between the lines and the total has to be explained on
+              the paper itself, not in a system somebody else cannot open. */}
+          {invoice.discount_amount > 0 && invoice.discount_reason ? (
+            <div style={{ marginTop: '2mm' }}>
+              Concession of {formatAmount(invoice.discount_amount)} applied: {invoice.discount_reason}
+            </div>
+          ) : null}
           <div style={{ marginTop: '2mm' }}>This is a computer generated invoice.</div>
         </div>
         <div style={{ width: '60mm', textAlign: 'center' }}>

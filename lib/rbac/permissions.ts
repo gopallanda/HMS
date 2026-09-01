@@ -26,6 +26,7 @@ export const PERMISSIONS = [
   'consultation.read', 'consultation.write',
   'prescription.create',
   'billing.read', 'billing.collect', 'billing.void', 'billing.defer',
+  'billing.discount',
   'pharmacy.read', 'pharmacy.dispense', 'pharmacy.stock_adjust',
   'lab.read', 'lab.result_entry',
   'staff.read', 'staff.create', 'staff.update', 'staff.deactivate',
@@ -80,8 +81,12 @@ export const PERMISSION_GROUPS: readonly {
   {
     key: 'billing',
     label: 'Billing',
-    description: 'Money. billing.void and billing.defer are the two that need thought.',
-    permissions: ['billing.read', 'billing.collect', 'billing.void', 'billing.defer'],
+    description:
+      'Money. billing.void, billing.defer and billing.discount are the three that need thought.',
+    permissions: [
+      'billing.read', 'billing.collect', 'billing.void', 'billing.defer',
+      'billing.discount',
+    ],
   },
   {
     key: 'pharmacy',
@@ -135,6 +140,7 @@ export const PERMISSION_LABEL: Record<Permission, string> = {
   'billing.collect': 'Raise an invoice and take a payment',
   'billing.void': 'Void an invoice, with a reason',
   'billing.defer': 'Let a patient be seen before paying',
+  'billing.discount': 'Give a concession on a bill, with a reason',
   'pharmacy.read': 'See stock and dispensing history',
   'pharmacy.dispense': 'Dispense against a prescription',
   'pharmacy.stock_adjust': 'Adjust stock and record purchases',

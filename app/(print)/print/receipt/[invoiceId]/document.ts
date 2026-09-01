@@ -28,6 +28,8 @@ export type InvoiceDocument = {
     | 'void_reason'
     | 'subtotal'
     | 'tax_total'
+    | 'discount_amount'
+    | 'discount_reason'
     | 'grand_total'
     | 'paid_total'
     | 'balance'
