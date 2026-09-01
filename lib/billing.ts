@@ -130,6 +130,34 @@ export function defaultPrintFormat(settings: unknown): PrintFormat {
 }
 
 /**
+ * Ageing buckets for the outstanding-dues report.
+ *
+ * Three, not five. A small hospital chases a debt by ringing the number on the
+ * row, and the only decision the bucket drives is whether that call happens
+ * today: this week is normal, this month is a reminder, older than that is a
+ * conversation with the owner. Finer bands would be a report nobody acts on
+ * differently.
+ *
+ * Here rather than beside the table that renders them, because the page is a
+ * Server Component and the table is a Client Component: a plain value imported
+ * from a 'use client' module arrives on the server as a client reference, not
+ * as the array. That failure is a runtime TypeError, not a type error.
+ */
+export const AGE_BUCKETS = [
+  { key: 'fresh', label: '0-7 days' },
+  { key: 'chasing', label: '8-30 days' },
+  { key: 'old', label: '31+ days' },
+] as const;
+
+export type AgeBucket = (typeof AGE_BUCKETS)[number]['key'];
+
+export function bucketFor(ageDays: number): AgeBucket {
+  if (ageDays <= 7) return 'fresh';
+  if (ageDays <= 30) return 'chasing';
+  return 'old';
+}
+
+/**
  * A charge line, as every billing screen and both print templates need it.
  * One shape, whether the line came from the visit or was typed at the counter.
  */

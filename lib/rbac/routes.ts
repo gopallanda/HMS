@@ -79,6 +79,9 @@ export const ROUTE_PERMISSIONS: readonly (readonly [string, Permission])[] = [
   // still has to be able to close the day.
   ['/billing/day-close', 'reports.view'],
   ['/billing/collect', 'billing.collect'],
+  // Who owes us money. billing.read rather than reports.view: a cashier
+  // chasing a balance at the counter is the person this screen is for.
+  ['/billing/dues', 'billing.read'],
   ['/billing/invoices', 'billing.read'],
   ['/billing', 'billing.read'],
 

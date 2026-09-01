@@ -27,6 +27,7 @@ import {
   StethoscopeIcon,
   UserRoundPlusIcon,
   UsersIcon,
+  WalletCardsIcon,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -120,6 +121,14 @@ export const NAV: readonly NavSection[] = [
         href: '/billing/invoices',
         label: 'Invoices',
         icon: ReceiptIcon,
+        permissions: ['billing.read'],
+        status: 'ready',
+        phase: 1,
+      },
+      {
+        href: '/billing/dues',
+        label: 'Outstanding dues',
+        icon: WalletCardsIcon,
         permissions: ['billing.read'],
         status: 'ready',
         phase: 1,
