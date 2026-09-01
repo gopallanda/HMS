@@ -69,6 +69,37 @@ export async function collectPayment(supabase: Client, payload: CollectPaymentPa
   });
 }
 
+export type AddPaymentPayload = {
+  invoiceId: string;
+  /** Client-generated, so a resubmitted dialog banks the money once. */
+  paymentId: string;
+  amount: number;
+  mode: PaymentMode;
+  reference: string | null;
+};
+
+/**
+ * Settle some or all of an invoice that already exists.
+ *
+ * The other half of collect_payment, and deliberately not part of it: this one
+ * never draws an invoice number and never writes an invoice row. It locks the
+ * invoice, checks the amount against the real outstanding balance, records the
+ * payment and recomputes the status from the payment rows.
+ *
+ * hospital_id and collected_by are not sent, for the same reason
+ * collectPayment does not send them: the function reads both from the JWT and
+ * refuses a payload that disagrees.
+ */
+export async function addPayment(supabase: Client, payload: AddPaymentPayload) {
+  return supabase.rpc('add_payment', {
+    p_invoice_id: payload.invoiceId,
+    p_amount: payload.amount,
+    p_mode: payload.mode,
+    p_reference: payload.reference,
+    p_payment_id: payload.paymentId,
+  });
+}
+
 /**
  * Voids an invoice with a typed reason: the lines go back to pending, the
  * payments are reversed, the number stays consumed. Nothing is deleted.

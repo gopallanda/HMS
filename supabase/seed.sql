@@ -815,6 +815,11 @@ $$;
 --     queue and on the visit header
 --   * a TRANSFER, so /front-desk/queue has a row whose token was reissued and
 --     visit_transfers has something in it
+--   * a deferred registration that was LATER SETTLED through add_payment
+--     (20260902090000), so the demo carries the full deferral lifecycle:
+--     one still owing, one cleared. Without this second half the only
+--     deferred row on the screen is the one nobody ever collected, and the
+--     button that clears it has nothing to be tried on.
 --
 -- Guarded on "has this hospital already registered somebody this way today",
 -- for the same reason the queue block above is: the screens show TODAY, so a
@@ -915,5 +920,52 @@ begin
   );
   raise notice 'seed: transferred to % on token %',
     v_result ->> 'doctor_name', v_result ->> 'token_no';
+
+  -- 4. Deferred at the desk, then settled at the counter. The half the
+  --    product could not do at all before add_payment: register_patient_visit
+  --    leaves an `unpaid` invoice with its charge already `invoiced`, so the
+  --    collect desk offered nothing and the money was unreachable.
+  --
+  --    Paid in two goes on purpose -- part now, the rest a moment later --
+  --    because `partial` was the other one-way door, and a demo that only
+  --    ever pays in full never shows the status moving through it.
+  v_result := public.register_patient_visit(
+    p_hospital_id  => v_hospital,
+    p_patient      => jsonb_build_object(
+                        'full_name', 'Rekha Nair',
+                        'dob',       '1988-02-19',
+                        'gender',    'female',
+                        'phone',     '+91 98450 71190',
+                        'address',   '9 Cross, Malleshwaram, Bengaluru 560003'
+                      ),
+    p_doctor_id    => v_doctor_b,
+    p_deferred     => true,
+    p_defer_reason => 'Card machine down, patient returning after the ATM',
+    p_actor_id     => v_actor
+  );
+
+  perform public.add_payment(
+    p_invoice_id   => (v_result ->> 'invoice_id')::uuid,
+    p_amount       => round((v_result ->> 'grand_total')::numeric / 2, 2),
+    p_mode         => 'cash',
+    p_reference    => null,
+    p_hospital_id  => v_hospital,
+    p_payment_id   => null,
+    p_collected_by => v_actor
+  );
+
+  perform public.add_payment(
+    p_invoice_id   => (v_result ->> 'invoice_id')::uuid,
+    p_amount       => (v_result ->> 'grand_total')::numeric
+                        - round((v_result ->> 'grand_total')::numeric / 2, 2),
+    p_mode         => 'upi',
+    p_reference    => 'UPI/427761003991',
+    p_hospital_id  => v_hospital,
+    p_payment_id   => null,
+    p_collected_by => v_actor
+  );
+
+  raise notice 'seed: deferred registration on token % settled in two payments',
+    v_result ->> 'token_no';
 end;
 $$;

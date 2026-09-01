@@ -1,11 +1,15 @@
 'use client';
 
-import { BanIcon, PrinterIcon, ReceiptIcon } from 'lucide-react';
+import { BanIcon, IndianRupeeIcon, PrinterIcon, ReceiptIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useActionState, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 
 import { voidInvoiceAction } from './actions';
+import {
+  CollectBalanceDialog,
+  type CollectBalanceTarget,
+} from '@/components/shared/collect-balance-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Field } from '@/components/shared/field';
 import { FormMessage } from '@/components/shared/form-message';
@@ -63,8 +67,34 @@ export type InvoiceRowData = {
   created_by_name: string | null;
 };
 
-export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
+/** An invoice still owing money is one somebody can pay. */
+function isCollectable(invoice: InvoiceRowData): boolean {
+  return invoice.status !== 'void' && invoice.balance > 0;
+}
+
+function targetFor(invoice: InvoiceRowData): CollectBalanceTarget {
+  return {
+    invoiceId: invoice.id,
+    invoiceNo: invoice.invoice_no,
+    patientName: invoice.patient_name_snapshot,
+    balance: invoice.balance,
+  };
+}
+
+export function InvoiceTable({
+  invoices,
+  canCollect,
+}: {
+  invoices: InvoiceRowData[];
+  /**
+   * billing.collect. Without it the row offers Print and Void only -- an
+   * accountant reconciles and voids, and does not stand at the counter.
+   * The action re-checks: this only decides whether a button is drawn.
+   */
+  canCollect: boolean;
+}) {
   const [voiding, setVoiding] = useState<InvoiceRowData | null>(null);
+  const [collecting, setCollecting] = useState<InvoiceRowData | null>(null);
 
   if (invoices.length === 0) {
     return (
@@ -148,6 +178,16 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
                 {formatDateTime(invoice.invoice_date)}
               </span>
               <div className="ml-auto flex items-center gap-1">
+                {canCollect && isCollectable(invoice) ? (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCollecting(invoice)}
+                  >
+                    <IndianRupeeIcon data-icon="inline-start" />
+                    Collect
+                  </Button>
+                ) : null}
                 <Button asChild variant="ghost" size="icon-sm" title="Print">
                   <Link href={`/print/receipt/${invoice.id}?autoprint=0`}>
                     <PrinterIcon />
@@ -269,6 +309,19 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
                 </TableCell>
                 <TableCell>
                   <div className="flex items-center justify-end gap-1">
+                    {canCollect && isCollectable(invoice) ? (
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        title={`Collect the ${formatAmount(invoice.balance)} still owing`}
+                        onClick={() => setCollecting(invoice)}
+                      >
+                        <IndianRupeeIcon className="text-success" />
+                        <span className="sr-only">
+                          Collect balance on {invoice.invoice_no}
+                        </span>
+                      </Button>
+                    ) : null}
                     <Button asChild variant="ghost" size="icon-sm" title="Print">
                       <Link href={`/print/receipt/${invoice.id}?autoprint=0`}>
                         <PrinterIcon />
@@ -297,10 +350,18 @@ export function InvoiceTable({ invoices }: { invoices: InvoiceRowData[] }) {
       <p className="text-xs text-muted-foreground">
         Invoices are never deleted. Voiding keeps the number, records the reason, returns the
         charges to the visit so it can be billed again, and reverses any payment against it.
+        Collecting adds a payment to a bill that already exists; it never raises a second one.
       </p>
 
       {voiding ? (
         <VoidDialog invoice={voiding} onClose={() => setVoiding(null)} />
+      ) : null}
+
+      {collecting ? (
+        <CollectBalanceDialog
+          target={targetFor(collecting)}
+          onClose={() => setCollecting(null)}
+        />
       ) : null}
     </>
   );

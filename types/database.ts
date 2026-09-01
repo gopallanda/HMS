@@ -1061,6 +1061,24 @@ export type Database = {
         };
         Returns: Database['public']['Tables']['invoices']['Row'];
       };
+      /**
+       * A payment against an invoice that already exists. Never creates one.
+       */
+      add_payment: {
+        Args: {
+          p_invoice_id: string;
+          p_amount: number;
+          p_mode: PaymentMode;
+          p_reference?: string | null;
+          /** Service-role callers only; a session takes its tenant from the JWT. */
+          p_hospital_id?: string | null;
+          /** Client-generated, so a resubmitted dialog banks once. */
+          p_payment_id?: string | null;
+          /** Service-role callers only; a session records auth.uid(). */
+          p_collected_by?: string | null;
+        };
+        Returns: Database['public']['Tables']['invoices']['Row'];
+      };
       void_invoice: {
         Args: {
           p_invoice_id: string;

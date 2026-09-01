@@ -217,7 +217,12 @@ export default async function PatientRecordPage({
         at all, so nothing is pushed down for them.
       */}
       {canSeeMoney ? (
-        <MoneyPanel invoices={invoices} error={invoiceResult?.error?.message} />
+        <MoneyPanel
+          invoices={invoices}
+          error={invoiceResult?.error?.message}
+          patientName={patient.full_name}
+          canCollect={session.access.permissions.has('billing.collect')}
+        />
       ) : null}
 
       <VisitTimeline

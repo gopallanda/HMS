@@ -90,6 +90,31 @@ export const collectPaymentSchema = z.object({
 export type CollectPaymentInput = z.infer<typeof collectPaymentSchema>;
 
 /**
+ * Settling a balance on an invoice that already exists.
+ *
+ * Separate from collectPaymentSchema rather than a variant of it, because the
+ * two forms ask different questions: that one asks what to bill, this one asks
+ * only what was handed over. There are no lines here at all -- the bill was
+ * raised when the invoice was.
+ *
+ * The amount is deliberately NOT bounded against the balance here. The browser
+ * knows a balance that was true when the page rendered, and a second cashier
+ * may have collected against it since; add_payment re-reads it under a row
+ * lock and names the real figure in the refusal. A client-side maximum would
+ * only be a worse copy of that.
+ */
+export const addPaymentSchema = z.object({
+  invoice_id: z.uuid('That invoice is no longer valid.'),
+  /** Client-generated, so a double-click banks the money once. */
+  payment_id: clientId,
+  amount: money('Amount').refine((value) => value > 0, 'Enter the amount collected.'),
+  mode: z.enum(PAYMENT_MODES, { error: 'Choose how the payment was made.' }),
+  reference: optionalText('Reference', 80),
+});
+
+export type AddPaymentInput = z.infer<typeof addPaymentSchema>;
+
+/**
  * Voiding.
  *
  * A typed reason, never a bare confirm dialog (CLAUDE.md 7). The minimum

@@ -7,6 +7,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CalendarClockIcon } from 'lucide-react';
 
 import { TransferDialog, type TransferDoctor } from '../incomplete/transfer-dialog';
+import {
+  CollectBalanceDialog,
+  type CollectBalanceTarget,
+} from '@/components/shared/collect-balance-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -54,6 +58,18 @@ export type QueueEntry = {
 };
 
 /**
+ * What is outstanding on a visit, for whoever is allowed to see the figure.
+ *
+ * visit_queue carries only the payment_due BIT, on purpose: it comes from a
+ * SECURITY DEFINER helper so a nurse watching the board sees the badge without
+ * the invoice being opened to her (20260829090000). The amount comes from a
+ * separate read of invoice_summary on the page, which goes through the billing
+ * policies and returns nothing for a role that may not see money. So this map
+ * is empty for exactly the people the badge is deliberately vague for.
+ */
+export type QueueDue = CollectBalanceTarget;
+
+/**
  * PAYMENT DUE.
  *
  * Deliberately loud, and deliberately on the row rather than only on the
@@ -61,13 +77,42 @@ export type QueueEntry = {
  * and by the time anybody opens a bill the patient has already been seen. The
  * reason is in the title attribute because "why" is the second question and
  * the badge has no room for it.
+ *
+ * When the viewer may collect AND the amount is known, the badge becomes the
+ * button that clears it -- the badge is where somebody is already looking, and
+ * a separate action elsewhere on the row would be one more thing to find.
+ * Otherwise it stays exactly what it was: a statement, not a control.
  */
-function PaymentDue({ reason }: { reason: string | null }) {
+function PaymentDue({
+  reason,
+  due,
+  onCollect,
+}: {
+  reason: string | null;
+  due?: QueueDue;
+  onCollect?: (due: QueueDue) => void;
+}) {
+  const className =
+    'inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-warning uppercase ring-1 ring-warning/40';
+
+  if (due && onCollect) {
+    return (
+      <button
+        type="button"
+        onClick={() => onCollect(due)}
+        title={`${reason ?? 'No payment recorded against this visit yet.'} Click to collect.`}
+        className={cn(
+          className,
+          'transition-colors hover:bg-warning/10 focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
+        )}
+      >
+        Payment due &middot; {formatAmount(due.balance)}
+      </button>
+    );
+  }
+
   return (
-    <span
-      title={reason ?? 'No payment recorded against this visit yet.'}
-      className="inline-flex shrink-0 items-center rounded px-1.5 py-0.5 text-[10px] font-bold tracking-wide text-warning uppercase ring-1 ring-warning/40"
-    >
+    <span title={reason ?? 'No payment recorded against this visit yet.'} className={className}>
       Payment due
     </span>
   );
@@ -81,6 +126,8 @@ export function QueueBoard({
   hospitalId,
   doctors,
   canManage,
+  dues,
+  canCollect,
 }: {
   entries: QueueEntry[];
   hospitalId: string;
@@ -88,8 +135,13 @@ export function QueueBoard({
   doctors: TransferDoctor[];
   /** queue.manage. Without it the row has no Transfer button. */
   canManage: boolean;
+  /** visit_id -> the oldest invoice on it still owing. Empty when unreadable. */
+  dues: Record<string, QueueDue>;
+  /** billing.collect. Without it the badge stays a badge. */
+  canCollect: boolean;
 }) {
   const router = useRouter();
+  const [collecting, setCollecting] = useState<QueueDue | null>(null);
   const [live, setLive] = useState(false);
   const [updatedAt, setUpdatedAt] = useState<string | null>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -217,7 +269,13 @@ export function QueueBoard({
                     {entry.patient_name}
                   </Link>
                   <span className="flex shrink-0 items-center gap-1.5">
-                    {entry.payment_due ? <PaymentDue reason={entry.defer_reason} /> : null}
+                    {entry.payment_due ? (
+                      <PaymentDue
+                        reason={entry.defer_reason}
+                        due={canCollect ? dues[entry.id] : undefined}
+                        onCollect={setCollecting}
+                      />
+                    ) : null}
                     <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
                       {VISIT_STATUS_LABEL[entry.status]}
                     </Badge>
@@ -325,7 +383,13 @@ export function QueueBoard({
                     <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
                       {VISIT_STATUS_LABEL[entry.status]}
                     </Badge>
-                    {entry.payment_due ? <PaymentDue reason={entry.defer_reason} /> : null}
+                    {entry.payment_due ? (
+                      <PaymentDue
+                        reason={entry.defer_reason}
+                        due={canCollect ? dues[entry.id] : undefined}
+                        onCollect={setCollecting}
+                      />
+                    ) : null}
                   </span>
                 </TableCell>
                 <TableCell className="text-right">
@@ -353,6 +417,10 @@ export function QueueBoard({
         Tokens restart at 1 every day. Visit numbers do not &mdash; they run for the financial
         year.
       </p>
+
+      {collecting ? (
+        <CollectBalanceDialog target={collecting} onClose={() => setCollecting(null)} />
+      ) : null}
     </>
   );
 }

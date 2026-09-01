@@ -1,6 +1,7 @@
 import { PrinterIcon, ReceiptIcon } from 'lucide-react';
 import Link from 'next/link';
 
+import { CollectBalanceButton } from './collect-balance-button';
 import { SectionCard, SectionError } from './section';
 import { EmptyState } from '@/components/shared/empty-state';
 import { Badge } from '@/components/ui/badge';
@@ -44,10 +45,20 @@ export type PatientInvoice = {
 export function MoneyPanel({
   invoices,
   error,
+  patientName,
+  canCollect,
 }: {
   /** null when the read failed -- not the same as "never been billed". */
   invoices: PatientInvoice[] | null;
   error?: string;
+  /**
+   * For the collect dialog's header. The record's CURRENT name, not the
+   * invoice snapshot: the person standing at the counter is called what they
+   * are called today, and the snapshot is what the old bill was printed with.
+   */
+  patientName: string;
+  /** billing.collect. Without it the outstanding figure is a fact, not a task. */
+  canCollect: boolean;
 }) {
   if (invoices === null) {
     return (
@@ -99,7 +110,7 @@ export function MoneyPanel({
                 <TableHead className="hidden w-24 text-right sm:table-cell">Paid &#8377;</TableHead>
                 <TableHead className="w-24 text-right">Balance &#8377;</TableHead>
                 <TableHead className="w-24">Status</TableHead>
-                <TableHead className="w-10" />
+                <TableHead className="w-20" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -137,14 +148,26 @@ export function MoneyPanel({
                     </Badge>
                   </TableCell>
                   <TableCell>
-                    <Link
-                      href={`/print/receipt/${invoice.id}?autoprint=0`}
-                      className="text-muted-foreground transition-colors hover:text-foreground"
-                      aria-label={`Print ${invoice.invoice_no}`}
-                      title={`Print ${invoice.invoice_no}`}
-                    >
-                      <PrinterIcon className="size-4" />
-                    </Link>
+                    <div className="flex items-center justify-end gap-0.5">
+                      {canCollect && invoice.status !== 'void' && invoice.balance > 0 ? (
+                        <CollectBalanceButton
+                          target={{
+                            invoiceId: invoice.id,
+                            invoiceNo: invoice.invoice_no,
+                            patientName,
+                            balance: invoice.balance,
+                          }}
+                        />
+                      ) : null}
+                      <Link
+                        href={`/print/receipt/${invoice.id}?autoprint=0`}
+                        className="text-muted-foreground transition-colors hover:text-foreground"
+                        aria-label={`Print ${invoice.invoice_no}`}
+                        title={`Print ${invoice.invoice_no}`}
+                      >
+                        <PrinterIcon className="size-4" />
+                      </Link>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

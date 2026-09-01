@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { InvoiceTable, type InvoiceRowData } from './invoice-table';
+import { Notice } from '@/components/shared/form-message';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -56,7 +57,14 @@ export default async function InvoicesPage({
 
   if (isStatus(status)) query = query.eq('status', status);
 
-  const { data, error } = await query.order('invoice_date', { ascending: false }).limit(200);
+  // The cap is real and the screen says so below rather than quietly dropping
+  // the tail (block 9). One row over the limit is fetched purely to find out
+  // whether there IS a tail; it is sliced off before anything renders.
+  const LIST_LIMIT = 200;
+
+  const { data, error } = await query
+    .order('invoice_date', { ascending: false })
+    .limit(LIST_LIMIT + 1);
 
   if (error) {
     return (
@@ -69,7 +77,9 @@ export default async function InvoicesPage({
     );
   }
 
-  const invoices: InvoiceRowData[] = data ?? [];
+  const fetched: InvoiceRowData[] = data ?? [];
+  const capped = fetched.length > LIST_LIMIT;
+  const invoices: InvoiceRowData[] = capped ? fetched.slice(0, LIST_LIMIT) : fetched;
 
   // Totals for what is on screen, not for the hospital. The day-close report is
   // the authority on a day; this is an orientation line.
@@ -150,7 +160,18 @@ export default async function InvoicesPage({
         A search looks across every date; leave it empty to stay on one day.
       </p>
 
-      <InvoiceTable invoices={invoices} />
+      {capped ? (
+        <Notice>
+          Showing the {LIST_LIMIT} most recent of more than {LIST_LIMIT} matching invoices. The
+          totals above are for these {LIST_LIMIT} only. Narrow the search, or pick a single day,
+          to see the rest.
+        </Notice>
+      ) : null}
+
+      <InvoiceTable
+        invoices={invoices}
+        canCollect={session.access.permissions.has('billing.collect')}
+      />
     </div>
   );
 }
