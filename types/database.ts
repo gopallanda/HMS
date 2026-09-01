@@ -22,6 +22,15 @@
  * services.unit, the service_unit enum and seed_starter_services come from
  * 20260901090000_service_units_and_starter_catalogue.sql.
  *
+ * MVP gap closure, 2026-09-02: add_payment, cancel_visit, reverse_payment,
+ * close_day and log_document_print; the day_closures table;
+ * invoices.discount_amount / discount_reason (and the same two on
+ * invoice_summary); consultations.prescription; and the two new
+ * collect_payment arguments. All written from migrations 20260902090000
+ * through 090600 after they were pushed, and then checked against the live
+ * schema column-for-column and signature-for-signature through
+ * information_schema.columns and pg_get_function_arguments.
+ *
  * EmploymentType and ShiftStatus are unions over CHECK constraints rather than
  * Postgres enums, so they are absent from Enums below on purpose: generated
  * output would type those columns as plain `string`, and narrowing them here
