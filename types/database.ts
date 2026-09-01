@@ -747,6 +747,29 @@ export type Database = {
         Update: never;
         Relationships: [];
       };
+      /**
+       * That a day was counted, by whom, and how the drawer compared with
+       * the system (20260902090400). Written only by close_day().
+       */
+      day_closures: {
+        Row: {
+          id: string;
+          hospital_id: string;
+          close_date: string;
+          declared_cash: number;
+          /** The cash line from day_close_report, snapshotted at close time. */
+          system_cash: number;
+          /** declared_cash - system_cash. Positive means extra in the drawer. */
+          variance: number;
+          notes: string | null;
+          closed_by: string | null;
+          closed_at: string;
+        };
+        // close_day() is the only writer: there is no insert or update policy.
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       payments: {
         Row: {
           id: string;
@@ -1049,6 +1072,20 @@ export type Database = {
           status: VisitStatus;
           doctor_id: string | null;
         };
+      };
+      /**
+       * Records that a day was counted, with the variance between the cash
+       * declared at the counter and the cash the system says was taken.
+       */
+      close_day: {
+        Args: {
+          /** Service-role callers only; a session takes its tenant from the JWT. */
+          p_hospital_id?: string | null;
+          p_date?: string | null;
+          p_declared_cash?: number;
+          p_notes?: string | null;
+        };
+        Returns: Database['public']['Tables']['day_closures']['Row'];
       };
       /**
        * Cancels a waiting or in-consultation visit with a typed reason.

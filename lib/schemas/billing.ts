@@ -171,3 +171,22 @@ export const dayCloseSchema = z.object({
     .regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a date.')
     .optional(),
 });
+
+/**
+ * Closing the day.
+ *
+ * Only the declared cash is asked for. The system figure is not a field on
+ * this form at all -- close_day reads it inside the transaction, because a
+ * number the browser posts back is a number somebody can post a different
+ * version of.
+ *
+ * Notes are optional and usually where the variance gets explained: "500 short,
+ * Ramesh took an advance". A required note would be filled with a full stop.
+ */
+export const closeDaySchema = z.object({
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Pick a date.'),
+  declared_cash: money('Cash counted'),
+  notes: optionalText('Notes', 500),
+});
+
+export type CloseDayInput = z.infer<typeof closeDaySchema>;

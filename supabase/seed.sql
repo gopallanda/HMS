@@ -1073,3 +1073,47 @@ begin
     v_result ->> 'invoice_no';
 end;
 $$;
+
+-- =============================================================================
+-- A day that was counted -- block 5.
+--
+-- Yesterday, not today: today's takings are still moving while somebody is
+-- looking at the demo, and a closure whose system_cash disagrees with the live
+-- report the moment it is written teaches the wrong thing about the screen.
+-- Yesterday is finished, so the variance below is the one an owner would
+-- actually be reading.
+--
+-- Deliberately NOT square. A day close that always balances hides the only
+-- line on the screen anybody cares about; this one is 200 short with the
+-- explanation an Indian counter actually writes.
+-- =============================================================================
+do $$
+declare
+  v_hospital uuid := '00000000-0000-4000-8000-000000000001';
+  v_date     date := public.ist_date(now()) - 1;
+  v_system   numeric(12,2);
+  v_closure  public.day_closures;
+begin
+  if exists (
+    select 1 from public.day_closures d
+    where d.hospital_id = v_hospital and d.close_date = v_date
+  ) then
+    raise notice 'seed: % already closed, left alone', v_date;
+    return;
+  end if;
+
+  select coalesce(r.amount, 0) into v_system
+  from public.day_close_report(v_hospital, v_date) r
+  where r.bucket = 'mode' and r.key = 'cash';
+
+  v_closure := public.close_day(
+    p_hospital_id   => v_hospital,
+    p_date          => v_date,
+    p_declared_cash => greatest(coalesce(v_system, 0) - 200, 0),
+    p_notes         => 'Two hundred short - Ramesh took an advance against salary, chit in the drawer'
+  );
+
+  raise notice 'seed: % closed. system %, counted %, variance %',
+    v_date, v_closure.system_cash, v_closure.declared_cash, v_closure.variance;
+end;
+$$;

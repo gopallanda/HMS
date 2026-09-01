@@ -1,6 +1,7 @@
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import Link from 'next/link';
 
+import { ClosePanel, type DayClosure } from './close-panel';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -53,7 +54,17 @@ export default async function DayClosePage({
   const today = todayIst();
   const selectedDay = /^\d{4}-\d{2}-\d{2}$/.test(day ?? '') ? day! : today;
 
-  const { data, error } = await dayCloseReport(supabase, session.hospitalId, selectedDay);
+  // The report and the closure for this day, together. The closure is a plain
+  // read through day_closures_select_tenant -- close_day() is the only writer.
+  const [{ data, error }, closureResult] = await Promise.all([
+    dayCloseReport(supabase, session.hospitalId, selectedDay),
+    supabase
+      .from('day_closures')
+      .select('declared_cash, system_cash, variance, notes, closed_at, closed_by')
+      .eq('hospital_id', session.hospitalId)
+      .eq('close_date', selectedDay)
+      .maybeSingle(),
+  ]);
 
   if (error) {
     return (
@@ -68,6 +79,37 @@ export default async function DayClosePage({
 
   const report = groupDayClose((data ?? []) as DayCloseRow[]);
   const collected = report.collected?.amount ?? 0;
+  const discounted = report.discounted?.amount ?? 0;
+
+  // What the drawer should hold. Card and UPI settle into a bank account, so
+  // the cash line is the only one a hand count can disagree with.
+  const systemCash =
+    report.byMode.find((row) => row.key === 'cash')?.amount ?? 0;
+
+  let closure: DayClosure | null = null;
+
+  if (closureResult.data) {
+    // Who closed it, by name. A second small read rather than a join, because
+    // closed_by points at auth.users and the name lives on staff -- the same
+    // shape invoice_summary uses for created_by_name.
+    const { data: closer } = closureResult.data.closed_by
+      ? await supabase
+          .from('staff')
+          .select('full_name')
+          .eq('hospital_id', session.hospitalId)
+          .eq('user_id', closureResult.data.closed_by)
+          .maybeSingle()
+      : { data: null };
+
+    closure = {
+      declared_cash: closureResult.data.declared_cash,
+      system_cash: closureResult.data.system_cash,
+      variance: closureResult.data.variance,
+      notes: closureResult.data.notes,
+      closed_at: closureResult.data.closed_at,
+      closed_by_name: closer?.full_name ?? null,
+    };
+  }
 
   const atToday = selectedDay >= today;
 
@@ -114,7 +156,7 @@ export default async function DayClosePage({
       </form>
 
       {/* The three numbers somebody actually reads out. */}
-      <div className="grid gap-4 sm:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Summary
           label="Collected"
           value={collected}
@@ -131,7 +173,22 @@ export default async function DayClosePage({
           value={report.voided?.amount ?? 0}
           note={`${report.voided?.entry_count ?? 0} cancelled, payments reversed`}
         />
+        {/* Leakage, beside the collections rather than in a report nobody
+            opens. "We took 41,000" is not a day anybody can reconcile without
+            "and gave away 2,300" next to it (item 5). */}
+        <Summary
+          label="Concessions"
+          value={discounted}
+          note={`given on ${report.discounted?.entry_count ?? 0} bill${report.discounted?.entry_count === 1 ? '' : 's'}`}
+        />
       </div>
+
+      <ClosePanel
+        date={selectedDay}
+        systemCash={systemCash}
+        closure={closure}
+        canClose={session.access.permissions.has('reports.view')}
+      />
 
       <div className="grid gap-6 lg:grid-cols-3">
         <Section

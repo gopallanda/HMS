@@ -138,6 +138,29 @@ export async function voidInvoice(supabase: Client, invoiceId: string, reason: s
   });
 }
 
+export type DayClosureRow = Database['public']['Tables']['day_closures']['Row'];
+
+/**
+ * Record that a day was counted.
+ *
+ * The system figure is read inside the transaction, so the variance is against
+ * the numbers the person closing was looking at rather than against whatever
+ * the table says a moment later. Closing locks nothing: a re-close updates the
+ * same row and the audit trail carries both counts.
+ */
+export async function closeDay(
+  supabase: Client,
+  date: string,
+  declaredCash: number,
+  notes: string | null,
+) {
+  return supabase.rpc('close_day', {
+    p_date: date,
+    p_declared_cash: declaredCash,
+    p_notes: notes,
+  });
+}
+
 /** Read-only day close for one IST day. */
 export async function dayCloseReport(supabase: Client, hospitalId: string, date: string) {
   return supabase.rpc('day_close_report', {
@@ -160,6 +183,13 @@ export function groupDayClose(rows: DayCloseRow[]) {
     collected: total('collected'),
     invoiced: total('invoiced'),
     voided: total('voided'),
+    /**
+     * Concessions given on the day's bills (item 5). The leakage figure, and
+     * the reason it sits with the other three totals rather than in a report
+     * of its own: "we collected 41,000" is not a day anybody can reconcile
+     * without "and gave away 2,300" beside it.
+     */
+    discounted: total('discounted'),
     // UNION ALL does not promise an order. The modes are shown in the same
     // sequence every day (cash first, as at the counter), the other two by
     // size, because the biggest line is the one being reconciled first.

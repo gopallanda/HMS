@@ -90,6 +90,7 @@ export async function wipe(client) {
   // audit rows go last, because the deletes above write more of them.
   // Before invoices and visits: both hold composite FKs into them
   // (20260829090000, 20260829090200).
+  await client.query('delete from public.day_closures            where hospital_id = $1', [id]);
   await client.query('delete from public.visit_payment_deferrals where hospital_id = $1', [id]);
   await client.query('delete from public.visit_transfers         where hospital_id = $1', [id]);
   await client.query('delete from public.payments      where hospital_id = $1', [id]);
