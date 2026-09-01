@@ -1,5 +1,6 @@
 import Link from 'next/link';
 
+import { CancelVisitDialog } from '../cancel-visit-dialog';
 import { TransferDialog, type TransferDoctor } from './transfer-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
 import { PageHeader } from '@/components/shared/page-header';
@@ -85,6 +86,7 @@ export default async function IncompleteVisitsPage() {
   const visits = visitResult.data ?? [];
   const doctors: TransferDoctor[] = doctorResult.data ?? [];
   const canManage = session.access.permissions.has('queue.manage');
+  const canCancel = session.access.permissions.has('queue.cancel');
 
   return (
     <div className="grid gap-5">
@@ -153,17 +155,32 @@ export default async function IncompleteVisitsPage() {
                     )}
                   </TableCell>
                   <TableCell className="text-right">
-                    {canManage ? (
-                      <TransferDialog
-                        visitId={visit.id}
-                        patientName={visit.patient_name}
-                        currentDoctor={null}
-                        doctors={doctors}
-                        trigger="Assign a doctor"
-                      />
-                    ) : (
-                      <span className="text-xs text-muted-foreground">Ask the front desk</span>
-                    )}
+                    <div className="flex items-center justify-end gap-1">
+                      {canManage ? (
+                        <TransferDialog
+                          visitId={visit.id}
+                          patientName={visit.patient_name}
+                          currentDoctor={null}
+                          doctors={doctors}
+                          trigger="Assign a doctor"
+                        />
+                      ) : null}
+                      {/* The other honest answer to a visit nobody can place:
+                          it should never have been open. Cancelling says so,
+                          with a reason, instead of leaving the row here for
+                          somebody to guess a doctor for later. */}
+                      {canCancel ? (
+                        <CancelVisitDialog
+                          visitId={visit.id}
+                          visitNo={visit.visit_no}
+                          patientName={visit.patient_name}
+                          tokenNo={visit.token_no}
+                        />
+                      ) : null}
+                      {!canManage && !canCancel ? (
+                        <span className="text-xs text-muted-foreground">Ask the front desk</span>
+                      ) : null}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}

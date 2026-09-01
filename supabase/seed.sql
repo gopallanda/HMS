@@ -539,8 +539,17 @@ begin
    where id = any(v_ids[1:3]);
   update public.visits set status = 'in_consultation'
    where id = v_ids[4];
-  update public.visits set status = 'cancelled'
-   where id = v_ids[5];
+  -- Through cancel_visit (20260902090100), not an UPDATE. Before that function
+  -- existed nothing in the product could reach `cancelled` at all, and a
+  -- demo row set by hand carries no reason -- which is the only part of a
+  -- cancellation anybody reads back later. This visit has a pending
+  -- consultation charge and no invoice yet, so there is nothing to void; the
+  -- desk block below covers the case where there is.
+  perform public.cancel_visit(
+    p_visit_id    => v_ids[5],
+    p_reason      => 'Patient left without waiting to be seen',
+    p_hospital_id => v_hospital
+  );
 
   raise notice 'seed: 10 visits created for %', public.ist_date(now());
 end;
@@ -967,5 +976,32 @@ begin
 
   raise notice 'seed: deferred registration on token % settled in two payments',
     v_result ->> 'token_no';
+
+  -- 5. Registered, then walked out. The half of cancel_visit that has to
+  --    touch money: the invoice is unpaid, so it is voided through
+  --    void_invoice -- the number stays consumed, the charge lines go back to
+  --    pending, and the token is retired rather than handed to the next
+  --    person through the door.
+  v_result := public.register_patient_visit(
+    p_hospital_id  => v_hospital,
+    p_patient      => jsonb_build_object(
+                        'full_name', 'Basavaraj Hiremath',
+                        'dob',       '1954-08-08',
+                        'gender',    'male',
+                        'phone',     '+91 90350 66218'
+                      ),
+    p_doctor_id    => v_doctor_b,
+    p_deferred     => true,
+    p_defer_reason => 'Son bringing the money, patient waiting inside',
+    p_actor_id     => v_actor
+  );
+
+  v_result := public.cancel_visit(
+    p_visit_id    => (v_result ->> 'visit_id')::uuid,
+    p_reason      => 'Waited an hour and left; asked to come back tomorrow morning',
+    p_hospital_id => v_hospital
+  );
+  raise notice 'seed: cancelled % (token %, % invoice(s) voided)',
+    v_result ->> 'visit_no', v_result ->> 'token_no', v_result ->> 'invoices_voided';
 end;
 $$;

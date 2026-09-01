@@ -130,6 +130,7 @@ export default async function QueuePage() {
         canManage={session.access.permissions.has('queue.manage')}
         dues={dues}
         canCollect={session.access.permissions.has('billing.collect')}
+        canCancel={session.access.permissions.has('queue.cancel')}
       />
     </div>
   );

@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 
 import { CalendarClockIcon } from 'lucide-react';
 
+import { CancelVisitDialog } from '../cancel-visit-dialog';
 import { TransferDialog, type TransferDoctor } from '../incomplete/transfer-dialog';
 import {
   CollectBalanceDialog,
@@ -128,6 +129,7 @@ export function QueueBoard({
   canManage,
   dues,
   canCollect,
+  canCancel,
 }: {
   entries: QueueEntry[];
   hospitalId: string;
@@ -139,6 +141,11 @@ export function QueueBoard({
   dues: Record<string, QueueDue>;
   /** billing.collect. Without it the badge stays a badge. */
   canCollect: boolean;
+  /**
+   * queue.cancel. Held apart from queue.manage on purpose: transferring moves
+   * somebody, cancelling takes them off the board and voids their bill.
+   */
+  canCancel: boolean;
 }) {
   const router = useRouter();
   const [collecting, setCollecting] = useState<QueueDue | null>(null);
@@ -299,6 +306,31 @@ export function QueueBoard({
                     &#8377;{formatAmount(entry.charge_total)}
                   </span>
                 </p>
+
+                {/* The card carries the same two actions as the table row.
+                    A phone at the counter is not a read-only view of the
+                    queue -- it is what a clerk standing beside the door has. */}
+                {(entry.status === 'waiting' || entry.status === 'in_consultation') &&
+                (canManage || canCancel) ? (
+                  <div className="mt-2 flex items-center gap-1 border-t border-border/60 pt-2">
+                    {canManage ? (
+                      <TransferDialog
+                        visitId={entry.id}
+                        patientName={entry.patient_name}
+                        currentDoctor={entry.doctor_name}
+                        doctors={doctors}
+                      />
+                    ) : null}
+                    {canCancel ? (
+                      <CancelVisitDialog
+                        visitId={entry.id}
+                        visitNo={entry.visit_no}
+                        patientName={entry.patient_name}
+                        tokenNo={entry.token_no}
+                      />
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             </div>
           ))}
@@ -397,15 +429,29 @@ export function QueueBoard({
                       (block 7.1). Closed visits are left alone: moving somebody
                       who has already been seen would retire a token for no
                       reason and misattribute the consultation. */}
-                  {canManage &&
-                  (entry.status === 'waiting' || entry.status === 'in_consultation') ? (
-                    <TransferDialog
-                      visitId={entry.id}
-                      patientName={entry.patient_name}
-                      currentDoctor={entry.doctor_name}
-                      doctors={doctors}
-                    />
-                  ) : null}
+                  <div className="flex items-center justify-end gap-1">
+                    {canManage &&
+                    (entry.status === 'waiting' || entry.status === 'in_consultation') ? (
+                      <TransferDialog
+                        visitId={entry.id}
+                        patientName={entry.patient_name}
+                        currentDoctor={entry.doctor_name}
+                        doctors={doctors}
+                      />
+                    ) : null}
+                    {/* Cancelling is only offered while somebody is still
+                        waiting to be seen. A completed visit is finished, and
+                        the fix for a wrong bill on one is a void. */}
+                    {canCancel &&
+                    (entry.status === 'waiting' || entry.status === 'in_consultation') ? (
+                      <CancelVisitDialog
+                        visitId={entry.id}
+                        visitNo={entry.visit_no}
+                        patientName={entry.patient_name}
+                        tokenNo={entry.token_no}
+                      />
+                    ) : null}
+                  </div>
                 </TableCell>
               </TableRow>
             ))}

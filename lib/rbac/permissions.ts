@@ -22,7 +22,7 @@
 export const PERMISSIONS = [
   'patients.read', 'patients.create', 'patients.update',
   'visits.create', 'visits.read',
-  'queue.read', 'queue.manage',
+  'queue.read', 'queue.manage', 'queue.cancel',
   'consultation.read', 'consultation.write',
   'prescription.create',
   'billing.read', 'billing.collect', 'billing.void', 'billing.defer',
@@ -68,7 +68,7 @@ export const PERMISSION_GROUPS: readonly {
     permissions: [
       'patients.read', 'patients.create', 'patients.update',
       'visits.create', 'visits.read',
-      'queue.read', 'queue.manage',
+      'queue.read', 'queue.manage', 'queue.cancel',
     ],
   },
   {
@@ -126,7 +126,8 @@ export const PERMISSION_LABEL: Record<Permission, string> = {
   'visits.create': 'Start a visit and put someone in the queue',
   'visits.read': 'See visits',
   'queue.read': 'See the queue for today',
-  'queue.manage': 'Reorder, transfer and cancel queue entries',
+  'queue.manage': 'Transfer a queue entry to another doctor',
+  'queue.cancel': 'Cancel a visit, with a reason',
   'consultation.read': 'Read consultation notes and vitals',
   'consultation.write': 'Record consultation notes and vitals',
   'prescription.create': 'Write a prescription',

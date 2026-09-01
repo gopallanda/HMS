@@ -1045,6 +1045,26 @@ export type Database = {
           doctor_id: string | null;
         };
       };
+      /**
+       * Cancels a waiting or in-consultation visit with a typed reason.
+       * Refused outright when money has already been collected against it.
+       */
+      cancel_visit: {
+        Args: {
+          p_visit_id: string;
+          p_reason: string;
+          /** Service-role callers only; a session takes its tenant from the JWT. */
+          p_hospital_id?: string | null;
+        };
+        Returns: {
+          visit_id: string;
+          visit_no: string;
+          token_no: number;
+          status: VisitStatus;
+          invoices_voided: number;
+          reason: string;
+        };
+      };
       collect_payment: {
         Args: {
           p_visit_id: string;

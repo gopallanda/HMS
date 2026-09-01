@@ -1,8 +1,7 @@
 /**
  * Typed wrappers around the visit-queue Postgres functions.
  *
- * One function, and it is here rather than folded into the consultation
- * wrapper on purpose: moving a patient through the queue and writing what
+ * They are here rather than folded into the consultation wrapper on purpose: moving a patient through the queue and writing what
  * happened to them are different acts with different failure modes, and
  * save_consultation REPLACES the vitals it is given. A queue button routed
  * through that function would wipe a nurse's readings every time a doctor
@@ -18,6 +17,9 @@ type Client = SupabaseClient<Database>;
 export type VisitStatusResult =
   Database['public']['Functions']['set_visit_status']['Returns'];
 
+export type CancelVisitResult =
+  Database['public']['Functions']['cancel_visit']['Returns'];
+
 /** waiting | in_consultation | completed. Cancellation is a front-desk act. */
 export type QueueStatus = Extract<VisitStatus, 'waiting' | 'in_consultation' | 'completed'>;
 
@@ -29,4 +31,19 @@ export async function setVisitStatus(
   // p_hospital_id is deliberately absent: the function reads the tenant from
   // the JWT and refuses an argument that disagrees (CLAUDE.md 3.1).
   return supabase.rpc('set_visit_status', { p_visit_id: visitId, p_status: status });
+}
+
+/**
+ * Cancel a visit, with a typed reason.
+ *
+ * Not a status transition through setVisitStatus: cancel_visit also has to
+ * decide what happens to the money -- void an unpaid invoice, refuse outright
+ * when something has been collected -- and set_visit_status deliberately
+ * cannot reach `cancelled` for exactly that reason.
+ *
+ * p_hospital_id is absent for the usual reason: the function reads the tenant
+ * from the JWT and refuses an argument that disagrees (CLAUDE.md 3.1).
+ */
+export async function cancelVisit(supabase: Client, visitId: string, reason: string) {
+  return supabase.rpc('cancel_visit', { p_visit_id: visitId, p_reason: reason });
 }
