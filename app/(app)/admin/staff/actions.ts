@@ -388,6 +388,9 @@ export async function setStaffAccountEnabled(
   const result = await setAccountEnabled({
     hospitalId: session.hospitalId,
     accountId: account.id,
+    // Who is clicking, so the guard can refuse somebody disabling their own
+    // login -- the click that lands is the last one that works.
+    actorId: session.userId,
     enabled: enabling,
   });
 
@@ -437,6 +440,7 @@ export async function removeStaffAccount(
   const result = await removeAccount({
     hospitalId: session.hospitalId,
     accountId: account.id,
+    actorId: session.userId,
   });
 
   if (!result.ok) return failure(result.message);

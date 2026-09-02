@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 
 import { failure, invalid, type ActionState } from '@/lib/action-state';
+import { ensureFounderAccount } from '@/lib/accounts/founder';
 import { provisionHospital } from '@/lib/rpc/onboarding';
 import { signupSchema } from '@/lib/schemas/auth';
 import { createClient } from '@/lib/supabase/server';
@@ -20,6 +21,12 @@ import { createClient } from '@/lib/supabase/server';
  *      BEFORE the membership existed and therefore carries hospital_id: null.
  *      Skip it and requireSession() bounces the user straight back to /login
  *      with "no hospital attached", one second after a successful signup.
+ *   4. ensureFounderAccount(), which writes the staff_accounts row that
+ *      provision_hospital does not. Without it the founder is a half-
+ *      provisioned member of staff: no username, no sign-in throttle, no
+ *      disabled_at to revoke through, and -- the symptom that found this --
+ *      /forgot-password matching nothing and returning silently while the form
+ *      says a link is on its way. See lib/accounts/founder.ts.
  */
 export async function signUp(_previous: ActionState, formData: FormData): Promise<ActionState> {
   const parsed = signupSchema.safeParse({
@@ -100,6 +107,18 @@ export async function signUp(_previous: ActionState, formData: FormData): Promis
       `${parsed.data.hospital_name} was created, but this session did not pick it up: ` +
         `${refreshError.message} Sign in again to continue.`,
     );
+  }
+
+  // Step 4. Deliberately not fatal: the hospital exists and the session is
+  // good, so refusing to let the founder in over a recovery row would be the
+  // wrong trade. A failed write is reported to the server log inside, and the
+  // next sign-in repairs it -- the email branch of the login action calls the
+  // same function.
+  // data.user is non-null on any path that reaches here -- a session exists,
+  // which means a user does -- but the SDK types it as nullable, and guessing an
+  // id would write the row against the wrong login.
+  if (data.user) {
+    await ensureFounderAccount({ hospitalId, userId: data.user.id });
   }
 
   // The overview, not landingFor(): a brand new hospital has no departments,

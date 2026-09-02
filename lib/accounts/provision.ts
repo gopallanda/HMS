@@ -66,7 +66,7 @@ const USERNAME_ATTEMPTS = 20;
  * questions -- the data model stays per tenant, and the login stays
  * unambiguous.
  */
-async function allocateUsername(
+export async function allocateUsername(
   admin: Admin,
   stem: string,
 ): Promise<string> {
@@ -400,6 +400,69 @@ export async function resetStaffPassword(input: {
 }
 
 /**
+ * The two ways a hospital can lock itself out, and the guard against both.
+ *
+ * Once founders hold a staff_accounts row like everybody else (lib/accounts/
+ * founder.ts), the disable and remove buttons on Admin -> Staff point at the
+ * owner's own login for the first time. Two mistakes then become possible that
+ * were not possible before, and neither of them is recoverable from inside the
+ * product:
+ *
+ *   1. Disabling yourself. disabled_at is read by the proxy on EVERY request,
+ *      so the click that saves the row is the last one that works. A one-admin
+ *      hospital is then shut out of its own tenant with no second login to undo
+ *      it from -- the fix is a service-role write, which means a support call.
+ *   2. Removing the last administrator. Same end state, arrived at from the
+ *      other button, and this one also deletes the auth user.
+ *
+ * A hospital with two administrators can still disable one of them, which is
+ * the point: this refuses the LAST way in, not every risky act. Enabling and
+ * restoring are never guarded -- they only ever widen access.
+ */
+type GuardedAccount = { id: string; auth_user_id: string | null; role_id: string };
+
+async function refuseIfLastWayIn(
+  admin: Admin,
+  input: { hospitalId: string; actorId: string; account: GuardedAccount; verb: string },
+): Promise<string | null> {
+  if (input.account.auth_user_id && input.account.auth_user_id === input.actorId) {
+    return (
+      `You cannot ${input.verb} your own login. Ask another administrator to do it, ` +
+      'so there is always somebody left who can undo it.'
+    );
+  }
+
+  // Which roles in THIS hospital carry administrator rights. Read by
+  // legacy_role rather than by code, because an administrator may rename a
+  // system role and a custom role may legitimately carry admin rights too.
+  const { data: adminRoles } = await admin
+    .from('roles')
+    .select('id')
+    .eq('hospital_id', input.hospitalId)
+    .in('legacy_role', ['admin', 'super_admin'])
+    .is('deleted_at', null);
+
+  const adminRoleIds = (adminRoles ?? []).map((role) => role.id);
+  if (!adminRoleIds.includes(input.account.role_id)) return null;
+
+  const { count } = await admin
+    .from('staff_accounts')
+    .select('id', { count: 'exact', head: true })
+    .eq('hospital_id', input.hospitalId)
+    .in('role_id', adminRoleIds)
+    .is('disabled_at', null)
+    .neq('id', input.account.id);
+
+  if ((count ?? 0) > 0) return null;
+
+  return (
+    `That is the only administrator login left in this hospital, so to ${input.verb} it ` +
+    'would lock everybody out of settings, staff and roles. Give somebody else an ' +
+    'administrator login first.'
+  );
+}
+
+/**
  * Revoking access: ONE write.
  *
  * disabled_at is checked at sign-in and again on every request, so a disabled
@@ -411,9 +474,29 @@ export async function resetStaffPassword(input: {
 export async function setAccountEnabled(input: {
   hospitalId: string;
   accountId: string;
+  actorId: string;
   enabled: boolean;
 }): Promise<{ ok: true } | { ok: false; message: string }> {
   const admin = createAdminClient();
+
+  if (!input.enabled) {
+    const { data: account } = await admin
+      .from('staff_accounts')
+      .select('id, auth_user_id, role_id')
+      .eq('id', input.accountId)
+      .eq('hospital_id', input.hospitalId)
+      .maybeSingle();
+
+    if (!account) return { ok: false, message: 'That account is not in this hospital.' };
+
+    const refusal = await refuseIfLastWayIn(admin, {
+      hospitalId: input.hospitalId,
+      actorId: input.actorId,
+      account,
+      verb: 'disable',
+    });
+    if (refusal) return { ok: false, message: refusal };
+  }
 
   const { error } = await admin
     .from('staff_accounts')
@@ -439,17 +522,27 @@ export async function setAccountEnabled(input: {
 export async function removeStaffAccount(input: {
   hospitalId: string;
   accountId: string;
+  actorId: string;
 }): Promise<{ ok: true } | { ok: false; message: string }> {
   const admin = createAdminClient();
 
   const { data: account } = await admin
     .from('staff_accounts')
-    .select('id, auth_user_id, staff_id')
+    .select('id, auth_user_id, staff_id, role_id')
     .eq('id', input.accountId)
     .eq('hospital_id', input.hospitalId)
     .maybeSingle();
 
   if (!account) return { ok: false, message: 'That account is not in this hospital.' };
+
+  // Before the auth user is deleted, not after: this one is not reversible.
+  const refusal = await refuseIfLastWayIn(admin, {
+    hospitalId: input.hospitalId,
+    actorId: input.actorId,
+    account,
+    verb: 'remove',
+  });
+  if (refusal) return { ok: false, message: refusal };
 
   if (account.auth_user_id) {
     const deleted = await admin.auth.admin.deleteUser(account.auth_user_id);

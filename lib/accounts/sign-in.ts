@@ -64,6 +64,46 @@ export async function resolveUsername(username: string): Promise<ResolvedAccount
   };
 }
 
+/**
+ * The account behind a sign-in ADDRESS, or null.
+ *
+ * The login form accepts an email as well as a username, for whoever created
+ * the hospital through /signup with their own mailbox. That branch used to sign
+ * in through Supabase Auth alone and never look at staff_accounts, which meant
+ * the lockout counter and disabled_at did not apply to it -- the one address an
+ * attacker is most likely to be able to guess was the one with no throttle on
+ * it. This is what closes that: the email branch resolves an account the same
+ * way the username branch does, and applies the same two checks.
+ *
+ * `.eq` on a lowercased address rather than `.ilike`. The unique index is on
+ * lower(login_email) and both writers store lowercase, so equality finds the
+ * row; ilike would treat an underscore as a wildcard, and `john_doe@gmail.com`
+ * matching `johnxdoe@gmail.com` is a way to resolve somebody else's account.
+ */
+export async function resolveLoginEmail(loginEmail: string): Promise<ResolvedAccount | null> {
+  const admin = createAdminClient();
+
+  const { data } = await admin
+    .from('staff_accounts')
+    .select('id, hospital_id, username, login_email, disabled_at, locked_until, must_change_password')
+    .eq('login_email', loginEmail.trim().toLowerCase())
+    .order('created_at')
+    .limit(1);
+
+  const row = data?.[0];
+  if (!row) return null;
+
+  return {
+    id: row.id,
+    hospitalId: row.hospital_id,
+    username: row.username,
+    loginEmail: row.login_email,
+    disabledAt: row.disabled_at,
+    lockedUntil: row.locked_until,
+    mustChangePassword: row.must_change_password,
+  };
+}
+
 export function isLockedOut(account: ResolvedAccount, now: Date = new Date()): boolean {
   return account.lockedUntil !== null && new Date(account.lockedUntil) > now;
 }

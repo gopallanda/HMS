@@ -3,10 +3,12 @@
 import { redirect } from 'next/navigation';
 
 import { failure, invalid, type ActionState } from '@/lib/action-state';
+import { ensureFounderAccount } from '@/lib/accounts/founder';
 import {
   isLockedOut,
   recordFailedSignIn,
   recordSuccessfulSignIn,
+  resolveLoginEmail,
   resolveUsername,
   COOLDOWN_MINUTES,
 } from '@/lib/accounts/sign-in';
@@ -60,20 +62,61 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
   const supabase = await createClient();
   const next = safeNext(formData.get('next'));
 
-  // ---- The founder path: an email, no staff_accounts row ------------------
+  // ---- The founder path: an email --------------------------------------------
+  //
+  // This branch used to be "an email, and therefore no account row" -- it signed
+  // in through Supabase Auth and nothing else. That was the hole: no lockout, no
+  // disabled_at check, and no reset path, because a founder had no
+  // staff_accounts row for any of the three to hang off. Founders get that row
+  // now (lib/accounts/founder.ts), so this branch runs the same two checks the
+  // username branch does.
+  //
+  // The account may still be absent -- the very first sign-in of a founder
+  // created before this existed, or one whose email needed confirming and whose
+  // hospital is provisioned further down. The checks are therefore conditional,
+  // and ensureFounderAccount() below repairs the row for the next time.
   if (looksLikeEmail(parsed.data.identifier)) {
+    const loginEmail = parsed.data.identifier;
+    const account = await resolveLoginEmail(loginEmail);
+
+    if (account && isLockedOut(account)) {
+      return failure(
+        `Too many attempts. This account is locked for ${COOLDOWN_MINUTES} minutes. ` +
+          'An administrator can reset the password to unlock it sooner.',
+      );
+    }
+
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: parsed.data.identifier,
+      email: loginEmail,
       password: parsed.data.password,
     });
 
     if (error) {
+      if (account) await recordFailedSignIn(account.id);
       return failure(BLENDED_FAILURE, {
         identifier: ['Check what you typed and try again.'],
       });
     }
 
-    return finishSignIn(supabase, data.user.id, next);
+    if (account) {
+      // Re-read, exactly as the username branch does: revoking access is one
+      // write and has to bite on the very next sign-in, even if it landed
+      // between the resolve above and the password check.
+      const current = await resolveLoginEmail(loginEmail);
+
+      if (!current || current.disabledAt) {
+        await supabase.auth.signOut({ scope: 'local' });
+        redirect('/access-denied?reason=revoked');
+      }
+
+      await recordSuccessfulSignIn(current.id);
+
+      if (current.mustChangePassword) {
+        redirect('/change-password');
+      }
+    }
+
+    return finishSignIn(supabase, data.user.id, next, { repairFounderAccount: true });
   }
 
   // ---- The staff path: a username -----------------------------------------
@@ -138,12 +181,31 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
  * authenticated caller to act on them. provision_hospital returns null for
  * anybody not in that situation and is idempotent, so a repeated sign-in
  * cannot mint a second hospital.
+ *
+ * repairFounderAccount is set by the email branch only. It writes the
+ * staff_accounts row a /signup founder was never given, so that from the next
+ * request on they have a username, a throttle, a disabled_at and -- the reason
+ * this was found at all -- a working /forgot-password. It is idempotent and
+ * costs one indexed read once the row exists, which is why it can sit on a path
+ * every founder takes rather than in a migration nobody runs twice.
  */
 async function finishSignIn(
   supabase: Awaited<ReturnType<typeof createClient>>,
   userId: string,
   next: string | null,
+  options: { repairFounderAccount?: boolean } = {},
 ): Promise<ActionState> {
+  /**
+   * Never blocks the sign-in. A founder who cannot reach the hospital they
+   * created is a worse failure than one whose recovery path is repaired on
+   * their next visit -- and ensureFounderAccount already reports a failed write
+   * to the server log, which is where the three of us will see it.
+   */
+  const repairFounder = async (activeHospitalId: string) => {
+    if (!options.repairFounderAccount) return;
+    await ensureFounderAccount({ hospitalId: activeHospitalId, userId });
+  };
+
   const { data: claimsData } = await supabase.auth.getClaims();
   const appMetadata = (claimsData?.claims?.app_metadata ?? {}) as Record<string, unknown>;
   const hospitalId =
@@ -168,6 +230,7 @@ async function finishSignIn(
           `Your hospital was set up, but this session did not pick it up: ${refreshError.message} Sign in again.`,
         );
       }
+      await repairFounder(provisionedId);
       redirect(next ?? '/');
     }
 
@@ -195,6 +258,8 @@ async function finishSignIn(
       'This account is not an active member of any hospital. Ask an administrator to add you.',
     );
   }
+
+  await repairFounder(hospitalId);
 
   // Outside any try/catch: redirect() signals by throwing.
   redirect(next ?? (await landingForCaller(supabase, role)));

@@ -853,3 +853,92 @@ numbers for one day get onto two screens.
 7. **`PRINT_FORMAT_LABEL['a4']` reads "A4 invoice"** on the prescription's
    paper picker. Correct on the receipt and in hospital settings, slightly
    wrong there. Shared label, not worth forking for one word.
+
+---
+
+# Founder accounts — the silent /forgot-password
+
+## The report
+
+A founder account created through `/signup` (`landagopal1930@gmail.com`, "Dr.
+Murali Ashok") could not reset its own password. `/forgot-password` accepted the
+address, said *if that address belongs to a staff account, a reset link is on
+its way*, and sent nothing. The workaround was a recovery link from the Supabase
+dashboard.
+
+## What was actually wrong
+
+`requestPasswordReset` looks accounts up by `staff_accounts.contact_email`, and
+a founder has no `staff_accounts` row at all. `/signup` calls
+`supabase.auth.signUp()` and then `provision_hospital()`, which writes the
+hospital, the membership and the founder's staff row. Every *other* login is
+created by `provisionStaffAccount()`, which also writes the account row. So a
+founder was a half-provisioned member of staff, and the missing reset was one of
+four consequences:
+
+| | desk-provisioned staff | founder, before this |
+|---|---|---|
+| `/forgot-password` | works | silently no-ops |
+| sign-in lockout | 5 in 15 minutes | none — the email branch never read `staff_accounts` |
+| revocation (`disabled_at`) | one write | no row to write |
+| account state on the staff list | shown | `has_account: false`, and *Issue login* refused because `staff.user_id` was already set |
+
+Widening the reset lookup to `auth.users.email` would have fixed the symptom
+only, and awkwardly: `password_reset_tokens.account_id` is
+`not null references staff_accounts(id)`, so a founder's token has nowhere to
+live without either a nullable `auth_user_id` on that table or a second reset
+mechanism with its own mailer and TTL.
+
+## The fix
+
+**`ensureFounderAccount()` — `lib/accounts/founder.ts`.** Writes the missing
+row. Called from the signup action right after `provision_hospital`, and again
+from `finishSignIn` on the email branch, idempotently — which repairs founders
+created before this existed on their next sign-in, with no data migration. It
+never throws and never blocks a sign-in.
+
+`login_email` is the founder's **real address**, not a synthetic one. That is
+the column's actual meaning — the address Auth signs this account in with — and
+minting a synthetic address for a founder would mean changing their auth email,
+breaking a credential they already use. `contact_email` is the same address,
+which is what makes the reset work. `must_change_password` is **false**: they
+chose that password at signup, and raising the flag would bounce them to
+`/change-password` on the proxy gate a second after creating their hospital.
+
+Not in `provision_hospital()`, deliberately: usernames must be free across the
+whole deployment, that allocation lives in TypeScript, and a plpgsql second
+implementation of it would eventually disagree with the first.
+
+**Throttle and revocation on the email branch** — `app/(auth)/login/actions.ts`
+plus `resolveLoginEmail()` in `lib/accounts/sign-in.ts`. The email path signed
+in through Supabase Auth and looked at nothing else, so the one address an
+attacker is most likely to know was the one with no lockout on it. It now
+resolves the account and runs the same two checks the username branch does.
+`.eq` on a lowercased address rather than `.ilike`: `_` is a LIKE wildcard, and
+`john_doe@gmail.com` matching `johnxdoe@gmail.com` would resolve somebody else's
+account.
+
+**`refuseIfLastWayIn()` — `lib/accounts/provision.ts`.** Founders holding account
+rows means the disable and remove buttons now point at the owner's own login for
+the first time. Refuses disabling or removing your own account, and refuses
+removing the last enabled administrator; enabling is never guarded. Both server
+actions pass `session.userId` for it.
+
+**`npm run db:backfill-founders`** — `scripts/backfill-founder-accounts.mjs`.
+The self-heal only covers founders who sign in again; this walks every tenant.
+Dry run by default, `--apply` writes. It imports the real username helpers from
+`lib/credentials.ts` rather than restating them in SQL (needs Node ≥ 22.18 for
+type stripping, which is what CI targets).
+
+**`20260902091000_founder_accounts.sql`** is comments only — the table already
+accepted the row it needed; nothing ever wrote one. It corrects
+`login_email`'s description, which said "synthetic and immutable" when only the
+second half is universally true.
+
+## Open
+
+- The backfill has been dry-run against the hosted project (4 rows: Care
+  Hospitals ×2, Healing Hands, Sunrise) but **not applied**.
+- The affected account's password was reset from the Supabase dashboard, so it
+  is usable today; its `staff_accounts` row lands on its next sign-in or on the
+  backfill, whichever comes first.

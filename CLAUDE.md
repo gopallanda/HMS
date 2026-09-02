@@ -123,6 +123,8 @@ their `app_role`.
 - **`super_admin` is the one membership role that overrides the staff role**, because it already opens every RLS policy — withholding a permission from it in the app would be theatre. `admin` deliberately does not, or every Manager would gain `settings.manage`.
 - `staff.role` (the old `app_role`) still exists and is **derived from `role_id` by trigger**. Do not write it. It survives only because `create_visit` still checks it; it goes when that check does.
 - **Credentials are handed over at the desk. There is no invitation email.** Staff in a small Indian hospital do not have work mailboxes and will not complete an email round trip before their first shift. `provisionStaffAccount` returns a username and a temporary password, shown once, with copy buttons, and there is no "show it again" anywhere. Lost credentials → reset, which mints a new password and re-raises `must_change_password`.
+- **A founder is a member of staff too.** `/signup` creates an auth user from the owner's own mailbox and `provision_hospital` gives them a hospital, a membership and a staff row — and for a while, nothing else. Without a `staff_accounts` row they had no username, no sign-in throttle, no `disabled_at` to revoke through, and `/forgot-password` matched nothing and returned silently while the form promised a link. `ensureFounderAccount` (`lib/accounts/founder.ts`) writes that row at signup and again, idempotently, on every email sign-in, so a founder created before it existed is repaired the next time they log in. It never blocks a sign-in: being shut out of the hospital you just created is worse than a recovery path repaired one visit later.
+- **The disable and remove buttons refuse the last way in.** Once founders hold account rows, those buttons point at the owner's own login. `disabled_at` is read by the proxy on every request, so disabling yourself is the last click that works — and a one-admin hospital would then need a service-role write to get back. `refuseIfLastWayIn` in `lib/accounts/provision.ts` blocks disabling or removing your own account, and blocks removing the last enabled administrator. Enabling is never guarded; it only widens access.
 - Staff sign in with a **username**, not an email. `lib/credentials.ts` is the single module that builds the synthetic login address; a second implementation of it will disagree with the first and nobody will be able to explain why one person cannot sign in.
 - The **forced-password-change gate lives in the proxy**, not on a page. A page-level check is bypassed by deep-linking to any other route. Three exemptions and no more: `/change-password`, `/reset-password/*`, `/access-denied`.
 - The **only email this product sends is a password reset**. Its base URL comes from `APP_BASE_URL` in server config, never from `Host` or `X-Forwarded-Host` — that is host-poisoning account takeover, and framework origin checks do not save you.
@@ -178,10 +180,16 @@ staff_accounts   id, hospital_id, staff_id, auth_user_id, login_email,
                  must_change_password, failed_sign_ins, first_failed_at,
                  locked_until, last_login_at, created_at, created_by,
                  disabled_at
-                 -- login_email is synthetic and immutable; contact_email is a
-                 -- real mailbox used only for a reset link, never to sign in.
+                 -- login_email is the address Auth signs in with, and is
+                 -- immutable: synthetic for staff provisioned at the desk, the
+                 -- founder's own mailbox for an account made through /signup.
+                 -- contact_email is a real mailbox used only for a reset link,
+                 -- never to sign in; for a founder the two are equal.
                  -- Revoking access is ONE write: disabled_at.
                  -- The temporary password itself is never stored.
+                 -- EVERY login has a row here, founders included. Written in
+                 -- two places, both server only: provisionStaffAccount() and
+                 -- ensureFounderAccount().
 
 password_reset_tokens
                  id, hospital_id, account_id, token_hash, expires_at,
