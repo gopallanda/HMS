@@ -409,3 +409,5 @@ Hospital **services** are largely GST-exempt; **pharmacy sales** are taxable. Th
 - If a task would require changing `patients`, `visits`, `invoices`, `payments`, `charge_items`, or `stock_ledger` schema — **stop and ask** before writing the migration.
 - If a requirement seems to need a global unique constraint, it's wrong. Scope it to `hospital_id`.
 - If a feature is not in the current phase, don't build it. Note it and move on.
+
+Do not add "Co-Author By Claude" ( or any AI co author ) while commit in the github repo. 
