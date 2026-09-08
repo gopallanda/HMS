@@ -33,7 +33,7 @@ export const PERMISSIONS = [
   'accounts.provision', 'accounts.reset_password',
   'roster.read', 'roster.write',
   'roles.manage', 'departments.manage',
-  'settings.manage', 'reports.view',
+  'settings.manage', 'reports.view', 'reports.integrity',
 ] as const;
 
 export type Permission = (typeof PERMISSIONS)[number];
@@ -114,7 +114,10 @@ export const PERMISSION_GROUPS: readonly {
     key: 'administration',
     label: 'Administration',
     description: 'Configuration. roles.manage lets a role edit the roles, including its own.',
-    permissions: ['roles.manage', 'departments.manage', 'settings.manage', 'reports.view'],
+    permissions: [
+      'roles.manage', 'departments.manage', 'settings.manage',
+      'reports.view', 'reports.integrity',
+    ],
   },
 ];
 
@@ -158,6 +161,8 @@ export const PERMISSION_LABEL: Record<Permission, string> = {
   'departments.manage': 'Create and edit departments',
   'settings.manage': 'Change hospital settings, branding and printing',
   'reports.view': 'Open reports and the day close',
+  'reports.integrity':
+    'See who voided, discounted, deferred and reprinted, by name',
 };
 
 /** A set of permissions, as carried on a session. */

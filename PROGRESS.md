@@ -942,3 +942,195 @@ second half is universally true.
 - The affected account's password was reset from the Supabase dashboard, so it
   is usable today; its `staff_accounts` row lands on its next sign-in or on the
   backfill, whichever comes first.
+
+---
+
+# Cash integrity — the report the owner is buying
+
+## Why
+
+Every fact this needs had been written since block 1 and none of it was
+readable. `invoices.void_reason` says a bill was retired but not by whom —
+`created_by` is whoever raised it. `payments.reversal_reason` says a collection
+was undone but not when. `log_receipt_print()` had been counting trips to the
+printer since 20260829090100 and nothing had ever read one back. Audit-grade
+data, and the product was blind to it.
+
+`day_close_report` answers "what came in today". This answers "what did not,
+and who decided that" — which is the question a small hospital's owner is
+actually buying software to answer.
+
+## What it counts
+
+Five kinds of event over an IST date range, defaulting to the last seven days.
+A range and not a day, deliberately: one void is an incident, six by one person
+in a week is the thing worth seeing, and a one-day screen can never show it.
+
+| Kind | Source | Why that source |
+| --- | --- | --- |
+| `void` | `audit_log` | the actor lives nowhere else |
+| `reversal` | `audit_log` | same |
+| `reprint` | `audit_log` | the **second** copy onwards; the first print is the receipt |
+| `discount` | `invoices` | `discount_amount` is written once by `collect_payment` and never updated, so the row carries its own actor and time |
+| `deferral` | `visit_payment_deferrals` | same |
+
+Plus one flag, `after_close`: the event landed on a business day somebody had
+already counted the drawer for. A void on today's bill is a correction; a void
+on a bill from a day closed last Tuesday is a different conversation. Measured
+against the *latest* close, because `day_closures.closed_at` is updated by a
+re-close rather than duplicated — an event between a first count and a re-count
+therefore reads as before-close once the day is counted again. Deliberate, and
+noted in the migration.
+
+Windowed on when the event happened, never on the day of the bill it touched.
+
+## Shape
+
+**Migrations**
+
+| Version | What |
+| --- | --- |
+| `20260908090000_cash_integrity_report` | `has_permission()`, `cash_integrity_report()` |
+| `20260908090100_reports_integrity_permission` | `reports.integrity` into `seed_system_roles()` + backfill |
+
+Two buckets in one flat table with a `bucket` discriminator — the shape
+`day_close_report` uses, and for the same reason: one round trip, one snapshot,
+so the league table and the event list describe the same moment. `summary` is
+counted in Postgres over the whole range and is **never** capped; `event` is
+capped at 500. A league table folded from a truncated event list would
+under-report precisely the person generating the most events.
+
+**Files**
+
+- `lib/rpc/integrity.ts` — the wrapper, the kind labels, `groupIntegrity()`
+- `app/(app)/reports/integrity/page.tsx`, `integrity-events.tsx`
+- `app/(app)/reports/page.tsx` — a third card, its figure read the same way
+- `lib/utils/dates.ts` — `shiftIstDay()`, so the two new screens do not each
+  grow their own copy (`day-close`'s `shiftDay` is still its own; left alone)
+
+## `has_permission()` — new, and the point of it
+
+The database could only ask what **membership** role a caller holds
+(`app_role()`, `has_role()`, `is_hospital_admin()`). That is the coarse RLS
+safety net and it is deliberately not the product's permission model
+(CLAUDE.md 3.6).
+
+This report *needs* a database-side guard: `audit_log` is readable only by
+`is_hospital_admin()`, so the function must be `SECURITY DEFINER`, and
+PostgREST will happily call it with a nurse's JWT. The route guard and the nav
+are not boundaries.
+
+Guarding it on `is_hospital_admin()` would have reproduced exactly the bug
+CLAUDE.md 3.6 exists to prevent: an administrator ticks `reports.integrity` for
+their own "Owner" or "Auditor" role, the nav shows it, the proxy allows it, and
+the database refuses it. A permission that grants nothing reads as a broken
+screen.
+
+`has_permission()` is `my_access()` asking about one key instead of returning
+all of them — the same `staff → roles → role_permissions` path, the same
+`super_admin` override, the same no-staff-record fallback that
+`resolveAccess()` / `fallbackAccess()` apply. Written by reading
+`lib/rbac/resolve.ts` rather than by inventing a second rule.
+
+## `reports.integrity`, not `reports.view`
+
+`reports.view` opens figures about the hospital. This report is about **people**
+— it names who voided, who discounted, who took a third copy off the printer. A
+hospital may reasonably want its accountant reconciling the money without being
+handed a conduct report on the counter staff.
+
+Seeded to `admin` and `manager` only. **Not** `accountant`, even though
+reconciliation is the obvious use: a new key is granted narrowly and widened by
+whoever runs the hospital in ten seconds at `/admin/roles`, whereas a key
+seeded onto a role by mistake has to be unticked on every tenant that already
+has it.
+
+## Open — the commercial gate blocks schema top-ups
+
+**Found by pushing this.** `20260828090000` and `20260902090600` both claim a
+suspended tenant is seeded too, "because suspension means cannot do new
+business, not cannot be brought up to the current schema". That was a statement
+of intent and it was never true:
+
+- `roles` and `role_permissions` carry `roles_hospital_active` /
+  `role_permissions_hospital_active` (`20260828090000`);
+- `enforce_hospital_active()` has **no exemption for a null `app_role()`** — a
+  migration, a seed, the service role — the way every `assert_*` function in
+  this schema does;
+- the idempotent re-seed is an `UPDATE` even when nothing changes, so the gate
+  fires.
+
+The earlier backfills only passed because no tenant had expired yet. This one
+did not: the first push failed on Healing Hands Hospital, whose trial ended
+08 Sep 2026.
+
+Skipping that tenant was the other option and it is worse — nothing re-runs
+`seed_system_roles` when a plan is upgraded, so a tenant skipped is skipped
+permanently, and their administrator would tick a checkbox at `/admin/roles`
+that their own Admin role never received.
+
+So `20260908090100` takes the two triggers off around the backfill and puts
+them straight back. The whole migration is one transaction, so a failure rolls
+the `DISABLE` back with everything else. Verified after the push: both triggers
+read `tgenabled = 'O'`.
+
+**That is a workaround, not a fix.** The decision still to be made: should
+`enforce_hospital_active()` exempt a session with no `app_role()`? It would
+align the commercial gate with every `assert_*` in the schema, and it would
+also mean service-role writes (account provisioning, for one) stop being gated
+by an expired trial — which is a product call, not a refactor, and did not
+belong in a report's migration.
+
+## Verified
+
+- `npm run db:push` — all three pending migrations applied to the hosted project
+  (`20260902091000_founder_accounts` was pending from the previous slice)
+- `npm run typecheck`, `npm run lint` (5 pre-existing warnings, none new),
+  `npm run build`
+- `cash_integrity_report` run over every tenant against real data: Sunrise
+  returns 6 summary rows across void / reversal / discount / deferral, one of
+  them flagged `after_close`; the other three tenants correctly return nothing
+- print ranking checked read-only: the one `receipt_print` row in the project
+  ranks `print_no = 1` and is correctly **not** counted as a reprint
+- `reports.integrity` seeded to `admin` and `manager` on all four hospitals
+- the proxy bounces `/reports/integrity` to `/login?next=%2Freports%2Fintegrity`
+
+## Still open
+
+- `types/database.ts` gained `has_permission` and `cash_integrity_report` by
+  hand, checked against the live schema through `pg_get_function_arguments` and
+  `pg_get_function_result`. `npm run db:types` still needs
+  `SUPABASE_ACCESS_TOKEN`, which is not in `.env.local`.
+- No seed data exercises `reprint`: the project has exactly one
+  `receipt_print` row. The branch is correct by inspection and by the ranking
+  check above, but a seeded second print would make it visible on the screen.
+- The screen itself has not been looked at signed in. Everything behind it is
+  verified against the hosted project; the render is not.
+
+## Follow-up, same day — `20260908090200_integrity_void_reversals`
+
+`void_invoice()` reverses every payment on the bill as part of retiring it,
+writing the void's reason onto each payment row. The `payments_audit` trigger
+fires on each, so the first version of the report saw one `void` **and** one
+`reversal` per payment — same actor, same instant, same reason — and counted
+them all. The hosted project showed it straight away: Sunrise reported 4 voids
+and 4 reversals by the service role for identical amounts, because they were
+the same four acts seen twice.
+
+Not cosmetic. The per-person table is ranked on event count, so voiding a paid
+bill moved somebody up it twice as fast as voiding an unpaid one — a fact about
+whether the patient had paid yet, not about the person.
+
+Excluded by timestamp: `audit_log.at` is `now()`, the **transaction** start
+time, so a void's row and the reversals it causes share an `at` exactly.
+`reverse_payment()` can never collide with the test — it does not set an
+invoice to void, so there is no matching row. After the fix Sunrise reads
+`void 4 (service role) / void 1 / reversal 1 / discount 1 / deferral 3`, and
+the single remaining reversal is the genuine standalone `reverse_payment`,
+correctly flagged `after_close`.
+
+The page header no longer sums amounts across kinds either. A retired bill, a
+payment handed back and a concession are three different quantities, and a
+reprint's amount is a bill printed again rather than money that moved.
+Concessions given is the one figure that stands alone, so that is what the
+header carries.

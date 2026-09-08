@@ -1,11 +1,21 @@
-import { CalendarCheckIcon, WalletCardsIcon, type LucideIcon } from 'lucide-react';
+import {
+  CalendarCheckIcon,
+  ShieldAlertIcon,
+  WalletCardsIcon,
+  type LucideIcon,
+} from 'lucide-react';
 import Link from 'next/link';
 
 import { PageHeader } from '@/components/shared/page-header';
 import { requireSession } from '@/lib/auth/session';
 import { mayOpen } from '@/lib/rbac/routes';
+import {
+  cashIntegrityReport,
+  groupIntegrity,
+  type IntegrityRow,
+} from '@/lib/rpc/integrity';
 import { createClient } from '@/lib/supabase/server';
-import { formatDate, todayIst } from '@/lib/utils/dates';
+import { formatDate, shiftIstDay, todayIst } from '@/lib/utils/dates';
 import { formatMoney } from '@/lib/utils/money';
 
 export const metadata = { title: 'Reports' };
@@ -16,8 +26,8 @@ export const metadata = { title: 'Reports' };
  * ROUTE_PERMISSIONS has had an entry for /reports since block 3 and there was
  * no directory behind it: a guarded path that 404s. The audit called it, and
  * the honest options were to build something or delete the line. There are now
- * two reports worth linking -- the day close and the outstanding dues -- so
- * this is a door rather than a dead end.
+ * three reports worth linking -- the day close, the outstanding dues and the
+ * integrity report -- so this is a door rather than a dead end.
  *
  * Deliberately an INDEX and not a dashboard. `/` is already the hospital
  * overview with the day's takings on it; a second screen computing the same
@@ -35,9 +45,16 @@ export default async function ReportsPage() {
   const held = session.access.permissions;
   const today = todayIst();
 
-  // Two small reads, both through RLS. Neither is the authority on anything:
-  // each is the headline of the screen it links to.
-  const [dayClose, dues] = await Promise.all([
+  // Three small reads. Neither is the authority on anything: each is the
+  // headline of the screen it links to.
+  //
+  // The integrity read is skipped entirely for a viewer who cannot open it.
+  // Calling it anyway would raise 42501 inside the RPC, and a card that shows
+  // a dash because the reader lacks a permission is indistinguishable from one
+  // showing a dash because the query broke.
+  const mayAudit = held.has('reports.integrity');
+
+  const [dayClose, dues, integrity] = await Promise.all([
     supabase.rpc('day_close_report', { p_hospital_id: session.hospitalId, p_date: today }),
     supabase
       .from('invoice_summary')
@@ -45,12 +62,19 @@ export default async function ReportsPage() {
       .eq('hospital_id', session.hospitalId)
       .in('status', ['unpaid', 'partial'])
       .gt('balance', 0),
+    mayAudit
+      ? cashIntegrityReport(supabase, session.hospitalId, shiftIstDay(today, -6), today, 1)
+      : Promise.resolve({ data: null, error: null }),
   ]);
 
   const collected =
     (dayClose.data ?? []).find((row) => row.bucket === 'total' && row.key === 'collected')
       ?.amount ?? 0;
   const outstanding = (dues.data ?? []).reduce((sum, row) => sum + row.balance, 0);
+  // eventCount is folded from the summary bucket, which the RPC counts over
+  // the whole range -- so p_limit: 1 above keeps the payload to one event row
+  // without making the headline wrong.
+  const audit = groupIntegrity((integrity.data ?? []) as IntegrityRow[]);
 
   const cards = [
     {
@@ -71,6 +95,22 @@ export default async function ReportsPage() {
       figure: dues.error ? null : formatMoney(outstanding),
       figureLabel: `${(dues.data ?? []).length} invoice${(dues.data ?? []).length === 1 ? '' : 's'} owing`,
     },
+    {
+      href: '/reports/integrity',
+      icon: ShieldAlertIcon,
+      title: 'Cash integrity',
+      description:
+        'Bills voided, payments reversed, concessions given, patients let through unpaid and receipts printed twice — by name, with the reason typed at the time.',
+      figure: integrity.error ? null : String(audit.eventCount),
+      // Not money: the five kinds measure five different things and a total of
+      // them would be a number that means nothing. The count is the headline,
+      // and the one qualifier worth putting on the card is how many of those
+      // events landed on a day already closed.
+      figureLabel:
+        audit.afterCloseCount > 0
+          ? `in 7 days · ${audit.afterCloseCount} after close`
+          : 'in the last 7 days',
+    },
   ].filter((card) => mayOpen(card.href, held));
 
   return (
@@ -86,7 +126,7 @@ export default async function ReportsPage() {
           for billing.read or reports.view.
         </p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           {cards.map((card) => (
             <ReportCard key={card.href} {...card} />
           ))}

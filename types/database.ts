@@ -31,6 +31,11 @@
  * schema column-for-column and signature-for-signature through
  * information_schema.columns and pg_get_function_arguments.
  *
+ * Cash integrity, 2026-09-08: has_permission and cash_integrity_report, from
+ * 20260908090000_cash_integrity_report.sql after it was pushed, and then
+ * checked argument-for-argument and column-for-column against the live schema
+ * through pg_get_function_arguments and pg_get_function_result.
+ *
  * EmploymentType and ShiftStatus are unions over CHECK constraints rather than
  * Postgres enums, so they are absent from Enums below on purpose: generated
  * output would type those columns as plain `string`, and narrowing them here
@@ -1232,6 +1237,47 @@ export type Database = {
           label: string;
           entry_count: number;
           amount: number;
+        }[];
+      };
+      has_permission: {
+        Args: { p_key: string };
+        Returns: boolean;
+      };
+      cash_integrity_report: {
+        Args: {
+          p_hospital_id?: string | null;
+          p_from?: string | null;
+          p_to?: string | null;
+          p_limit?: number | null;
+        };
+        /**
+         * One flat table with a `bucket` discriminator, the shape
+         * day_close_report uses. Half these columns are null in each bucket:
+         * `summary` fills entry_count / amount / after_close_count and
+         * `event` fills the rest. lib/rpc/integrity.ts splits them apart.
+         *
+         * `kind` is deliberately typed as the union rather than as `string`,
+         * the same narrowing this file already applies to the CHECK-constraint
+         * columns -- but groupIntegrity() still checks it at runtime, because
+         * a value the database grows and this build does not know is a real
+         * possibility across a deploy boundary.
+         */
+        Returns: {
+          bucket: 'summary' | 'event';
+          kind: 'void' | 'reversal' | 'discount' | 'deferral' | 'reprint';
+          actor_id: string | null;
+          actor_name: string | null;
+          entry_count: number | null;
+          amount: number | null;
+          after_close_count: number | null;
+          event_id: string | null;
+          occurred_at: string | null;
+          invoice_id: string | null;
+          invoice_no: string | null;
+          patient_name: string | null;
+          reason: string | null;
+          detail: string | null;
+          after_close: boolean | null;
         }[];
       };
     };

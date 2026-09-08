@@ -100,6 +100,12 @@ export const ROUTE_PERMISSIONS: readonly (readonly [string, Permission])[] = [
   ['/print/prescription', 'consultation.read'],
   ['/print', 'billing.read'],
 
+  // The integrity report is about PEOPLE, not about the hospital's figures --
+  // it names who voided, who discounted, who took a third copy off the
+  // printer. Its own key, narrowing /reports, so a hospital can let an
+  // accountant reconcile the money without handing them a conduct report on
+  // the counter staff. Longest prefix wins, so this is the one that applies.
+  ['/reports/integrity', 'reports.integrity'],
   ['/reports', 'reports.view'],
 ];
 

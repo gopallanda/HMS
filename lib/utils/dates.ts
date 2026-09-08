@@ -58,6 +58,19 @@ function toDate(value: string | Date): Date {
   return value instanceof Date ? value : new Date(value);
 }
 
+/**
+ * N days either side of an IST day, as "YYYY-MM-DD".
+ *
+ * Arithmetic on the calendar day, deliberately, not on a timestamp: adding
+ * 86,400,000ms to a Date is the version that goes wrong, and it goes wrong in
+ * whichever timezone the server happens to be in. UTC noon-free construction
+ * from the three numbers has no such edge — IST has no DST either way.
+ */
+export function shiftIstDay(day: string, days: number): string {
+  const [year, month, date] = day.split('-').map(Number);
+  return new Date(Date.UTC(year, month - 1, date + days)).toISOString().slice(0, 10);
+}
+
 /** "Tuesday, 25 August 2026" — the dashboard's date line. */
 export function formatLongDate(value: string | Date = new Date()): string {
   return fmt({
