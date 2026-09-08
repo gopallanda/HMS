@@ -6,7 +6,7 @@ import {
   usernameStem,
   type ContactEmailProblem,
 } from '@/lib/credentials';
-import { reportError } from '@/lib/report-error';
+import { reportError, type ErrorContext } from '@/lib/report-error';
 import { generateTempPassword } from '@/lib/credentials.server';
 import { appBaseUrl } from '@/lib/env';
 import { createAdminClient } from '@/lib/supabase/admin';
@@ -89,7 +89,7 @@ export async function allocateUsername(
   }
 }
 
-export async function provisionStaffAccount(input: {
+async function runProvisionStaffAccount(input: {
   hospitalId: string;
   hospitalSlug: string;
   actorId: string;
@@ -334,7 +334,7 @@ export type ResetResult =
  * it means a temporary password read aloud over a phone is one sign-in away
  * from being dead.
  */
-export async function resetStaffPassword(input: {
+async function runResetStaffPassword(input: {
   hospitalId: string;
   accountId: string;
 }): Promise<ResetResult> {
@@ -471,7 +471,7 @@ async function refuseIfLastWayIn(
  * why it is reversible, which matters on a Tuesday when somebody is disabled
  * by mistake.
  */
-export async function setAccountEnabled(input: {
+async function runSetAccountEnabled(input: {
   hospitalId: string;
   accountId: string;
   actorId: string;
@@ -519,7 +519,7 @@ export async function setAccountEnabled(input: {
  *
  * The staff record itself is untouched: the person still works here.
  */
-export async function removeStaffAccount(input: {
+async function runRemoveStaffAccount(input: {
   hospitalId: string;
   accountId: string;
   actorId: string;
@@ -581,6 +581,109 @@ export async function removeStaffAccount(input: {
     .eq('hospital_id', input.hospitalId);
 
   return { ok: true };
+}
+
+/**
+ * ============================================================================
+ * THE LAST RESORT, ROUND EVERY ENTRY POINT BELOW
+ * ============================================================================
+ *
+ * Everything in this module returns a discriminated result rather than
+ * throwing, and the Server Actions that call it turn `ok: false` into a
+ * sentence on the form. That contract held for every failure the code
+ * anticipated and for none of the ones it did not.
+ *
+ * What it missed is that configuration throws. `appBaseUrl()` is a hard error
+ * in production when APP_BASE_URL is unset, and `serviceRoleKey()` is one when
+ * the service role key is; both are reached from here, and both were escaping
+ * as unhandled exceptions. An unhandled exception in a Server Action is a 500
+ * with a digest, which the browser renders as a blank platform error page --
+ * so an administrator who had just created a doctor lost the screen, and never
+ * saw that the staff record HAD been written and only the login had failed.
+ * That message is the difference between clicking `Issue login` on the new row
+ * and typing the whole person in again.
+ *
+ * So each entry point is wrapped once, here, and an unexpected throw becomes
+ * the same shape as an expected failure. It is reported first: this catch
+ * exists to keep the hospital working, not to make a misconfigured deployment
+ * look healthy, and a swallowed error with nothing in the log would do exactly
+ * that (CLAUDE.md 7 -- never a silent no-op).
+ *
+ * Deliberately a wrapper rather than a try around each body: the rollback
+ * ladders inside are the delicate part of this file, and burying them one
+ * level deeper to add a catch that applies to all four equally would be a
+ * large diff over the most careful code here.
+ */
+async function guarded<T>(
+  action: string,
+  context: ErrorContext,
+  onThrow: (message: string) => T,
+  run: () => Promise<T>,
+): Promise<T> {
+  try {
+    return await run();
+  } catch (error) {
+    reportError(action, error, context);
+
+    // The message names configuration explicitly because that is what this
+    // almost always is on a fresh deployment, and "something went wrong" sends
+    // an administrator to the wrong place. It never carries the thrown text:
+    // that is developer-facing and reaches the log above, which is where a
+    // service role key or a connection string must stay.
+    return onThrow(
+      `${MISCONFIGURED} Nothing about the login was changed; the staff record itself is unaffected.`,
+    );
+  }
+}
+
+const MISCONFIGURED =
+  'The account service is not available -- this deployment may be missing its ' +
+  'configuration (APP_BASE_URL, SUPABASE_SERVICE_ROLE_KEY). Ask a developer to check ' +
+  'the server logs.';
+
+export function provisionStaffAccount(input: {
+  hospitalId: string;
+  hospitalSlug: string;
+  actorId: string;
+  staffId: string;
+  contactEmail: string;
+}): Promise<ProvisionResult> {
+  return guarded(
+    'provisionStaffAccount',
+    { hospitalId: input.hospitalId, userId: input.actorId, extra: { staff_id: input.staffId } },
+    (message) => fail(null, 'unknown', message),
+    () => runProvisionStaffAccount(input),
+  );
+}
+
+export function resetStaffPassword(input: {
+  hospitalId: string;
+  accountId: string;
+}): Promise<ResetResult> {
+  return guarded(
+    'resetStaffPassword',
+    { hospitalId: input.hospitalId, extra: { account_id: input.accountId } },
+    (message) => ({ ok: false, message }),
+    () => runResetStaffPassword(input),
+  );
+}
+
+export function setAccountEnabled(input: Parameters<typeof runSetAccountEnabled>[0]) {
+  return guarded(
+    'setAccountEnabled',
+    { hospitalId: input.hospitalId, extra: { account_id: input.accountId } },
+    (message) => ({ ok: false as const, message }),
+    () => runSetAccountEnabled(input),
+  );
+}
+
+export function removeStaffAccount(input: Parameters<typeof runRemoveStaffAccount>[0]) {
+  return guarded(
+    'removeStaffAccount',
+    { hospitalId: input.hospitalId, extra: { account_id: input.accountId } },
+    (message) => ({ ok: false as const, message }),
+    () => runRemoveStaffAccount(input),
+  );
 }
 
 function fail(
