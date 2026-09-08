@@ -73,11 +73,11 @@ export const setAccountEnabledSchema = z.object({
  */
 export const signInSchema = z.object({
   identifier: z
-    .string({ error: 'Enter your username.' })
+    .string({ error: 'Enter your username or email address.' })
     .trim()
     .toLowerCase()
-    .min(1, 'Enter your username.')
-    .max(254, 'That is too long to be a username.'),
+    .min(1, 'Enter your username or email address.')
+    .max(254, 'That is too long to be a username or an email address.'),
   password: z.string().min(1, 'Enter your password.'),
 });
 
