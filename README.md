@@ -16,6 +16,42 @@ pharmacy and IPD appear in the sidebar greyed out, tagged with their phase.
 
 ---
 
+## Where things actually run (read this before chasing "the app is slow")
+
+Two facts that are easy to get wrong, and both cost round trips:
+
+**The Supabase project is in `ap-southeast-2` (Sydney), NOT `ap-south-1`
+(Mumbai).** CLAUDE.md and the lines above still say Mumbai because that is
+where it was always meant to live. Verified 2026-09-09: the direct host
+resolves to an AWS Sydney IPv6 address, and the only pooler that accepts the
+tenant is `aws-0-ap-southeast-2.pooler.supabase.com`. Until the project is
+actually moved, every statement here that says Mumbai is aspiration.
+
+**`vercel.json` pins serverless functions to the region the DATABASE is in,
+not the region the users are in.** A page renders several queries in sequence,
+so function-to-Postgres latency is paid N times per request while
+user-to-function latency is paid once. Functions were defaulting to `iad1`
+(Washington) against a Sydney database, which is where a ~2s TTFB came from.
+`regions: ["syd1"]` co-locates them.
+
+**If the database is ever moved to Mumbai, change `vercel.json` to `bom1` in
+the same commit.** The two settings are one decision and they are wrong apart.
+Moving it is worth doing: Indian hospital records sitting in Australia is a
+data-residency question somebody will eventually ask, and `bom1` + `ap-south-1`
+is faster for these users than the Sydney pair.
+
+### Connecting from a machine with no IPv6 route
+
+`db.<ref>.supabase.co` is IPv6-only. On a network without an IPv6 route
+`npm run db:push` fails with `LegacyDbConnectError ... getaddrinfo ENOTFOUND`.
+Use the session pooler instead (IPv4, port 5432, user `postgres.<ref>`):
+
+```
+postgresql://postgres.<ref>:<password>@aws-0-ap-southeast-2.pooler.supabase.com:5432/postgres
+```
+
+---
+
 ## Setup
 
 This project uses a **hosted** Supabase project (region: Mumbai, `ap-south-1`).

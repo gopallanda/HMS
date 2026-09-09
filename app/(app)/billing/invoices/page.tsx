@@ -63,9 +63,19 @@ export default async function InvoicesPage({
   // whether there IS a tail; it is sliced off before anything renders.
   const LIST_LIMIT = 200;
 
-  const { data, error } = await query
-    .order('invoice_date', { ascending: false })
-    .limit(LIST_LIMIT + 1);
+  // The staff name map is fetched ALONGSIDE the invoice list rather than after
+  // the payments read that needs it. It does not depend on either, it is one
+  // small per-hospital table, and every round trip on this page costs the
+  // latency between the function and Postgres -- so a lookup that can start at
+  // t=0 should not be the third leg of a waterfall.
+  const [{ data, error }, staffResult] = await Promise.all([
+    query.order('invoice_date', { ascending: false }).limit(LIST_LIMIT + 1),
+    supabase
+      .from('staff')
+      .select('user_id, full_name')
+      .eq('hospital_id', session.hospitalId)
+      .not('user_id', 'is', null),
+  ]);
 
   if (error) {
     return (
@@ -92,8 +102,9 @@ export default async function InvoicesPage({
   // all -- for anyone else the policies return nothing and the row simply has
   // no Payments button.
   //
-  // Collector names come from a second small read rather than a join, because
-  // payments.collected_by points at auth.users and the name lives on staff.
+  // Collector names come from the staff map fetched above rather than a join,
+  // because payments.collected_by points at auth.users and the name lives on
+  // staff.
   // ---------------------------------------------------------------------------
   const payments: Record<string, InvoicePayment[]> = {};
 
@@ -108,19 +119,9 @@ export default async function InvoicesPage({
       )
       .order('paid_at', { ascending: true });
 
-    const collectorIds = [...new Set((rows ?? []).map((row) => row.collected_by))];
     const names = new Map<string, string>();
-
-    if (collectorIds.length > 0) {
-      const { data: staff } = await supabase
-        .from('staff')
-        .select('user_id, full_name')
-        .eq('hospital_id', session.hospitalId)
-        .in('user_id', collectorIds);
-
-      for (const person of staff ?? []) {
-        if (person.user_id) names.set(person.user_id, person.full_name);
-      }
+    for (const person of staffResult.data ?? []) {
+      if (person.user_id) names.set(person.user_id, person.full_name);
     }
 
     for (const row of rows ?? []) {

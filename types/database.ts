@@ -22,6 +22,11 @@
  * services.unit, the service_unit enum and seed_starter_services come from
  * 20260901090000_service_units_and_starter_catalogue.sql.
  *
+ * Day-close composition, 2026-09-09: day_close_report gains three columns
+ * (detail, note, actor_name) and three buckets (patient, service, concession)
+ * plus a `tax` total, from 20260909090000_day_close_composition.sql. Written
+ * after that migration was applied and checked against the live function.
+ *
  * MVP gap closure, 2026-09-02: add_payment, cancel_visit, reverse_payment,
  * close_day and log_document_print; the day_closures table;
  * invoices.discount_amount / discount_reason (and the same two on
@@ -1231,10 +1236,29 @@ export type Database = {
       };
       day_close_report: {
         Args: { p_hospital_id: string; p_date?: string | null };
+        /**
+         * One flat table with a `bucket` discriminator, so the day-close screen
+         * makes a single round trip and every section is guaranteed to come
+         * from the same snapshot. lib/rpc/billing.ts splits it apart.
+         *
+         * `detail`, `note` and `actor_name` are null in every bucket that
+         * predates 20260909090000 -- they carry a service category, a patient
+         * MRN, and the reason and author of a concession.
+         */
         Returns: {
-          bucket: 'total' | 'mode' | 'staff' | 'department';
+          bucket:
+            | 'total'
+            | 'mode'
+            | 'staff'
+            | 'department'
+            | 'patient'
+            | 'service'
+            | 'concession';
           key: string;
           label: string;
+          detail: string | null;
+          note: string | null;
+          actor_name: string | null;
           entry_count: number;
           amount: number;
         }[];

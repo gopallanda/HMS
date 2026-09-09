@@ -190,8 +190,18 @@ export function groupDayClose(rows: DayCloseRow[]) {
      * without "and gave away 2,300" beside it.
      */
     discounted: total('discounted'),
+    /**
+     * Tax on the day's live bills. Not a headline -- it exists so the service
+     * section can bridge to Billed exactly:
+     *
+     *   sum(service lines) + tax - concessions = billed
+     *
+     * On an OPD-only day this is zero and the bridge is one subtraction
+     * (CLAUDE.md 8).
+     */
+    tax: total('tax'),
     // UNION ALL does not promise an order. The modes are shown in the same
-    // sequence every day (cash first, as at the counter), the other two by
+    // sequence every day (cash first, as at the counter), everything else by
     // size, because the biggest line is the one being reconciled first.
     byMode: of('mode').sort(
       (a, b) =>
@@ -200,5 +210,25 @@ export function groupDayClose(rows: DayCloseRow[]) {
     ),
     byStaff: of('staff').sort((a, b) => b.amount - a.amount),
     byDepartment: of('department').sort((a, b) => b.amount - a.amount),
+    /** Who the money came from. `detail` is the MRN. */
+    byPatient: of('patient').sort((a, b) => b.amount - a.amount),
+    /**
+     * What the work WAS, from the charge lines of the day's bills. `detail` is
+     * the raw service_category enum value, labelled by lib/services.ts -- the
+     * one place a category is given a display name.
+     *
+     * This reconciles to BILLED, not to collected: a payment is against an
+     * invoice and is never allocated to its lines, so a per-service share of a
+     * partial payment would be invented. The screen prints the bridge rather
+     * than leaving a section that quietly disagrees with the headline above it.
+     */
+    byService: of('service').sort((a, b) => b.amount - a.amount),
+    /**
+     * One row per discounted bill, not a total -- the total is already a
+     * headline card and is not a number anybody can act on. `key` is the
+     * invoice id, `label` its number, `detail` the patient, `note` the reason
+     * typed at the counter and `actor_name` whoever raised the bill.
+     */
+    concessions: of('concession').sort((a, b) => b.amount - a.amount),
   };
 }
