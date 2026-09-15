@@ -102,6 +102,76 @@ function prefillFrom(query: string): { full_name: string; phone: string } {
   return digits.length >= 6 ? { full_name: '', phone: trimmed } : { full_name: trimmed, phone: '' };
 }
 
+/**
+ * Patients already on file, one row each, for the clerk to pick from.
+ *
+ * Shared by the search box and the name field so the two lists read the same.
+ * The mobile number is on every row because it is what the clerk checks with
+ * the person at the counter: a name alone cannot tell two Lakshmis apart, and
+ * a shared household phone alone cannot tell a mother from her daughter.
+ *
+ * Up and Down move between rows, Enter picks (they are buttons).
+ */
+function MatchList({
+  matches,
+  note,
+  onPick,
+  listRef,
+}: {
+  matches: PatientSearchResult[];
+  note: string;
+  onPick: (match: PatientSearchResult) => void;
+  listRef?: React.Ref<HTMLDivElement>;
+}) {
+  function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+    const rows = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>('button'));
+    const at = rows.indexOf(document.activeElement as HTMLButtonElement);
+    if (at === -1) return;
+    event.preventDefault();
+    const next =
+      event.key === 'ArrowDown' ? Math.min(at + 1, rows.length - 1) : Math.max(at - 1, 0);
+    rows[next]?.focus();
+  }
+
+  return (
+    <div
+      ref={listRef}
+      onKeyDown={onKeyDown}
+      className="grid gap-1 rounded-xl border border-border/60 bg-muted/40 p-2"
+    >
+      <p className="px-1.5 pb-0.5 text-xs text-muted-foreground">{note}</p>
+      {matches.map((match) => (
+        <button
+          key={match.id}
+          type="button"
+          onClick={() => onPick(match)}
+          className="flex items-center gap-3 rounded-lg bg-background px-3 py-2 text-left text-sm transition-colors outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <span className="hidden font-mono text-xs text-muted-foreground sm:block">
+            {match.mrn}
+          </span>
+          <span className="min-w-0 flex-1 truncate font-medium">{match.full_name}</span>
+          <span className="hidden text-xs text-muted-foreground sm:block">
+            {ageGender(match.dob, match.gender)}
+          </span>
+          <span
+            className={cn(
+              'shrink-0 font-mono text-xs sm:w-32',
+              match.phone ? '' : 'text-muted-foreground',
+            )}
+          >
+            {match.phone ?? 'No mobile'}
+          </span>
+          <span className="hidden shrink-0 text-xs font-medium text-primary sm:block">
+            Use this patient
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function RegisterDesk({
   doctors,
   departments,
@@ -170,6 +240,31 @@ export function RegisterDesk({
   const { data, isFetching, active } = usePatientSearch(query);
   const matches = useMemo(() => data ?? [], [data]);
 
+  /**
+   * The name field searches too. A clerk who skips the search box and starts
+   * typing the name is the case the notebook trained them into, and a second
+   * MRN for a returning patient is made exactly there. Same RPC and cache as
+   * the search box; off once a patient is chosen, so correcting a chosen
+   * patient's spelling does not offer somebody else.
+   */
+  const [nameTyped, setNameTyped] = useState('');
+  const nameSearch = usePatientSearch(nameTyped, chosen === null);
+  const nameMatches = useMemo(
+    () => (chosen === null && nameSearch.active ? (nameSearch.data ?? []) : []),
+    [chosen, nameSearch.active, nameSearch.data],
+  );
+  const nameList = useRef<HTMLDivElement>(null);
+
+  function pick(match: PatientSearchResult) {
+    setChosen(fromSearch(match));
+    setEditingChosen(false);
+    setQuery('');
+    setNameTyped('');
+    // The row that had focus is about to unmount. Hand focus to the next
+    // question on the form rather than dropping it on <body>.
+    document.getElementById('department')?.focus();
+  }
+
   const doctor = doctors.find((option) => option.id === doctorId);
   const departmentId = departmentPick ?? doctor?.department_id ?? NO_DEPARTMENT;
 
@@ -237,6 +332,7 @@ export function RegisterDesk({
     if (result) setDismissed(result.visit_id);
     setIds(newIds());
     setQuery('');
+    setNameTyped('');
     setChosen(null);
     setEditingChosen(false);
     setGender('female');
@@ -366,32 +462,15 @@ export function RegisterDesk({
             is the normal case in an Indian household; this panel exists to save
             a re-type and to prevent a duplicate MRN, not to stop anybody. */}
         {active && (matches.length > 0 || isFetching) ? (
-          <div className="grid gap-1 rounded-xl border border-border/60 bg-muted/40 p-2">
-            <p className="px-1.5 pb-0.5 text-xs text-muted-foreground">
-              {isFetching && matches.length === 0
+          <MatchList
+            matches={matches}
+            note={
+              isFetching && matches.length === 0
                 ? 'Searching...'
-                : `${matches.length} already on file. Use one, or carry on registering a new patient.`}
-            </p>
-            {matches.map((match) => (
-              <button
-                key={match.id}
-                type="button"
-                onClick={() => {
-                  setChosen(fromSearch(match));
-                  setEditingChosen(false);
-                  setQuery('');
-                }}
-                className="flex items-center gap-3 rounded-lg bg-background px-3 py-2 text-left text-sm transition-colors hover:bg-accent"
-              >
-                <span className="font-mono text-xs text-muted-foreground">{match.mrn}</span>
-                <span className="min-w-0 flex-1 truncate font-medium">{match.full_name}</span>
-                <span className="hidden text-xs text-muted-foreground sm:block">
-                  {ageGender(match.dob, match.gender)}
-                </span>
-                <span className="shrink-0 text-xs font-medium text-primary">Use this patient</span>
-              </button>
-            ))}
-          </div>
+                : `${matches.length} already on file. Check the mobile number, then use one, or carry on registering a new patient.`
+            }
+            onPick={pick}
+          />
         ) : null}
 
         {active && matches.length === 0 && !isFetching ? (
@@ -425,6 +504,7 @@ export function RegisterDesk({
               onClick={() => {
                 setChosen(null);
                 setQuery('');
+                setNameTyped('');
                 searchInput.current?.focus();
               }}
               className="ml-auto flex items-center gap-1 text-xs font-medium text-primary hover:underline"
@@ -442,12 +522,20 @@ export function RegisterDesk({
               htmlFor="full_name"
               required
               error={fieldError(state, 'full_name')}
+              hint={nameMatches.length > 0 ? 'Already on file? Press ↓ to pick below.' : undefined}
               className="sm:col-span-5"
             >
               <Input
                 id="full_name"
                 name="full_name"
                 defaultValue={prefillFrom(query).full_name}
+                onChange={(event) => setNameTyped(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowDown' && nameMatches.length > 0) {
+                    event.preventDefault();
+                    nameList.current?.querySelector('button')?.focus();
+                  }
+                }}
                 maxLength={120}
                 autoComplete="off"
                 aria-invalid={fieldError(state, 'full_name') !== undefined}
@@ -498,6 +586,21 @@ export function RegisterDesk({
                 </SelectContent>
               </Select>
             </Field>
+
+            {/* A full-width row under name / phone / gender, and only when
+                something matches: a new name produces no panel at all, so the
+                form does not jump for the common case. Neutral, never a
+                warning -- the save is never blocked (CLAUDE.md 3.3). */}
+            {nameMatches.length > 0 ? (
+              <div className="sm:col-span-12">
+                <MatchList
+                  listRef={nameList}
+                  matches={nameMatches}
+                  note={`${nameMatches.length} already on file with a name like this. If the mobile number matches, use that patient. If not, carry on and a new patient is created.`}
+                  onPick={pick}
+                />
+              </div>
+            ) : null}
 
             {/* Date of birth and age are ONE question with two entry modes
                 (block 6.3). The border is what says so; two loose fields with

@@ -23,6 +23,7 @@ import {
   LayoutDashboardIcon,
   ReceiptIcon,
   ReceiptIndianRupeeIcon,
+  RepeatIcon,
   ShieldIcon,
   SlidersHorizontalIcon,
   StethoscopeIcon,
@@ -256,6 +257,18 @@ export const NAV: readonly NavSection[] = [
         label: 'Price list',
         icon: ReceiptIndianRupeeIcon,
         permissions: ['settings.manage'],
+        status: 'ready',
+        phase: 1,
+      },
+      /**
+       * The N and R from a clinic's paper register, derived from visit
+       * history. Its own key: it names doctors beside their return rates.
+       */
+      {
+        href: '/admin/new-vs-return',
+        label: 'New vs Return',
+        icon: RepeatIcon,
+        permissions: ['reports.patients'],
         status: 'ready',
         phase: 1,
       },

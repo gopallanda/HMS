@@ -30,6 +30,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
     'departments.manage',
     'staff.read',
     'roster.read',
+    'reports.patients',
   );
 
   if (!allowed) {

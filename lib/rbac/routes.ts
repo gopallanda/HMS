@@ -66,6 +66,9 @@ export const ROUTE_PERMISSIONS: readonly (readonly [string, Permission])[] = [
   ['/admin/departments', 'departments.manage'],
   ['/admin/staff', 'staff.read'],
   ['/admin/services', 'settings.manage'],
+  // New vs Return names doctors beside how many of their patients did not
+  // come back, so it has its own key rather than riding on reports.view.
+  ['/admin/new-vs-return', 'reports.patients'],
   ['/admin/settings', 'settings.manage'],
   ['/admin', 'settings.manage'],
 

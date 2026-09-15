@@ -41,6 +41,11 @@
  * checked argument-for-argument and column-for-column against the live schema
  * through pg_get_function_arguments and pg_get_function_result.
  *
+ * New vs Return, 2026-09-15: patient_mix_report and patient_mix_lost_patients,
+ * from 20260915090000_patient_mix_report.sql after it was applied, checked the
+ * same way. patient_mix_visits is internal (no grant to authenticated) and is
+ * deliberately not listed.
+ *
  * EmploymentType and ShiftStatus are unions over CHECK constraints rather than
  * Postgres enums, so they are absent from Enums below on purpose: generated
  * output would type those columns as plain `string`, and narrowing them here
@@ -1302,6 +1307,56 @@ export type Database = {
           reason: string | null;
           detail: string | null;
           after_close: boolean | null;
+        }[];
+      };
+      patient_mix_report: {
+        Args: {
+          p_hospital_id?: string | null;
+          p_from?: string | null;
+          p_to?: string | null;
+          p_window_days?: number | null;
+        };
+        /**
+         * One flat table with a `bucket` discriminator (20260915090000).
+         * `summary` and `doctor` fill the cohort columns; `week` leaves them
+         * null. doctor_* and department_name are set on `doctor` rows only,
+         * week_start on `week` rows only. lib/rpc/patient-mix.ts splits them.
+         */
+        Returns: {
+          bucket: 'summary' | 'doctor' | 'week';
+          doctor_id: string | null;
+          doctor_name: string | null;
+          department_name: string | null;
+          week_start: string | null;
+          visit_count: number;
+          patient_count: number;
+          new_to_hospital: number;
+          new_to_doctor: number;
+          repeat_visits: number;
+          cohort: number | null;
+          cohort_matured: number | null;
+          came_back: number | null;
+          went_elsewhere: number | null;
+          median_gap_days: number | null;
+        }[];
+      };
+      patient_mix_lost_patients: {
+        Args: {
+          p_doctor_id: string;
+          p_hospital_id?: string | null;
+          p_from?: string | null;
+          p_to?: string | null;
+          p_window_days?: number | null;
+          p_limit?: number | null;
+        };
+        Returns: {
+          patient_id: string;
+          mrn: string;
+          full_name: string;
+          phone: string | null;
+          first_visit_at: string;
+          new_to_hospital: boolean;
+          seen_other_doctor: boolean;
         }[];
       };
     };

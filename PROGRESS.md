@@ -1134,3 +1134,48 @@ payment handed back and a concession are three different quantities, and a
 reprint's amount is a bill printed again rather than money that moved.
 Concessions given is the one figure that stands alone, so that is what the
 header carries.
+
+## New vs Return — `20260915090000_patient_mix_report`
+
+A clinic's paper register has N or R beside every name. Here nobody writes it:
+it is derived from visit history and shown to the administrator only, at
+`/admin/new-vs-return`. Nothing on the register desk or the queue says N or R.
+
+Registration, separately: the matches under the search box now show the
+mobile number, and the Patient name field suggests existing patients (name,
+age, mobile) from the third letter. ↓ enters the list, Enter picks. No schema
+change; `search_patients` already returned the phone.
+
+**Definitions** — one SQL function, `patient_mix_visits` (internal, no grant):
+`new_hospital` = first non-cancelled visit; `new_doctor` = known here, first
+time with this doctor; `repeat` = this doctor has seen them. Judged against
+the whole history, not the range. "Came back" = another visit on a later IST
+day within the window (default 30); only patients whose window has passed are
+judged. "Went elsewhere" = no return to this doctor, a visit to another inside
+the window. Transfers count for the doctor the visit ended with.
+
+**Screens and access.** `patient_mix_report` (summary / doctor / week buckets)
+and `patient_mix_lost_patients` (one doctor's new patients who did not come
+back, with mobile numbers). New key `reports.patients`: admin by default,
+Manager excluded by subtraction. The patient list also needs `patients.read`.
+
+**No column on `patients`.** A "visited before (paper records)" flag was
+proposed and not approved, so the page shows a notice when the hospital has
+less than 180 days of records before the range: New is overstated then.
+
+**Verified:** migration applied through the session pooler and recorded;
+live signatures match `types/database.ts`; `tests/patient-mix-report.test.mjs`
+passes (6/6) against the hosted project; the seed block added 35 back-dated
+visits and the demo report reads sensibly (e.g. Orthopaedics 1 of 7 came back,
+2 went to another doctor). `tsc` and `eslint` clean.
+
+## Still open
+
+- The page has not been looked at signed in.
+- `npm test` over the session pooler: 35/37. The two failures are both in
+  `collect-payment-concurrency` — "did not wait" — the lock-wait detection via
+  `pg_stat_activity`, not the numbering. Nothing in this migration touches
+  collect_payment, number_series or charge_items; re-run on a direct
+  connection when the IPv6 host resolves.
+- No department filter yet; doctors are grouped by department instead.
+- Merging duplicate patient records (two MRNs for one person inflate New).
