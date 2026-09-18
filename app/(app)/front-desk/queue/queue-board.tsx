@@ -216,9 +216,12 @@ export function QueueBoard({
   return (
     <>
       {/* Phone: the counts are a row of chips that scrolls sideways, with the
-          live indicator on its own line above them. */}
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="-mx-4 flex w-[calc(100%+2rem)] gap-2 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:w-auto md:flex-wrap md:gap-x-3 md:overflow-visible md:px-0">
+          live indicator on its own line above them. min-w-0 is load-bearing:
+          this is a grid item, and without it the grid column grows to the
+          chips' full width, the page overflows sideways and the phone lets
+          the whole screen be zoomed out and panned. */}
+      <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+        <div className="-mx-4 flex w-[calc(100%+2rem)] min-w-0 gap-2 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:w-auto md:flex-wrap md:gap-x-3 md:overflow-visible md:px-0">
           {VISIT_STATUSES.map((status) => (
             <span
               key={status}

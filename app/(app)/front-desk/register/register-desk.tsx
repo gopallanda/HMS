@@ -2,6 +2,7 @@
 
 import {
   BanknoteIcon,
+  CheckIcon,
   PencilIcon,
   PrinterIcon,
   RotateCcwIcon,
@@ -10,17 +11,16 @@ import {
   UserRoundPlusIcon,
 } from 'lucide-react';
 import Link from 'next/link';
-import { useActionState, useEffect, useMemo, useRef, useState } from 'react';
+import { startTransition, useActionState, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
+import { z } from 'zod';
 
 import { registerAction, type RegisterState } from './actions';
-import { Field, FieldSet } from '@/components/shared/field';
+import { Field } from '@/components/shared/field';
 import { FormMessage } from '@/components/shared/form-message';
 import { KbdHint } from '@/components/shared/kbd';
 import { MIN_QUERY, usePatientSearch } from '@/components/shared/patient-search';
-import { SubmitButton } from '@/components/shared/submit-button';
 import { Button } from '@/components/ui/button';
-import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -29,37 +29,42 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Textarea } from '@/components/ui/textarea';
-import { fieldError, IDLE } from '@/lib/action-state';
+import { fieldError, IDLE, type FieldErrors } from '@/lib/action-state';
 import { PAYMENT_MODES, PAYMENT_MODE_LABEL, type PaymentMode } from '@/lib/billing';
 import { cn } from '@/lib/cn';
 import { ageGender, GENDERS, GENDER_LABEL, type Gender } from '@/lib/patients';
-import { todayIst } from '@/lib/utils/dates';
 import type { PatientSearchResult } from '@/lib/rpc/patients';
+import { registrationSchema } from '@/lib/schemas/registration';
 import { formatMoney } from '@/lib/utils/money';
 
 /**
  * The register desk.
  *
- * ONE form, one RPC, one transaction (block 4.2). It used to be a search, then
- * a dialog that created a patient, then a second dialog that created a visit,
- * and a clerk could stop after any of them. Now nothing is written until
+ * ONE form, one RPC, one transaction (block 4.2). Nothing is written until
  * submit, and what is written is complete: patient, visit, token, invoice, and
  * either the payment or a recorded deferral.
  *
- * The layout rules are block 6, and they are worth stating because they apply
- * to every form after this one:
+ * Two ways in, chosen at the top:
  *
- *   * <Field> reserves the hint/error line, so a validation message appearing
- *     under one control never moves its neighbour. That single change is most
- *     of what the screenshot in the brief was complaining about.
- *   * One 12-column grid, items-start, gap-x-6 gap-y-5. Every control the same
- *     height.
- *   * The search icon is positioned against the INPUT at left-3 with pl-10 on
- *     the input itself, never against a wrapper whose padding the input does
- *     not inherit.
- *   * Cancel is a ghost, "Register & collect" is the primary. Nothing on the
- *     happy path is styled destructive.
+ *   * Find patient -- the search box, for somebody who has been before. Picking
+ *     a row brings up the visit and payment steps; nothing else is on screen
+ *     until then.
+ *   * New patient -- straight to the fields. The name and the phone still
+ *     search as they are typed, and a row whose mobile number matches the one
+ *     typed is marked and sorted first: that is the returning patient the
+ *     clerk did not look for. The save is never blocked (CLAUDE.md 3.3).
+ *
+ * What makes it fast, because this is the screen that decides adoption:
+ *
+ *   * The form is validated in the browser with the SAME zod schema the action
+ *     uses, so a missing field is answered instantly, not after a round trip.
+ *   * Submitted through startTransition, not <form action>: React resets an
+ *     action form after every submission, which wiped everything typed
+ *     whenever the server said no.
+ *   * Typing does not re-render the form. The name and phone reach state only
+ *     after a pause, and only because the match list needs them.
+ *   * One tap for gender and doctor, instead of opening a dropdown each time.
+ *   * Enter moves to the next field; Ctrl+Enter registers.
  */
 
 export type DoctorOption = {
@@ -84,8 +89,16 @@ export type DeskPatient = {
   phone: string | null;
 };
 
+type Mode = 'find' | 'new';
+
 /** Radix Select cannot hold an empty value, so "no department" needs a token. */
 const NO_DEPARTMENT = '__none__';
+
+/** More doctors than this and one-tap cards stop being quicker than a list. */
+const DOCTOR_CARD_LIMIT = 8;
+
+/** How long a pause in typing before the name or phone is searched. */
+const TYPING_PAUSE_MS = 120;
 
 function fromSearch(row: PatientSearchResult): DeskPatient {
   return {
@@ -105,10 +118,53 @@ function prefillFrom(query: string): { full_name: string; phone: string } {
   return digits.length >= 6 ? { full_name: '', phone: trimmed } : { full_name: trimmed, phone: '' };
 }
 
+/** The last ten digits: +91 98450 11223 and 09845011223 are the same mobile. */
+function phoneKey(value: string | null | undefined): string {
+  return (value ?? '').replace(/\D/g, '').slice(-10);
+}
+
+/** Which element to focus for a field that failed validation. */
+const FOCUS_FOR: Record<string, string> = {
+  full_name: 'full_name',
+  phone: 'phone',
+  age_years: 'age_years',
+  dob: 'age_years',
+  gender: 'gender',
+  address: 'address',
+  doctor_id: 'doctor',
+  payment_mode: 'payment-mode',
+  defer_reason: 'defer_reason',
+  fee: 'fee-input',
+};
+
+/** The selected doctor card, else the first one, else the dropdown. */
+function focusDoctor() {
+  const target =
+    document.querySelector<HTMLElement>('[data-doctor][aria-checked="true"]') ??
+    document.querySelector<HTMLElement>('[data-doctor]') ??
+    document.getElementById('doctor');
+  target?.focus();
+}
+
+/** Focus the first field that failed, in screen order, not zod's. */
+function focusFirst(names: string[]) {
+  // In the order the fields appear on screen, not the order zod reported.
+  const order = Object.keys(FOCUS_FOR);
+  const first = names
+    .filter((name) => name in FOCUS_FOR)
+    .sort((a, b) => order.indexOf(a) - order.indexOf(b))[0];
+  if (!first) return;
+  requestAnimationFrame(() => {
+    if (first === 'doctor_id') return focusDoctor();
+    const element = document.getElementById(FOCUS_FOR[first]!);
+    element?.focus();
+    element?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  });
+}
+
 /**
  * Patients already on file, one row each, for the clerk to pick from.
  *
- * Shared by the search box and the name field so the two lists read the same.
  * The mobile number is on every row because it is what the clerk checks with
  * the person at the counter: a name alone cannot tell two Lakshmis apart, and
  * a shared household phone alone cannot tell a mother from her daughter.
@@ -120,11 +176,14 @@ function MatchList({
   note,
   onPick,
   listRef,
+  samePhone,
 }: {
   matches: PatientSearchResult[];
   note: string;
   onPick: (match: PatientSearchResult) => void;
   listRef?: React.Ref<HTMLDivElement>;
+  /** Rows whose mobile matches the one typed. Marked, and the likely pick. */
+  samePhone?: (match: PatientSearchResult) => boolean;
 }) {
   function onKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
@@ -146,42 +205,50 @@ function MatchList({
       <p className="px-1.5 pt-0.5 pb-1 text-xs leading-snug text-muted-foreground md:pt-0 md:pb-0.5">
         {note}
       </p>
-      {matches.map((match) => (
-        <button
-          key={match.id}
-          type="button"
-          onClick={() => onPick(match)}
-          className="flex items-center gap-3 rounded-xl bg-background px-3 py-2.5 text-left text-sm shadow-xs transition outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] md:rounded-lg md:py-2 md:shadow-none"
-        >
-          {/* Phone: avatar, name over MRN and age, the mobile number trailing. */}
-          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary sm:hidden">
-            {match.full_name.slice(0, 1).toUpperCase()}
-          </span>
-          <span className="hidden font-mono text-xs text-muted-foreground sm:block">
-            {match.mrn}
-          </span>
-          <span className="min-w-0 flex-1">
-            <span className="block truncate font-medium">{match.full_name}</span>
-            <span className="mt-0.5 block truncate text-xs text-muted-foreground sm:hidden">
-              {ageGender(match.dob, match.gender)} · <span className="font-mono">{match.mrn}</span>
-            </span>
-          </span>
-          <span className="hidden text-xs text-muted-foreground sm:block">
-            {ageGender(match.dob, match.gender)}
-          </span>
-          <span
+      {matches.map((match) => {
+        const same = samePhone?.(match) ?? false;
+        return (
+          <button
+            key={match.id}
+            type="button"
+            onClick={() => onPick(match)}
             className={cn(
-              'shrink-0 font-mono text-xs sm:w-32',
-              match.phone ? '' : 'text-muted-foreground',
+              'flex items-center gap-3 rounded-xl bg-background px-3 py-2.5 text-left text-sm shadow-xs transition outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] md:rounded-lg md:py-2 md:shadow-none',
+              same && 'ring-1 ring-success/50',
             )}
           >
-            {match.phone ?? 'No mobile'}
-          </span>
-          <span className="hidden shrink-0 text-xs font-medium text-primary sm:block">
-            Use this patient
-          </span>
-        </button>
-      ))}
+            <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary sm:hidden">
+              {match.full_name.slice(0, 1).toUpperCase()}
+            </span>
+            <span className="hidden font-mono text-xs text-muted-foreground sm:block">
+              {match.mrn}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block truncate font-medium">{match.full_name}</span>
+              <span className="mt-0.5 block truncate text-xs text-muted-foreground sm:hidden">
+                {ageGender(match.dob, match.gender)} · <span className="font-mono">{match.mrn}</span>
+              </span>
+            </span>
+            <span className="hidden text-xs text-muted-foreground sm:block">
+              {ageGender(match.dob, match.gender)}
+            </span>
+            <span className="flex shrink-0 flex-col items-end gap-0.5 sm:w-36">
+              <span className={cn('font-mono text-xs', match.phone ? '' : 'text-muted-foreground')}>
+                {match.phone ?? 'No mobile'}
+              </span>
+              {same ? (
+                <span className="flex items-center gap-0.5 text-[10px] font-semibold tracking-wide text-success uppercase">
+                  <CheckIcon className="size-3" />
+                  Same phone
+                </span>
+              ) : null}
+            </span>
+            <span className="hidden shrink-0 text-xs font-medium text-primary sm:block">
+              Use this patient
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -201,7 +268,7 @@ export function RegisterDesk({
   /** billing.defer. Without it the "cannot pay now" link is not rendered. */
   canDefer: boolean;
 }) {
-  const [state, action] = useActionState<RegisterState, FormData>(registerAction, IDLE);
+  const [state, action, pending] = useActionState<RegisterState, FormData>(registerAction, IDLE);
 
   /**
    * One generation of ids per registration. Regenerated only when the desk
@@ -211,116 +278,200 @@ export function RegisterDesk({
   const [ids, setIds] = useState(newIds);
 
   /**
-   * The registration whose success panel has been dismissed (defect 2).
-   *
-   * useActionState owns `state`, and there is no way to clear it from here --
-   * it only changes when the action runs again. So "Register next patient"
-   * used to reset every local field, leave state.status on 'success', and
-   * re-render the very same panel: the button looked dead because nothing it
-   * touched was what decided which screen you were on.
-   *
-   * Keyed on the visit id rather than a boolean, so the NEXT registration's
-   * panel appears on its own without anything having to remember to unset a
-   * flag first.
+   * The registration whose success panel has been dismissed. useActionState
+   * owns `state` and cannot be cleared from here, so the panel is keyed on the
+   * visit id rather than a boolean.
    */
   const [dismissed, setDismissed] = useState<string | null>(null);
 
-  /**
-   * Set while the form is coming back, so focus lands after it has mounted.
-   *
-   * A ref rather than state: nothing renders differently because of it, and a
-   * setState in the effect that reads it would be a cascading render for no
-   * visible reason.
-   */
+  /** Set while the form is coming back, so focus lands after it has mounted. */
   const refocus = useRef(false);
 
+  const [mode, setMode] = useState<Mode>('find');
   const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<DeskPatient | null>(initialPatient);
-  const [editingChosen, setEditingChosen] = useState(false);
+  /** What the new-patient fields open with, taken from the search box. */
+  const [prefill, setPrefill] = useState({ full_name: '', phone: '' });
 
   const [gender, setGender] = useState<Gender>('female');
-  const [phone, setPhone] = useState('');
   const [doctorId, setDoctorId] = useState('');
   const [departmentPick, setDepartmentPick] = useState<string | null>(null);
   const [fee, setFee] = useState('');
   const [feeTouched, setFeeTouched] = useState(false);
-  const [mode, setMode] = useState<PaymentMode | ''>('cash');
+  const [payMode, setPayMode] = useState<PaymentMode | ''>('cash');
   const [deferring, setDeferring] = useState(false);
+
+  /** Answered in the browser, before the round trip. Null once submitted. */
+  const [clientErrors, setClientErrors] = useState<FieldErrors | null>(null);
 
   const formRef = useRef<HTMLFormElement>(null);
   const searchInput = useRef<HTMLInputElement>(null);
+  const nameInput = useRef<HTMLInputElement>(null);
   const nextButton = useRef<HTMLButtonElement>(null);
 
-  const { data, isFetching, active } = usePatientSearch(query);
+  // ---- Search box (Find patient) ------------------------------------------
+  const { data, isFetching, active } = usePatientSearch(query, mode === 'find' && chosen === null);
   const matches = useMemo(() => data ?? [], [data]);
 
-  /**
-   * The name field searches too. A clerk who skips the search box and starts
-   * typing the name is the case the notebook trained them into, and a second
-   * MRN for a returning patient is made exactly there. Same RPC and cache as
-   * the search box; off once a patient is chosen, so correcting a chosen
-   * patient's spelling does not offer somebody else.
-   */
+  // ---- Name and phone matching (New patient) ------------------------------
+  // Both inputs are uncontrolled. Their values reach state only after a pause
+  // in typing, so a keystroke repaints one input, not the whole form.
   const [nameTyped, setNameTyped] = useState('');
-  const nameSearch = usePatientSearch(nameTyped, chosen === null);
-  const nameMatches = useMemo(
-    () => (chosen === null && nameSearch.active ? (nameSearch.data ?? []) : []),
-    [chosen, nameSearch.active, nameSearch.data],
-  );
-  const nameList = useRef<HTMLDivElement>(null);
+  const [phoneTyped, setPhoneTyped] = useState('');
+  const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  function typed(setter: (value: string) => void, value: string) {
+    clearTimeout(typingTimer.current);
+    typingTimer.current = setTimeout(() => setter(value.trim()), TYPING_PAUSE_MS);
+  }
+
+  const matching = mode === 'new' && chosen === null;
+  const typedPhone = phoneKey(phoneTyped);
+  const nameSearch = usePatientSearch(nameTyped, matching);
+  // A whole mobile number finds the household even when the name was spelt
+  // differently last time.
+  const phoneSearch = usePatientSearch(typedPhone.length === 10 ? typedPhone : '', matching);
+
+  const samePhone = (match: PatientSearchResult) =>
+    typedPhone.length === 10 && phoneKey(match.phone) === typedPhone;
+
+  const suggestions = useMemo(() => {
+    if (!matching) return [];
+    const rows = [
+      ...(nameSearch.active ? (nameSearch.data ?? []) : []),
+      ...(phoneSearch.active ? (phoneSearch.data ?? []) : []),
+    ];
+    const seen = new Set<string>();
+    const unique = rows.filter((row) => !seen.has(row.id) && seen.add(row.id));
+    const key = typedPhone.length === 10 ? typedPhone : null;
+    // Same phone first: that row is most likely the person at the counter.
+    return unique
+      .sort((a, b) => Number(phoneKey(b.phone) === key) - Number(phoneKey(a.phone) === key))
+      .slice(0, 6);
+  }, [matching, nameSearch.active, nameSearch.data, phoneSearch.active, phoneSearch.data, typedPhone]);
+  const suggestionList = useRef<HTMLDivElement>(null);
 
   function pick(match: PatientSearchResult) {
     setChosen(fromSearch(match));
-    setEditingChosen(false);
     setQuery('');
     setNameTyped('');
+    setPhoneTyped('');
+    setClientErrors(null);
     // The row that had focus is about to unmount. Hand focus to the next
     // question on the form rather than dropping it on <body>.
-    document.getElementById('department')?.focus();
+    requestAnimationFrame(() => focusDoctor());
+  }
+
+  function switchMode(next: Mode) {
+    if (next === mode && chosen === null) return;
+    if (next === 'new') setPrefill(prefillFrom(query));
+    setMode(next);
+    setChosen(null);
+    setNameTyped('');
+    setPhoneTyped('');
+    setClientErrors(null);
+    requestAnimationFrame(() => {
+      if (next === 'new') nameInput.current?.focus();
+      else searchInput.current?.focus();
+    });
+  }
+
+  // ---- Doctors --------------------------------------------------------------
+
+  /**
+   * Registrations made at this desk since the page loaded, per doctor. The
+   * action no longer refreshes the page after every registration (that was a
+   * second round trip before the token showed), so the desk keeps its own
+   * waiting counts current instead.
+   */
+  const [counted, setCounted] = useState<string | null>(null);
+  const [bumps, setBumps] = useState<Record<string, number>>({});
+  const result = state.status === 'success' ? state.result : undefined;
+  if (result && result.visit_id !== counted) {
+    setCounted(result.visit_id);
+    const id = result.doctor_id;
+    if (id) setBumps((current) => ({ ...current, [id]: (current[id] ?? 0) + 1 }));
   }
 
   const doctor = doctors.find((option) => option.id === doctorId);
   const departmentId = departmentPick ?? doctor?.department_id ?? NO_DEPARTMENT;
 
   /**
-   * Doctors, narrowed to the chosen department (block 4.2 step 3).
-   *
-   * Never narrowed to nothing: a department with no doctor assigned to it
-   * would otherwise leave the desk unable to register anybody, which is a
-   * worse answer than showing the whole list.
+   * Doctors, narrowed to the chosen department. Never narrowed to nothing: a
+   * department with no doctor assigned would otherwise leave the desk unable
+   * to register anybody.
    */
   const visible = useMemo(() => {
-    if (departmentPick === null || departmentPick === NO_DEPARTMENT) return doctors;
-    const inDepartment = doctors.filter((option) => option.department_id === departmentPick);
-    return inDepartment.length > 0 ? inDepartment : doctors;
-  }, [doctors, departmentPick]);
+    const all = doctors.map((option) => ({
+      ...option,
+      waiting: option.waiting + (bumps[option.id] ?? 0),
+    }));
+    if (departmentPick === null || departmentPick === NO_DEPARTMENT) return all;
+    const inDepartment = all.filter((option) => option.department_id === departmentPick);
+    return inDepartment.length > 0 ? inDepartment : all;
+  }, [doctors, departmentPick, bumps]);
+
+  const doctorCards = visible.length <= DOCTOR_CARD_LIMIT;
 
   // The fee follows whichever doctor is selected until somebody types over it.
   const effectiveFee = feeTouched ? fee : doctor ? String(doctor.consultation_fee) : '';
 
-  const result = state.status === 'success' ? state.result : undefined;
   const done = result && result.visit_id !== dismissed ? result : undefined;
 
   /**
    * The banner belongs to the registration that produced it. Once its panel is
-   * dismissed the next patient starts on a clean form, not under a green
-   * message about the last one.
+   * dismissed the next patient starts on a clean form.
    */
   const formState = result && result.visit_id === dismissed ? IDLE : state;
+
+  /** Browser-side errors win until the next submit; then the server's. */
+  function errorFor(name: string): string | undefined {
+    if (clientErrors) return clientErrors[name]?.[0];
+    return fieldError(formState, name);
+  }
+
+  function clearError(...names: string[]) {
+    if (!clientErrors || !names.some((name) => clientErrors[name])) return;
+    const next = { ...clientErrors };
+    for (const name of names) delete next[name];
+    setClientErrors(next);
+  }
 
   useEffect(() => {
     if (done) {
       toast.success(`Token ${done.token_no} - ${done.patient_name}`, {
         description: `${done.mrn} · ${done.invoice_no}`,
       });
-      // The clerk's hands stay on the keyboard: the next thing they will press
-      // is "Register next patient", so that is what has focus.
+      // The form was scrolled to its footer; the token is at the top.
+      window.scrollTo({ top: 0 });
       nextButton.current?.focus();
     }
   }, [done]);
 
+  // A refusal from the server: put the cursor on the first field it names.
+  useEffect(() => {
+    if (state.status !== 'error' || !state.fieldErrors) return;
+    focusFirst(Object.keys(state.fieldErrors));
+  }, [state]);
+
+  // The keyboard listener below is registered once; it reaches the current switchMode
+  // through this ref rather than re-subscribing on every render.
+  const switchModeRef = useRef(switchMode);
+  useEffect(() => {
+    switchModeRef.current = switchMode;
+  });
+
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      // Alt+F / Alt+N switch between the two ways in.
+      if (event.altKey && !event.ctrlKey && !event.metaKey) {
+        const key = event.key.toLowerCase();
+        if (key === 'f' || key === 'n') {
+          event.preventDefault();
+          switchModeRef.current(key === 'f' ? 'find' : 'new');
+        }
+        return;
+      }
       if (event.key === 'Escape') {
         const target = event.target as HTMLElement | null;
         if (target?.closest('[role="listbox"], [role="dialog"]')) return;
@@ -332,35 +483,72 @@ export function RegisterDesk({
     return () => document.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  /**
+   * Enter moves to the next field (CLAUDE.md 7), Ctrl+Enter registers. Only
+   * elements marked data-step take part, in DOM order, so the tab stops that
+   * are not questions -- "Not this patient", the payment modes -- are skipped.
+   */
   function onFormKeyDown(event: React.KeyboardEvent<HTMLFormElement>) {
-    if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
+    if (event.key !== 'Enter') return;
+    if (event.ctrlKey || event.metaKey) {
       event.preventDefault();
       formRef.current?.requestSubmit();
+      return;
     }
+    const target = event.target as HTMLElement;
+    if (target.tagName !== 'INPUT') return;
+    event.preventDefault();
+    const steps = Array.from(
+      formRef.current?.querySelectorAll<HTMLElement>('[data-step]') ?? [],
+    ).filter((element) => !(element as HTMLInputElement).disabled);
+    const at = steps.indexOf(target);
+    if (at === -1) return;
+    const next = steps[at + 1];
+    if (!next) formRef.current?.requestSubmit();
+    else if (next.hasAttribute('data-doctor-step')) focusDoctor();
+    else next.focus();
+  }
+
+  function onSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+    const formData = new FormData(event.currentTarget);
+
+    // The same schema the action parses, run here first: a missing field is
+    // answered now, not after a round trip to the database and back.
+    const parsed = registrationSchema.safeParse(
+      Object.fromEntries(Array.from(formData.keys()).map((key) => [key, formData.get(key)])),
+    );
+    if (!parsed.success) {
+      const flat = z.flattenError(parsed.error).fieldErrors as FieldErrors;
+      setClientErrors(flat);
+      focusFirst(Object.keys(flat));
+      return;
+    }
+
+    setClientErrors(null);
+    startTransition(() => action(formData));
   }
 
   function startNext() {
     // Before anything else: this is what actually takes the success panel off
-    // the screen. Everything below it only decides what the form underneath
-    // will be showing once it is gone.
+    // the screen.
     if (result) setDismissed(result.visit_id);
     setIds(newIds());
+    setMode('find');
     setQuery('');
+    setPrefill({ full_name: '', phone: '' });
     setNameTyped('');
+    setPhoneTyped('');
     setChosen(null);
-    setEditingChosen(false);
     setGender('female');
-    setPhone('');
     setDoctorId('');
     setDepartmentPick(null);
     setFee('');
     setFeeTouched(false);
-    setMode('cash');
+    setPayMode('cash');
     setDeferring(false);
-    // Both refs are null when this runs from the success panel -- the form is
-    // not mounted -- so the focus has to wait for the render that brings it
-    // back. formRef.reset() is a no-op in that case and still correct when
-    // Cancel calls this with the form on screen.
+    setClientErrors(null);
     formRef.current?.reset();
     refocus.current = true;
   }
@@ -421,10 +609,19 @@ export function RegisterDesk({
     );
   }
 
-  const showDemographics = chosen === null || editingChosen;
+  const showNewFields = mode === 'new' && chosen === null;
+  // In Find mode nothing past the search is on screen until somebody is
+  // picked: a visit and a fee for nobody in particular is only clutter.
+  const showVisit = chosen !== null || mode === 'new';
 
   return (
-    <form ref={formRef} action={action} onKeyDown={onFormKeyDown} className="grid gap-5">
+    <form
+      ref={formRef}
+      onSubmit={onSubmit}
+      onKeyDown={onFormKeyDown}
+      noValidate
+      className="grid min-w-0 gap-4 md:gap-5"
+    >
       <input type="hidden" name="patient_new_id" value={ids.patient} />
       <input type="hidden" name="visit_id" value={ids.visit} />
       <input type="hidden" name="invoice_id" value={ids.invoice} />
@@ -437,22 +634,36 @@ export function RegisterDesk({
         value={departmentId === NO_DEPARTMENT ? '' : departmentId}
       />
       <input type="hidden" name="fee" value={effectiveFee} />
-      <input type="hidden" name="payment_mode" value={deferring ? '' : mode} />
+      <input type="hidden" name="payment_mode" value={deferring ? '' : payMode} />
       <input type="hidden" name="deferred" value={deferring ? 'true' : ''} />
 
-      <FormMessage state={formState} />
+      <FormMessage state={clientErrors ? IDLE : formState} />
 
-      {/* ---- 1. Search ------------------------------------------------------
-          The whole screen starts here (CLAUDE.md 3.3). The icon is absolutely
-          positioned against the input at left-3 and the input carries pl-10;
-          relying on a wrapper's padding is what let the icon sit on top of
-          typed text (defect 7). */}
-      <section className="grid gap-3">
-        <Field
-          label="Find the patient"
-          htmlFor="patient-search"
-          hint={`Phone, name or MRN. ${MIN_QUERY} characters or more. Esc clears.`}
-        >
+      {/* ---- The two ways in ---------------------------------------------- */}
+      <div
+        role="tablist"
+        aria-label="Patient"
+        className="grid grid-cols-2 gap-1 rounded-2xl bg-muted/70 p-1 md:max-w-md md:rounded-xl"
+      >
+        <ModeTab
+          active={mode === 'find'}
+          onClick={() => switchMode('find')}
+          icon={<SearchIcon className="size-4" />}
+          label="Find patient"
+          shortcut="Alt+F"
+        />
+        <ModeTab
+          active={mode === 'new'}
+          onClick={() => switchMode('new')}
+          icon={<UserRoundPlusIcon className="size-4" />}
+          label="New patient"
+          shortcut="Alt+N"
+        />
+      </div>
+
+      {/* ---- Find: the search box ------------------------------------------ */}
+      {mode === 'find' && chosen === null ? (
+        <section className="grid gap-3">
           <div className="relative">
             <SearchIcon
               className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground md:left-3 md:size-4.5"
@@ -461,49 +672,67 @@ export function RegisterDesk({
             <Input
               ref={searchInput}
               id="patient-search"
+              aria-label="Find the patient"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
+              onKeyDown={(event) => {
+                // Enter takes the top match; Down walks the list.
+                if (event.key === 'Enter' && matches[0]) {
+                  event.preventDefault();
+                  pick(matches[0]);
+                } else if (event.key === 'ArrowDown' && matches.length > 0) {
+                  event.preventDefault();
+                  document.querySelector<HTMLButtonElement>('#search-results button')?.focus();
+                }
+              }}
               placeholder="Phone, name or MRN"
               className="h-13 rounded-2xl bg-card pl-12 text-base shadow-sm md:h-11 md:rounded-lg md:bg-background md:pl-10 md:text-base md:shadow-none"
               autoComplete="off"
               spellCheck={false}
+              enterKeyHint="search"
               autoFocus
             />
           </div>
-        </Field>
 
-        {/* Neutral, never a warning (block 4.1). Two people on one phone number
-            is the normal case in an Indian household; this panel exists to save
-            a re-type and to prevent a duplicate MRN, not to stop anybody. */}
-        {active && (matches.length > 0 || isFetching) ? (
-          <MatchList
-            matches={matches}
-            note={
-              isFetching && matches.length === 0
-                ? 'Searching...'
-                : `${matches.length} already on file. Check the mobile number, then use one, or carry on registering a new patient.`
-            }
-            onPick={pick}
-          />
-        ) : null}
+          {!active ? (
+            <p className="px-1 text-xs text-muted-foreground">
+              Type {MIN_QUERY} or more characters. Enter picks the first match.
+            </p>
+          ) : null}
 
-        {active && matches.length === 0 && !isFetching ? (
-          <p className="rounded-xl bg-muted/60 px-3.5 py-3 text-xs text-muted-foreground md:rounded-lg md:px-3 md:py-2">
-            Nobody matches &ldquo;{query.trim()}&rdquo;. Fill in the details below to register
-            them.
-          </p>
-        ) : null}
-      </section>
+          {active && (matches.length > 0 || isFetching) ? (
+            <div id="search-results">
+              <MatchList
+                matches={matches}
+                note={
+                  isFetching && matches.length === 0
+                    ? 'Searching...'
+                    : `${matches.length} on file. Check the mobile number with the patient, then tap to use.`
+                }
+                onPick={pick}
+              />
+            </div>
+          ) : null}
 
-      {/* ---- 2. Patient ----------------------------------------------------- */}
-      <section className={SECTION}>
-        <SectionHead
-          step="1"
-          title="Patient"
-          note={chosen ? 'On file already' : 'A new record'}
-        />
+          {active && !isFetching ? (
+            <button
+              type="button"
+              onClick={() => switchMode('new')}
+              className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/40 bg-primary/5 px-4 py-3 text-sm font-medium text-primary transition active:scale-[0.99] md:rounded-xl md:py-2.5"
+            >
+              <UserRoundPlusIcon className="size-4" />
+              {matches.length === 0
+                ? `Nobody matches “${query.trim()}”. Register as a new patient`
+                : 'Not in the list? Register as a new patient'}
+            </button>
+          ) : null}
+        </section>
+      ) : null}
 
-        {chosen && !editingChosen ? (
+      {/* ---- The patient ----------------------------------------------------- */}
+      {chosen ? (
+        <section className={SECTION}>
+          <SectionHead step="1" title="Patient" note="On file already" />
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-primary/5 px-3 py-3 text-sm ring-1 ring-primary/15 md:rounded-lg md:bg-muted/60 md:py-2.5 md:ring-0">
             <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground md:hidden">
               {chosen.full_name.slice(0, 1).toUpperCase()}
@@ -518,372 +747,532 @@ export function RegisterDesk({
             </span>
             <button
               type="button"
-              onClick={() => {
-                setChosen(null);
-                setQuery('');
-                setNameTyped('');
-                searchInput.current?.focus();
-              }}
+              onClick={() => switchMode(mode)}
               className="flex w-full items-center justify-center gap-1 rounded-lg py-2 text-xs font-medium text-primary hover:underline max-md:mt-1 max-md:bg-background md:ml-auto md:w-auto md:py-0"
             >
               <PencilIcon className="size-3" />
               Not this patient
             </button>
           </div>
-        ) : null}
+        </section>
+      ) : null}
 
-        {showDemographics ? (
-          <div className="grid grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-12">
+      {showNewFields ? (
+        <section className={SECTION}>
+          <SectionHead step="1" title="New patient" note="All fields required" />
+
+          {/* One grid, every control the same height, so the rows line up:
+              name and phone, then age, gender and address. On a phone the
+              only pair is age beside gender. */}
+          <div className="grid grid-cols-[6.5rem_minmax(0,1fr)] items-start gap-x-3 gap-y-3 sm:grid-cols-12 sm:gap-x-4 md:gap-y-4">
             <Field
               label="Patient name"
               htmlFor="full_name"
               required
-              error={fieldError(state, 'full_name')}
-              hint={nameMatches.length > 0 ? 'Already on file? Press ↓ to pick below.' : undefined}
-              className="sm:col-span-5"
+              error={errorFor('full_name')}
+              className="col-span-2 sm:col-span-6"
             >
               <Input
+                ref={nameInput}
                 id="full_name"
                 name="full_name"
-                defaultValue={prefillFrom(query).full_name}
-                onChange={(event) => setNameTyped(event.target.value)}
+                data-step
+                defaultValue={prefill.full_name}
+                onChange={(event) => {
+                  typed(setNameTyped, event.target.value);
+                  clearError('full_name');
+                }}
                 onKeyDown={(event) => {
-                  if (event.key === 'ArrowDown' && nameMatches.length > 0) {
+                  if (event.key === 'ArrowDown' && suggestions.length > 0) {
                     event.preventDefault();
-                    nameList.current?.querySelector('button')?.focus();
+                    suggestionList.current?.querySelector('button')?.focus();
                   }
                 }}
                 maxLength={120}
                 autoComplete="off"
-                aria-invalid={fieldError(state, 'full_name') !== undefined}
+                autoCapitalize="words"
+                enterKeyHint="next"
+                placeholder="Full name"
+                className={CONTROL}
+                aria-invalid={errorFor('full_name') !== undefined}
               />
             </Field>
 
             <Field
               label="Phone"
               htmlFor="phone"
-              error={fieldError(state, 'phone')}
-              hint="How this patient is found next time."
-              className="sm:col-span-4"
+              required
+              error={errorFor('phone')}
+              className="col-span-2 sm:col-span-6"
             >
               <Input
                 id="phone"
                 name="phone"
+                data-step
                 type="tel"
                 inputMode="tel"
-                value={phone}
-                onChange={(event) => setPhone(event.target.value)}
-                placeholder="+91 98450 11223"
+                defaultValue={prefill.phone}
+                onChange={(event) => {
+                  typed(setPhoneTyped, event.target.value);
+                  clearError('phone');
+                }}
+                placeholder="98450 11223"
                 autoComplete="off"
-                aria-invalid={fieldError(state, 'phone') !== undefined}
+                enterKeyHint="next"
+                className={CONTROL}
+                aria-invalid={errorFor('phone') !== undefined}
               />
             </Field>
 
-            {/* Gender sits with name and phone, not beside the Age fieldset:
-                a bordered group carries a legend and its own padding, so a
-                plain control next to it can never share a baseline with the
-                controls inside it (defect 7). */}
-            <Field
-              label="Gender"
-              htmlFor="gender"
-              required
-              error={fieldError(state, 'gender')}
-              className="sm:col-span-3"
-            >
-              <Select value={gender} onValueChange={(value) => setGender(value as Gender)}>
-                <SelectTrigger id="gender" className="w-full">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {GENDERS.map((option) => (
-                    <SelectItem key={option} value={option}>
-                      {GENDER_LABEL[option]}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </Field>
-
-            {/* A full-width row under name / phone / gender, and only when
-                something matches: a new name produces no panel at all, so the
-                form does not jump for the common case. Neutral, never a
-                warning -- the save is never blocked (CLAUDE.md 3.3). */}
-            {nameMatches.length > 0 ? (
-              <div className="sm:col-span-12">
+            {/* Only when something matches, so the common case -- a new
+                name -- does not make the form jump. Neutral, never a
+                warning: the save is never blocked (CLAUDE.md 3.3). */}
+            {suggestions.length > 0 ? (
+              <div className="col-span-2 sm:col-span-12">
                 <MatchList
-                  listRef={nameList}
-                  matches={nameMatches}
-                  note={`${nameMatches.length} already on file with a name like this. If the mobile number matches, use that patient. If not, carry on and a new patient is created.`}
+                  listRef={suggestionList}
+                  matches={suggestions}
+                  samePhone={samePhone}
+                  note={
+                    suggestions.some(samePhone)
+                      ? 'Already on file with this phone number. Tap the patient to use their record.'
+                      : 'Already on file with a name like this. If the mobile number matches, tap to use that patient; otherwise carry on.'
+                  }
                   onPick={pick}
                 />
               </div>
             ) : null}
 
-            {/* Date of birth and age are ONE question with two entry modes
-                (block 6.3). The border is what says so; two loose fields with
-                "or age in years" between them read as two questions. */}
-            <FieldSet
-              legend="Age"
-              hint="Enter either. Age is stored as an approximate date of birth, so it stays correct next year."
-              error={fieldError(state, 'dob') ?? fieldError(state, 'age_years')}
-              className="sm:col-span-6"
+            <Field
+              label="Age"
+              htmlFor="age_years"
+              required
+              error={errorFor('age_years') ?? errorFor('dob')}
+              className="sm:col-span-2"
             >
-              <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] items-start gap-x-3 sm:grid-cols-2 sm:gap-x-4">
-                <Field label="Date of birth" htmlFor="dob" collapse>
-                  <DatePicker id="dob" name="dob" typeable startView="years" max={todayIst()} />
-                </Field>
-                <Field label="or age in years" htmlFor="age_years" collapse>
-                  <Input
-                    id="age_years"
-                    name="age_years"
-                    inputMode="numeric"
-                    maxLength={3}
-                    placeholder="42"
-                    autoComplete="off"
-                  />
-                </Field>
+              <Input
+                id="age_years"
+                name="age_years"
+                data-step
+                inputMode="numeric"
+                pattern="[0-9]*"
+                maxLength={3}
+                placeholder="Years"
+                autoComplete="off"
+                enterKeyHint="next"
+                onChange={() => clearError('age_years', 'dob')}
+                className={cn(CONTROL, 'tabular-nums')}
+                aria-invalid={(errorFor('age_years') ?? errorFor('dob')) !== undefined}
+              />
+            </Field>
+
+            <Field
+              label="Gender"
+              htmlFor="gender"
+              required
+              error={errorFor('gender')}
+              className="sm:col-span-4"
+            >
+              <div
+                id="gender"
+                role="radiogroup"
+                aria-label="Gender"
+                className="grid grid-cols-3 gap-1 rounded-xl bg-muted/70 p-1 md:rounded-lg"
+              >
+                {GENDERS.map((option) => (
+                  <button
+                    key={option}
+                    type="button"
+                    role="radio"
+                    aria-checked={gender === option}
+                    onClick={() => setGender(option)}
+                    className={cn(
+                      'h-9 min-w-0 truncate rounded-lg px-1 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:h-8 md:rounded-md',
+                      gender === option
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground',
+                    )}
+                  >
+                    {GENDER_LABEL[option]}
+                  </button>
+                ))}
               </div>
-            </FieldSet>
+            </Field>
 
             <Field
               label="Address"
               htmlFor="address"
-              error={fieldError(state, 'address')}
-              className="sm:col-span-6"
+              required
+              error={errorFor('address')}
+              className="col-span-2 sm:col-span-6"
             >
-              <Textarea id="address" name="address" rows={3} maxLength={300} autoComplete="off" />
+              <Input
+                id="address"
+                name="address"
+                data-step
+                maxLength={300}
+                placeholder="Village / area, town"
+                autoComplete="off"
+                enterKeyHint="next"
+                onChange={() => clearError('address')}
+                className={CONTROL}
+                aria-invalid={errorFor('address') !== undefined}
+              />
             </Field>
           </div>
-        ) : null}
-      </section>
+        </section>
+      ) : null}
 
-      {/* ---- 3. Visit ------------------------------------------------------- */}
-      <section className={SECTION}>
-        <SectionHead step="2" title="Visit" note="The doctor is required" />
+      {showVisit ? (
+        <>
+          {/* ---- The visit --------------------------------------------------- */}
+          <section className={SECTION}>
+            <SectionHead step="2" title="Doctor" note="Required" />
 
-        <div className="grid grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-12">
-          <Field
-            label="Department"
-            htmlFor="department"
-            hint="Optional. Narrows the doctor list."
-            className="sm:col-span-5"
-          >
-            <Select
-              value={departmentId}
-              onValueChange={(value) => {
-                setDepartmentPick(value);
-                // A doctor left over from another department would be
-                // submitted invisibly.
-                if (
-                  value !== NO_DEPARTMENT &&
-                  doctor &&
-                  doctor.department_id !== value &&
-                  doctors.some((option) => option.department_id === value)
-                ) {
-                  setDoctorId('');
-                }
-              }}
-            >
-              <SelectTrigger id="department" className="h-11 w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={NO_DEPARTMENT}>No department</SelectItem>
-                {departments.map((option) => (
-                  <SelectItem key={option.id} value={option.id}>
-                    {option.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-
-          <Field
-            label="Doctor"
-            htmlFor="doctor"
-            required
-            error={fieldError(state, 'doctor_id')}
-            hint="On duty today, with how many are already waiting."
-            className="sm:col-span-7"
-          >
-            <Select value={doctorId} onValueChange={setDoctorId}>
-              <SelectTrigger
-                id="doctor"
-                className="h-11 w-full"
-                aria-invalid={fieldError(state, 'doctor_id') !== undefined}
-              >
-                <SelectValue placeholder="Choose a doctor" />
-              </SelectTrigger>
-              <SelectContent>
-                {visible.map((option) => (
-                  <SelectItem key={option.id} value={option.id}>
-                    {option.full_name}
-                    <span className="ml-2 text-xs text-muted-foreground">
-                      {option.waiting === 0 ? 'no queue' : `${option.waiting} waiting`}
-                      {option.on_duty ? '' : ' · not rostered'}
-                    </span>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </Field>
-        </div>
-      </section>
-
-      {/* ---- 4. Payment ----------------------------------------------------- */}
-      <section className={SECTION}>
-        <SectionHead
-          step="3"
-          title="Payment"
-          note={deferring ? 'Deferred' : 'Collected at the desk'}
-        />
-
-        <div className="grid grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-12">
-          <Field
-            label="Consultation fee"
-            htmlFor="fee-input"
-            error={fieldError(state, 'fee')}
-            hint={
-              canEditFee
-                ? "Prefilled from the doctor's own fee."
-                : 'Set from the doctor’s fee. You may not change it.'
-            }
-            className="sm:col-span-4"
-          >
-            <Input
-              id="fee-input"
-              inputMode="decimal"
-              value={effectiveFee}
-              disabled={!canEditFee || !doctor}
-              onChange={(event) => {
-                setFeeTouched(true);
-                setFee(event.target.value);
-              }}
-              className="h-11 text-right text-lg font-semibold tabular-nums md:text-sm md:font-normal"
-              aria-invalid={fieldError(state, 'fee') !== undefined}
-            />
-          </Field>
-
-          <Field
-            label="Payment mode"
-            htmlFor="payment-mode"
-            required={!deferring}
-            error={fieldError(state, 'payment_mode')}
-            hint={deferring ? 'Nothing is collected now.' : 'Required. Who collected it is you.'}
-            className="sm:col-span-8"
-          >
-            <div id="payment-mode" className="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap">
-              {PAYMENT_MODES.map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  disabled={deferring}
-                  aria-pressed={!deferring && mode === option}
-                  onClick={() => setMode(option)}
-                  className={cn(
-                    'h-11 rounded-xl border px-2 text-sm font-medium transition focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none active:scale-[0.97] sm:h-10 sm:min-w-20 sm:rounded-lg sm:px-4',
-                    deferring
-                      ? 'cursor-not-allowed border-border/60 text-muted-foreground/50'
-                      : mode === option
-                        ? 'border-primary bg-primary/10 font-semibold text-primary ring-1 ring-primary/30'
-                        : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground',
-                  )}
+            <div className="grid grid-cols-1 items-start gap-x-6 gap-y-3 sm:grid-cols-12 md:gap-y-4">
+              {departments.length > 0 ? (
+                <Field
+                  label="Department"
+                  htmlFor="department"
+                  hint="Optional. Narrows the doctor list."
+                  className="sm:col-span-5"
                 >
-                  {PAYMENT_MODE_LABEL[option]}
-                </button>
-              ))}
+                  <Select
+                    value={departmentId}
+                    onValueChange={(value) => {
+                      setDepartmentPick(value);
+                      // A doctor left over from another department would be
+                      // submitted invisibly.
+                      if (
+                        value !== NO_DEPARTMENT &&
+                        doctor &&
+                        doctor.department_id !== value &&
+                        doctors.some((option) => option.department_id === value)
+                      ) {
+                        setDoctorId('');
+                      }
+                    }}
+                  >
+                    <SelectTrigger id="department" className="h-11 w-full md:h-10">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value={NO_DEPARTMENT}>No department</SelectItem>
+                      {departments.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              ) : null}
+
+              <Field
+                label="Doctor"
+                htmlFor="doctor"
+                required
+                error={errorFor('doctor_id')}
+                hint={doctorCards ? undefined : 'On duty today, with how many are already waiting.'}
+                className="sm:col-span-12"
+              >
+                {/* The marker Enter uses to reach this question from Address. */}
+                <span data-step data-doctor-step hidden />
+                {doctorCards ? (
+                  <div
+                    id="doctor"
+                    role="radiogroup"
+                    aria-label="Doctor"
+                    className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
+                  >
+                    {visible.map((option) => {
+                      const selected = option.id === doctorId;
+                      return (
+                        <button
+                          key={option.id}
+                          type="button"
+                          role="radio"
+                          data-doctor
+                          aria-checked={selected}
+                          onClick={() => {
+                            setDoctorId(option.id);
+                            clearError('doctor_id');
+                          }}
+                          className={cn(
+                            'flex items-center gap-3 rounded-xl border px-3 py-2.5 text-left text-sm transition outline-none focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99] md:rounded-lg md:py-2',
+                            selected
+                              ? 'border-primary bg-primary/10 ring-1 ring-primary/30'
+                              : 'border-border bg-background hover:border-primary/40',
+                            errorFor('doctor_id') && !doctorId && 'border-destructive/60',
+                          )}
+                        >
+                          <span
+                            className={cn(
+                              'grid size-5 shrink-0 place-items-center rounded-full border',
+                              selected
+                                ? 'border-primary bg-primary text-primary-foreground'
+                                : 'border-muted-foreground/40',
+                            )}
+                          >
+                            {selected ? <CheckIcon className="size-3" strokeWidth={3} /> : null}
+                          </span>
+                          <span className="min-w-0 flex-1">
+                            <span className={cn('block truncate', selected ? 'font-semibold' : 'font-medium')}>
+                              {option.full_name}
+                            </span>
+                            <span className="block truncate text-xs text-muted-foreground">
+                              {option.waiting === 0 ? 'No queue' : `${option.waiting} waiting`}
+                              {option.on_duty ? '' : ' · not rostered'}
+                            </span>
+                          </span>
+                          <span className="shrink-0 text-right text-xs font-medium text-muted-foreground tabular-nums">
+                            {formatMoney(option.consultation_fee)}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <Select
+                    value={doctorId}
+                    onValueChange={(value) => {
+                      setDoctorId(value);
+                      clearError('doctor_id');
+                    }}
+                  >
+                    <SelectTrigger
+                      id="doctor"
+                      className="h-11 w-full md:h-10"
+                      aria-invalid={errorFor('doctor_id') !== undefined}
+                    >
+                      <SelectValue placeholder="Choose a doctor" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {visible.map((option) => (
+                        <SelectItem key={option.id} value={option.id}>
+                          {option.full_name}
+                          <span className="ml-2 text-xs text-muted-foreground">
+                            {option.waiting === 0 ? 'no queue' : `${option.waiting} waiting`}
+                            {option.on_duty ? '' : ' · not rostered'}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </Field>
             </div>
-          </Field>
-        </div>
+          </section>
 
-        {/* Rare, visible and auditable -- not a silent skip (block 4.2 step 5). */}
-        {canDefer ? (
-          deferring ? (
-            <Field
-              label="Why is the patient being seen before paying?"
-              htmlFor="defer_reason"
-              required
-              error={fieldError(state, 'defer_reason')}
-              hint="Recorded against your name and shown on the queue as PAYMENT DUE."
-            >
-              <div className="flex gap-2">
+          {/* ---- Payment ----------------------------------------------------- */}
+          <section className={SECTION}>
+            <SectionHead
+              step="3"
+              title="Payment"
+              note={deferring ? 'Deferred' : 'Collected at the desk'}
+            />
+
+            <div className="grid grid-cols-1 items-start gap-x-6 gap-y-3 sm:grid-cols-12 md:gap-y-4">
+              <Field
+                label="Consultation fee"
+                htmlFor="fee-input"
+                error={errorFor('fee')}
+                hint={
+                  canEditFee
+                    ? "Prefilled from the doctor's own fee."
+                    : 'Set from the doctor’s fee. You may not change it.'
+                }
+                className="sm:col-span-4"
+              >
                 <Input
-                  id="defer_reason"
-                  name="defer_reason"
-                  maxLength={200}
-                  autoFocus
-                  placeholder="Emergency, will settle at discharge"
-                  aria-invalid={fieldError(state, 'defer_reason') !== undefined}
+                  id="fee-input"
+                  inputMode="decimal"
+                  value={effectiveFee}
+                  disabled={!canEditFee || !doctor}
+                  onChange={(event) => {
+                    setFeeTouched(true);
+                    setFee(event.target.value);
+                  }}
+                  className="h-11 text-right text-lg font-semibold tabular-nums md:h-10 md:text-sm md:font-normal"
+                  aria-invalid={errorFor('fee') !== undefined}
                 />
-                <Button type="button" variant="ghost" onClick={() => setDeferring(false)}>
-                  Cancel
-                </Button>
-              </div>
-            </Field>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setDeferring(true)}
-              className="justify-self-start py-1 text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground md:py-0 md:text-xs"
-            >
-              Patient cannot pay now
-            </button>
-          )
-        ) : null}
-      </section>
+              </Field>
 
-      {/* ---- Footer --------------------------------------------------------- */}
-      {/* Phone: a floating bar docked above the tab bar -- the amount on the
-          left, the one button that matters on the right. From `md` it is the
-          full-width sticky footer with the shortcut hints. */}
-      <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 flex items-center gap-3 rounded-2xl border border-border/60 bg-background/95 py-2.5 pr-2.5 pl-4 shadow-lg shadow-foreground/5 backdrop-blur md:bottom-0 md:rounded-xl md:px-4 md:py-3 md:shadow-none">
-        <span className="hidden items-center gap-4 sm:flex">
-          <KbdHint keys={['Ctrl', 'Enter']} always>
-            register
-          </KbdHint>
-          <KbdHint keys="Esc" always>
-            clear search
-          </KbdHint>
-        </span>
+              <Field
+                label="Payment mode"
+                htmlFor="payment-mode"
+                required={!deferring}
+                error={errorFor('payment_mode')}
+                hint={deferring ? 'Nothing is collected now.' : 'Who collected it is you.'}
+                className="sm:col-span-8"
+              >
+                <div id="payment-mode" tabIndex={-1} className="grid grid-cols-4 gap-2 outline-none sm:flex sm:flex-wrap">
+                  {PAYMENT_MODES.map((option) => (
+                    <button
+                      key={option}
+                      type="button"
+                      disabled={deferring}
+                      aria-pressed={!deferring && payMode === option}
+                      onClick={() => {
+                        setPayMode(option);
+                        clearError('payment_mode');
+                      }}
+                      className={cn(
+                        'h-11 rounded-xl border px-2 text-sm font-medium transition focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none active:scale-[0.97] sm:h-10 sm:min-w-20 sm:rounded-lg sm:px-4',
+                        deferring
+                          ? 'cursor-not-allowed border-border/60 text-muted-foreground/50'
+                          : payMode === option
+                            ? 'border-primary bg-primary/10 font-semibold text-primary ring-1 ring-primary/30'
+                            : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground',
+                      )}
+                    >
+                      {PAYMENT_MODE_LABEL[option]}
+                    </button>
+                  ))}
+                </div>
+              </Field>
+            </div>
 
-        <span className="min-w-0 flex-1 text-sm text-muted-foreground sm:ml-auto sm:flex-none">
-          {deferring ? (
-            <>
-              <BanknoteIcon className="mr-1 inline size-4 align-text-bottom" />
-              Nothing collected
-            </>
-          ) : (
-            <>
-              <span className="block text-[11px] leading-tight font-medium tracking-wide uppercase sm:inline sm:text-sm sm:font-normal sm:tracking-normal sm:normal-case">
-                Collecting{' '}
-              </span>
-              <strong className="block truncate text-lg leading-tight font-bold text-foreground tabular-nums sm:inline sm:text-sm sm:font-semibold">
-                {formatMoney(Number(effectiveFee) || 0)}
-              </strong>
-            </>
-          )}
-        </span>
+            {/* Rare, visible and auditable -- not a silent skip. */}
+            {canDefer ? (
+              deferring ? (
+                <Field
+                  label="Why is the patient being seen before paying?"
+                  htmlFor="defer_reason"
+                  required
+                  error={errorFor('defer_reason')}
+                  hint="Recorded against your name and shown on the queue as PAYMENT DUE."
+                >
+                  <div className="flex gap-2">
+                    <Input
+                      id="defer_reason"
+                      name="defer_reason"
+                      maxLength={200}
+                      autoFocus
+                      placeholder="Emergency, will settle at discharge"
+                      onChange={() => clearError('defer_reason')}
+                      aria-invalid={errorFor('defer_reason') !== undefined}
+                    />
+                    <Button type="button" variant="ghost" onClick={() => setDeferring(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                </Field>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setDeferring(true)}
+                  className="justify-self-start py-1 text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground md:py-0 md:text-xs"
+                >
+                  Patient cannot pay now
+                </button>
+              )
+            ) : null}
+          </section>
 
-        <div className="flex shrink-0 gap-2">
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={startNext}
-            aria-label="Cancel and start over"
-            className="max-sm:w-11 max-sm:px-0"
-          >
-            <RotateCcwIcon className="sm:hidden" />
-            <span className="hidden sm:inline">Cancel</span>
-          </Button>
-          <SubmitButton pendingLabel="Registering...">
-            <TicketIcon data-icon="inline-start" />
-            Register<span className="hidden sm:inline">&nbsp;&amp; collect</span>
-          </SubmitButton>
-        </div>
-      </div>
+          {/* ---- Footer ------------------------------------------------------ */}
+          {/* Phone: a floating bar docked above the tab bar -- the amount on the
+              left, the one button that matters on the right. */}
+          <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 flex items-center gap-3 rounded-2xl border border-border/60 bg-background/95 py-2.5 pr-2.5 pl-4 shadow-lg shadow-foreground/5 backdrop-blur md:bottom-0 md:rounded-xl md:px-4 md:py-3 md:shadow-none">
+            <span className="hidden items-center gap-4 sm:flex">
+              <KbdHint keys={['Ctrl', 'Enter']} always>
+                register
+              </KbdHint>
+              <KbdHint keys="Enter" always>
+                next field
+              </KbdHint>
+            </span>
+
+            <span className="min-w-0 flex-1 text-sm text-muted-foreground sm:ml-auto sm:flex-none">
+              {deferring ? (
+                <>
+                  <BanknoteIcon className="mr-1 inline size-4 align-text-bottom" />
+                  Nothing collected
+                </>
+              ) : (
+                <>
+                  <span className="block text-[11px] leading-tight font-medium tracking-wide uppercase sm:inline sm:text-sm sm:font-normal sm:tracking-normal sm:normal-case">
+                    Collecting{' '}
+                  </span>
+                  <strong className="block truncate text-lg leading-tight font-bold text-foreground tabular-nums sm:inline sm:text-sm sm:font-semibold">
+                    {formatMoney(Number(effectiveFee) || 0)}
+                  </strong>
+                </>
+              )}
+            </span>
+
+            <div className="flex shrink-0 gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={startNext}
+                disabled={pending}
+                aria-label="Cancel and start over"
+                className="max-sm:w-11 max-sm:px-0"
+              >
+                <RotateCcwIcon className="sm:hidden" />
+                <span className="hidden sm:inline">Cancel</span>
+              </Button>
+              <Button type="submit" disabled={pending} className="min-w-32">
+                {pending ? (
+                  <>
+                    <span
+                      aria-hidden
+                      className="size-4 animate-spin rounded-full border-2 border-current border-r-transparent"
+                    />
+                    Registering
+                  </>
+                ) : (
+                  <>
+                    <TicketIcon data-icon="inline-start" />
+                    Register<span className="hidden sm:inline">&nbsp;&amp; collect</span>
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </>
+      ) : null}
     </form>
   );
 }
+
+function ModeTab({
+  active,
+  onClick,
+  icon,
+  label,
+  shortcut,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  shortcut: string;
+}) {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      aria-keyshortcuts={shortcut}
+      onClick={onClick}
+      className={cn(
+        'flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:scale-[0.98] md:h-9 md:rounded-lg',
+        active ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground',
+      )}
+    >
+      {icon}
+      {label}
+      <span className="hidden text-[10px] font-normal text-muted-foreground md:inline">
+        {shortcut}
+      </span>
+    </button>
+  );
+}
+
+/** Every text control on the patient step: one height, so the rows line up. */
+const CONTROL = 'h-11 md:h-10';
 
 function newIds() {
   return {

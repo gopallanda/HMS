@@ -34,9 +34,15 @@ export const metadata: Metadata = {
 // viewport-fit=cover hands the notch and home-indicator strips to the page, so
 // the phone's app bar and tab bar can pad themselves with env(safe-area-inset-*)
 // instead of the browser letterboxing them in white.
+//
+// Pinch-zoom is off: this is a work app used on the counter phone, and a page
+// that drifts in and out of zoom under a thumb reads as a broken website, not
+// an app. It also stops iOS zooming in on every input the clerk taps.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
   viewportFit: 'cover',
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#fbfbfa' },

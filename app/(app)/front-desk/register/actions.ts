@@ -1,7 +1,5 @@
 'use server';
 
-import { refresh } from 'next/cache';
-
 import { checkPermission } from '@/lib/auth/session';
 import { failure, invalid, success, type ActionState } from '@/lib/action-state';
 import { registerPatientVisit, type RegistrationResult } from '@/lib/rpc/registration';
@@ -106,10 +104,11 @@ export async function registerAction(
   }
   if (!data) return failure('The registration could not be completed. Try again.');
 
-  // The queue is a Server Component; this is what makes it current for anyone
-  // who navigates to it next in this tab. Other people's browsers find out
-  // through Realtime instead.
-  refresh();
+  // No refresh() here. It re-rendered the whole register page -- four more
+  // round trips to the database -- before the clerk saw the token, on the one
+  // screen where speed decides adoption. The desk bumps its own waiting counts
+  // (register-desk.tsx), the queue is dynamic and re-renders when opened, and
+  // other browsers find out through Realtime.
 
   return {
     ...success(`Token ${data.token_no} - ${data.patient_name} (${data.mrn})`),

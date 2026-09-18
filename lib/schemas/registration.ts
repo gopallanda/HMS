@@ -99,10 +99,31 @@ export const registrationSchema = z
         });
       }
 
-      const dob = resolveDob(value.dob, value.age_years, ctx);
+      // Phone, age and address are required at the desk for a NEW patient.
+      // The phone is how they are found next time and the address is on every
+      // receipt; neither is required of the database, so the emergency and
+      // service-role paths still work without them.
+      if (value.phone === null) {
+        failed = true;
+        ctx.addIssue({ code: 'custom', path: ['phone'], message: 'Phone number is required.' });
+      }
+      if (value.address === null) {
+        failed = true;
+        ctx.addIssue({ code: 'custom', path: ['address'], message: 'Address is required.' });
+      }
+
+      // The desk asks for age only. A date of birth is still accepted -- the
+      // deep links and older clients may send one -- but one of the two must
+      // be there, and the message names the field the clerk can see.
+      let dob: string | typeof z.NEVER = z.NEVER;
+      if (value.dob === '' && value.age_years === '') {
+        ctx.addIssue({ code: 'custom', path: ['age_years'], message: 'Age is required.' });
+      } else {
+        dob = resolveDob(value.dob, value.age_years, ctx);
+      }
       if (dob === z.NEVER) failed = true;
 
-      if (name.success && gender.success && dob !== z.NEVER) {
+      if (name.success && gender.success && dob !== z.NEVER && !failed) {
         patient = {
           id: value.patient_new_id,
           full_name: name.data,

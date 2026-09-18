@@ -192,6 +192,13 @@
   html {
     @apply font-sans;
   }
+  /* A belt to the braces of min-w-0 on each wide row: nothing may make the
+     page scroll sideways. `clip`, not `hidden`, so sticky headers and the
+     register footer keep working (hidden would make body a scroll container). */
+  html,
+  body {
+    overflow-x: clip;
+  }
   /* Money, counts, tokens and dates are read in columns all day. Lining figures
      keep them from jittering as values change (CLAUDE.md 7). */
   table, .tabular-nums {
