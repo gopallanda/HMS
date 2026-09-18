@@ -135,7 +135,7 @@ export default async function RegisterPage({
     <div className="grid gap-5">
       <PageHeader
         title="Register patient"
-        description="Search first. One form: patient, doctor, fee and token together."
+        description="Type the name: anyone already on file shows up as you type."
         actions={
           // The queue is a tab on a phone; here the search keeps the top.
           <Button asChild variant="outline" className="max-md:hidden">

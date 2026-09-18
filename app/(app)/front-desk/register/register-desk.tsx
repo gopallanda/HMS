@@ -6,7 +6,6 @@ import {
   PencilIcon,
   PrinterIcon,
   RotateCcwIcon,
-  SearchIcon,
   TicketIcon,
   UserRoundPlusIcon,
 } from 'lucide-react';
@@ -19,7 +18,7 @@ import { registerAction, type RegisterState } from './actions';
 import { Field } from '@/components/shared/field';
 import { FormMessage } from '@/components/shared/form-message';
 import { KbdHint } from '@/components/shared/kbd';
-import { MIN_QUERY, usePatientSearch } from '@/components/shared/patient-search';
+import { usePatientSearch } from '@/components/shared/patient-search';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -44,15 +43,12 @@ import { formatMoney } from '@/lib/utils/money';
  * submit, and what is written is complete: patient, visit, token, invoice, and
  * either the payment or a recorded deferral.
  *
- * Two ways in, chosen at the top:
- *
- *   * Find patient -- the search box, for somebody who has been before. Picking
- *     a row brings up the visit and payment steps; nothing else is on screen
- *     until then.
- *   * New patient -- straight to the fields. The name and the phone still
- *     search as they are typed, and a row whose mobile number matches the one
- *     typed is marked and sorted first: that is the returning patient the
- *     clerk did not look for. The save is never blocked (CLAUDE.md 3.3).
+ * One way in: the patient's name. There is no separate search box to go
+ * through first -- the name field IS the search (CLAUDE.md 3.3). As it is
+ * typed, anybody already on file with a name like it is listed with their
+ * mobile number; once a whole phone number is typed, a row with the same number
+ * is marked and sorted first. Tapping a row uses that patient; carrying on
+ * creates a new one. The save is never blocked.
  *
  * What makes it fast, because this is the screen that decides adoption:
  *
@@ -89,8 +85,6 @@ export type DeskPatient = {
   phone: string | null;
 };
 
-type Mode = 'find' | 'new';
-
 /** Radix Select cannot hold an empty value, so "no department" needs a token. */
 const NO_DEPARTMENT = '__none__';
 
@@ -109,13 +103,6 @@ function fromSearch(row: PatientSearchResult): DeskPatient {
     gender: row.gender,
     phone: row.phone,
   };
-}
-
-/** What was typed, split into the field it most likely belongs in. */
-function prefillFrom(query: string): { full_name: string; phone: string } {
-  const trimmed = query.trim();
-  const digits = trimmed.replace(/\D/g, '');
-  return digits.length >= 6 ? { full_name: '', phone: trimmed } : { full_name: trimmed, phone: '' };
 }
 
 /** The last ten digits: +91 98450 11223 and 09845011223 are the same mobile. */
@@ -287,11 +274,7 @@ export function RegisterDesk({
   /** Set while the form is coming back, so focus lands after it has mounted. */
   const refocus = useRef(false);
 
-  const [mode, setMode] = useState<Mode>('find');
-  const [query, setQuery] = useState('');
   const [chosen, setChosen] = useState<DeskPatient | null>(initialPatient);
-  /** What the new-patient fields open with, taken from the search box. */
-  const [prefill, setPrefill] = useState({ full_name: '', phone: '' });
 
   const [gender, setGender] = useState<Gender>('female');
   const [doctorId, setDoctorId] = useState('');
@@ -305,15 +288,10 @@ export function RegisterDesk({
   const [clientErrors, setClientErrors] = useState<FieldErrors | null>(null);
 
   const formRef = useRef<HTMLFormElement>(null);
-  const searchInput = useRef<HTMLInputElement>(null);
   const nameInput = useRef<HTMLInputElement>(null);
   const nextButton = useRef<HTMLButtonElement>(null);
 
-  // ---- Search box (Find patient) ------------------------------------------
-  const { data, isFetching, active } = usePatientSearch(query, mode === 'find' && chosen === null);
-  const matches = useMemo(() => data ?? [], [data]);
-
-  // ---- Name and phone matching (New patient) ------------------------------
+  // ---- Name and phone matching ---------------------------------------------
   // Both inputs are uncontrolled. Their values reach state only after a pause
   // in typing, so a keystroke repaints one input, not the whole form.
   const [nameTyped, setNameTyped] = useState('');
@@ -325,7 +303,7 @@ export function RegisterDesk({
     typingTimer.current = setTimeout(() => setter(value.trim()), TYPING_PAUSE_MS);
   }
 
-  const matching = mode === 'new' && chosen === null;
+  const matching = chosen === null;
   const typedPhone = phoneKey(phoneTyped);
   const nameSearch = usePatientSearch(nameTyped, matching);
   // A whole mobile number finds the household even when the name was spelt
@@ -353,7 +331,6 @@ export function RegisterDesk({
 
   function pick(match: PatientSearchResult) {
     setChosen(fromSearch(match));
-    setQuery('');
     setNameTyped('');
     setPhoneTyped('');
     setClientErrors(null);
@@ -362,18 +339,12 @@ export function RegisterDesk({
     requestAnimationFrame(() => focusDoctor());
   }
 
-  function switchMode(next: Mode) {
-    if (next === mode && chosen === null) return;
-    if (next === 'new') setPrefill(prefillFrom(query));
-    setMode(next);
+  function notThisPatient() {
     setChosen(null);
     setNameTyped('');
     setPhoneTyped('');
     setClientErrors(null);
-    requestAnimationFrame(() => {
-      if (next === 'new') nameInput.current?.focus();
-      else searchInput.current?.focus();
-    });
+    requestAnimationFrame(() => nameInput.current?.focus());
   }
 
   // ---- Doctors --------------------------------------------------------------
@@ -454,35 +425,6 @@ export function RegisterDesk({
     focusFirst(Object.keys(state.fieldErrors));
   }, [state]);
 
-  // The keyboard listener below is registered once; it reaches the current switchMode
-  // through this ref rather than re-subscribing on every render.
-  const switchModeRef = useRef(switchMode);
-  useEffect(() => {
-    switchModeRef.current = switchMode;
-  });
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      // Alt+F / Alt+N switch between the two ways in.
-      if (event.altKey && !event.ctrlKey && !event.metaKey) {
-        const key = event.key.toLowerCase();
-        if (key === 'f' || key === 'n') {
-          event.preventDefault();
-          switchModeRef.current(key === 'f' ? 'find' : 'new');
-        }
-        return;
-      }
-      if (event.key === 'Escape') {
-        const target = event.target as HTMLElement | null;
-        if (target?.closest('[role="listbox"], [role="dialog"]')) return;
-        setQuery('');
-        searchInput.current?.focus();
-      }
-    }
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, []);
-
   /**
    * Enter moves to the next field (CLAUDE.md 7), Ctrl+Enter registers. Only
    * elements marked data-step take part, in DOM order, so the tab stops that
@@ -535,9 +477,6 @@ export function RegisterDesk({
     // the screen.
     if (result) setDismissed(result.visit_id);
     setIds(newIds());
-    setMode('find');
-    setQuery('');
-    setPrefill({ full_name: '', phone: '' });
     setNameTyped('');
     setPhoneTyped('');
     setChosen(null);
@@ -556,7 +495,7 @@ export function RegisterDesk({
   useEffect(() => {
     if (done || !refocus.current) return;
     refocus.current = false;
-    searchInput.current?.focus();
+    nameInput.current?.focus();
   }, [done]);
 
   // ---- The success panel (block 4.4) ---------------------------------------
@@ -609,11 +548,6 @@ export function RegisterDesk({
     );
   }
 
-  const showNewFields = mode === 'new' && chosen === null;
-  // In Find mode nothing past the search is on screen until somebody is
-  // picked: a visit and a fee for nobody in particular is only clutter.
-  const showVisit = chosen !== null || mode === 'new';
-
   return (
     <form
       ref={formRef}
@@ -639,96 +573,6 @@ export function RegisterDesk({
 
       <FormMessage state={clientErrors ? IDLE : formState} />
 
-      {/* ---- The two ways in ---------------------------------------------- */}
-      <div
-        role="tablist"
-        aria-label="Patient"
-        className="grid grid-cols-2 gap-1 rounded-2xl bg-muted/70 p-1 md:max-w-md md:rounded-xl"
-      >
-        <ModeTab
-          active={mode === 'find'}
-          onClick={() => switchMode('find')}
-          icon={<SearchIcon className="size-4" />}
-          label="Find patient"
-          shortcut="Alt+F"
-        />
-        <ModeTab
-          active={mode === 'new'}
-          onClick={() => switchMode('new')}
-          icon={<UserRoundPlusIcon className="size-4" />}
-          label="New patient"
-          shortcut="Alt+N"
-        />
-      </div>
-
-      {/* ---- Find: the search box ------------------------------------------ */}
-      {mode === 'find' && chosen === null ? (
-        <section className="grid gap-3">
-          <div className="relative">
-            <SearchIcon
-              className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground md:left-3 md:size-4.5"
-              aria-hidden
-            />
-            <Input
-              ref={searchInput}
-              id="patient-search"
-              aria-label="Find the patient"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              onKeyDown={(event) => {
-                // Enter takes the top match; Down walks the list.
-                if (event.key === 'Enter' && matches[0]) {
-                  event.preventDefault();
-                  pick(matches[0]);
-                } else if (event.key === 'ArrowDown' && matches.length > 0) {
-                  event.preventDefault();
-                  document.querySelector<HTMLButtonElement>('#search-results button')?.focus();
-                }
-              }}
-              placeholder="Phone, name or MRN"
-              className="h-13 rounded-2xl bg-card pl-12 text-base shadow-sm md:h-11 md:rounded-lg md:bg-background md:pl-10 md:text-base md:shadow-none"
-              autoComplete="off"
-              spellCheck={false}
-              enterKeyHint="search"
-              autoFocus
-            />
-          </div>
-
-          {!active ? (
-            <p className="px-1 text-xs text-muted-foreground">
-              Type {MIN_QUERY} or more characters. Enter picks the first match.
-            </p>
-          ) : null}
-
-          {active && (matches.length > 0 || isFetching) ? (
-            <div id="search-results">
-              <MatchList
-                matches={matches}
-                note={
-                  isFetching && matches.length === 0
-                    ? 'Searching...'
-                    : `${matches.length} on file. Check the mobile number with the patient, then tap to use.`
-                }
-                onPick={pick}
-              />
-            </div>
-          ) : null}
-
-          {active && !isFetching ? (
-            <button
-              type="button"
-              onClick={() => switchMode('new')}
-              className="flex items-center justify-center gap-2 rounded-2xl border border-dashed border-primary/40 bg-primary/5 px-4 py-3 text-sm font-medium text-primary transition active:scale-[0.99] md:rounded-xl md:py-2.5"
-            >
-              <UserRoundPlusIcon className="size-4" />
-              {matches.length === 0
-                ? `Nobody matches “${query.trim()}”. Register as a new patient`
-                : 'Not in the list? Register as a new patient'}
-            </button>
-          ) : null}
-        </section>
-      ) : null}
-
       {/* ---- The patient ----------------------------------------------------- */}
       {chosen ? (
         <section className={SECTION}>
@@ -747,7 +591,7 @@ export function RegisterDesk({
             </span>
             <button
               type="button"
-              onClick={() => switchMode(mode)}
+              onClick={notThisPatient}
               className="flex w-full items-center justify-center gap-1 rounded-lg py-2 text-xs font-medium text-primary hover:underline max-md:mt-1 max-md:bg-background md:ml-auto md:w-auto md:py-0"
             >
               <PencilIcon className="size-3" />
@@ -757,9 +601,9 @@ export function RegisterDesk({
         </section>
       ) : null}
 
-      {showNewFields ? (
+      {chosen === null ? (
         <section className={SECTION}>
-          <SectionHead step="1" title="New patient" note="All fields required" />
+          <SectionHead step="1" title="Patient" note="All fields required" />
 
           {/* One grid, every control the same height, so the rows line up:
               name and phone, then age, gender and address. On a phone the
@@ -770,6 +614,7 @@ export function RegisterDesk({
               htmlFor="full_name"
               required
               error={errorFor('full_name')}
+              hint="Patients already on file appear below after 3 letters."
               className="col-span-2 sm:col-span-6"
             >
               <Input
@@ -777,7 +622,7 @@ export function RegisterDesk({
                 id="full_name"
                 name="full_name"
                 data-step
-                defaultValue={prefill.full_name}
+                autoFocus
                 onChange={(event) => {
                   typed(setNameTyped, event.target.value);
                   clearError('full_name');
@@ -811,7 +656,6 @@ export function RegisterDesk({
                 data-step
                 type="tel"
                 inputMode="tel"
-                defaultValue={prefill.phone}
                 onChange={(event) => {
                   typed(setPhoneTyped, event.target.value);
                   clearError('phone');
@@ -923,8 +767,7 @@ export function RegisterDesk({
         </section>
       ) : null}
 
-      {showVisit ? (
-        <>
+      <>
           {/* ---- The visit --------------------------------------------------- */}
           <section className={SECTION}>
             <SectionHead step="2" title="Doctor" note="Required" />
@@ -1171,9 +1014,11 @@ export function RegisterDesk({
           </section>
 
           {/* ---- Footer ------------------------------------------------------ */}
-          {/* Phone: a floating bar docked above the tab bar -- the amount on the
-              left, the one button that matters on the right. */}
-          <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 flex items-center gap-3 rounded-2xl border border-border/60 bg-background/95 py-2.5 pr-2.5 pl-4 shadow-lg shadow-foreground/5 backdrop-blur md:bottom-0 md:rounded-xl md:px-4 md:py-3 md:shadow-none">
+          {/* The end of the form, in the flow. On a phone it used to be sticky
+              above the tab bar, so it floated over every section while
+              scrolling and covered the fields being filled in. From `md` it
+              stays pinned to the bottom of the window, where there is room. */}
+          <div className="flex items-center gap-3 rounded-2xl border border-border/60 bg-card py-2.5 pr-2.5 pl-4 shadow-sm md:sticky md:bottom-0 md:z-20 md:rounded-xl md:bg-background/95 md:px-4 md:py-3 md:shadow-none md:backdrop-blur">
             <span className="hidden items-center gap-4 sm:flex">
               <KbdHint keys={['Ctrl', 'Enter']} always>
                 register
@@ -1231,43 +1076,8 @@ export function RegisterDesk({
               </Button>
             </div>
           </div>
-        </>
-      ) : null}
+      </>
     </form>
-  );
-}
-
-function ModeTab({
-  active,
-  onClick,
-  icon,
-  label,
-  shortcut,
-}: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-  shortcut: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="tab"
-      aria-selected={active}
-      aria-keyshortcuts={shortcut}
-      onClick={onClick}
-      className={cn(
-        'flex h-11 items-center justify-center gap-2 rounded-xl text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none active:scale-[0.98] md:h-9 md:rounded-lg',
-        active ? 'bg-background text-primary shadow-sm' : 'text-muted-foreground',
-      )}
-    >
-      {icon}
-      {label}
-      <span className="hidden text-[10px] font-normal text-muted-foreground md:inline">
-        {shortcut}
-      </span>
-    </button>
   );
 }
 
