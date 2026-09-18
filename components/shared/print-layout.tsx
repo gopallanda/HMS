@@ -1,6 +1,6 @@
 'use client';
 
-import { PrinterIcon } from 'lucide-react';
+import { ChevronLeftIcon, PrinterIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useRef } from 'react';
 
@@ -88,6 +88,15 @@ const SHARED_CSS = `
   .print-hide { display: none !important; }
   .print-sheet { margin: 0; }
 }
+/* Screen only: a phone previews the whole sheet instead of a sideways scroll.
+   zoom rather than transform, so the page's own height follows the sheet. */
+@media screen and (max-width: 480px) {
+  .print-sheet[data-paper="a4"] { zoom: 0.44; }
+  .print-sheet[data-paper="a5"] { zoom: 0.62; }
+}
+@media screen and (min-width: 481px) and (max-width: 820px) {
+  .print-sheet[data-paper="a4"] { zoom: 0.8; }
+}
 `;
 
 const PAPER_HINT: Record<PrintFormat, string> = {
@@ -151,45 +160,54 @@ export function PrintLayout({
   }, [autoPrint]);
 
   return (
-    <div className="flex min-h-svh flex-col items-center gap-4 bg-muted/40 py-4 print:bg-white print:py-0">
+    <div className="flex min-h-svh flex-col items-center gap-4 bg-muted/40 pb-6 sm:py-4 print:bg-white print:py-0">
       <style>{SHARED_CSS + PAPER_CSS[format]}</style>
 
       {/* The paper itself is untouched by this redesign -- @media print and the
           80mm/A4 sheets are load-bearing. Only the chrome around it moved. */}
-      <div className="print-hide flex w-full max-w-[210mm] flex-wrap items-center gap-2 rounded-xl border border-border/60 bg-card px-3 py-2.5 shadow-sm">
+      {/* Phone: a sticky app bar -- back, title, Print -- with the paper
+          choice as a full-width segmented row under it. */}
+      <div className="print-hide sticky top-0 z-10 grid w-full max-w-[210mm] grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-2 border-b border-border/60 bg-card/95 px-3 pt-[calc(env(safe-area-inset-top)+0.625rem)] pb-2.5 backdrop-blur sm:static sm:flex sm:flex-wrap sm:rounded-2xl sm:border sm:pt-2.5 sm:shadow-sm md:rounded-xl">
         <Button asChild variant="outline" size="sm">
-          <Link href={backHref}>Back</Link>
+          <Link href={backHref}>
+            <ChevronLeftIcon data-icon="inline-start" className="sm:hidden" />
+            Back
+          </Link>
         </Button>
-        <span className="text-sm font-medium">{title}</span>
+        <span className="truncate text-center text-sm font-semibold sm:text-left sm:font-medium">
+          {title}
+        </span>
 
-        <div className="ml-auto flex items-center gap-2">
-          {/* Paper size as a segmented control: it is one choice out of two,
-              not two competing actions. */}
-          <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
-            {formats.map((option) => (
-              <Link
-                key={option}
-                href={`${documentHref}?format=${option}`}
-                replace
-                aria-current={option === format ? 'true' : undefined}
-                className={
-                  option === format
-                    ? 'rounded-md bg-background px-3 py-1.5 text-[0.8rem] font-medium shadow-sm'
-                    : 'rounded-md px-3 py-1.5 text-[0.8rem] text-muted-foreground transition-colors hover:text-foreground'
-                }
-              >
-                {PRINT_FORMAT_LABEL[option]}
-              </Link>
-            ))}
-          </div>
-          <Button size="sm" onClick={() => window.print()}>
-            <PrinterIcon data-icon="inline-start" />
-            Print
-          </Button>
+        <Button size="sm" onClick={() => window.print()} className="sm:order-last">
+          <PrinterIcon data-icon="inline-start" />
+          Print
+        </Button>
+
+        {/* Paper size as a segmented control: it is one choice out of two,
+            not two competing actions. */}
+        <div className="col-span-3 flex items-center gap-1 rounded-xl bg-muted p-1 sm:ml-auto sm:rounded-lg">
+          {formats.map((option) => (
+            <Link
+              key={option}
+              href={`${documentHref}?format=${option}`}
+              replace
+              aria-current={option === format ? 'true' : undefined}
+              className={
+                option === format
+                  ? 'flex-1 rounded-lg bg-background px-3 py-2 text-center text-[0.8rem] font-medium shadow-sm sm:flex-none sm:rounded-md sm:py-1.5'
+                  : 'flex-1 rounded-lg px-3 py-2 text-center text-[0.8rem] text-muted-foreground transition-colors hover:text-foreground sm:flex-none sm:rounded-md sm:py-1.5'
+              }
+            >
+              {PRINT_FORMAT_LABEL[option]}
+            </Link>
+          ))}
         </div>
       </div>
 
-      <div className="print-sheet rounded-sm shadow-md print:rounded-none print:shadow-none">
+      <div
+        data-paper={format}
+        className="print-sheet rounded-sm shadow-md print:rounded-none print:shadow-none"
+      >
         {children}
       </div>
 

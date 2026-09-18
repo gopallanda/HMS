@@ -32,7 +32,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           userName={session.staffName}
           userEmail={session.email}
         />
-        <main className="min-w-0 flex-1 px-4 py-4 md:px-6 md:py-6">
+        <main className="min-w-0 flex-1 px-4 pt-4 pb-[calc(6rem+env(safe-area-inset-bottom))] md:px-6 md:py-6">
           <LifecycleBanner
             hospital={session.hospital}
             lifecycle={session.lifecycle}

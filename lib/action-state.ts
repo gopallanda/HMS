@@ -12,13 +12,27 @@ export type FieldErrors = Record<string, string[] | undefined>;
 
 export type ActionState =
   | { status: 'idle' }
-  | { status: 'error'; message: string; fieldErrors?: FieldErrors }
+  | {
+      status: 'error';
+      message: string;
+      fieldErrors?: FieldErrors;
+      link?: ActionLink;
+    }
   | { status: 'success'; message: string };
+
+/** Somewhere the banner can send the user when the fix is another screen. */
+export type ActionLink = { href: string; label: string };
 
 export const IDLE: ActionState = { status: 'idle' };
 
-export function failure(message: string, fieldErrors?: FieldErrors): ActionState {
-  return { status: 'error', message, fieldErrors };
+export function failure(
+  message: string,
+  fieldErrors?: FieldErrors,
+  link?: ActionLink,
+): ActionState {
+  return link
+    ? { status: 'error', message, fieldErrors, link }
+    : { status: 'error', message, fieldErrors };
 }
 
 export function success(message: string): ActionState {

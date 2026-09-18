@@ -39,6 +39,8 @@ import { roleHome } from '@/lib/rbac/routes';
 export type NavItem = {
   href: string;
   label: string;
+  /** What the phone's bottom tab bar prints: ~10 characters fit under an icon. */
+  shortLabel?: string;
   icon: LucideIcon;
   /**
    * What the viewer must hold to see this row. ANY one of them is enough --
@@ -70,6 +72,7 @@ export const NAV: readonly NavSection[] = [
     items: [
       {
         href: '/',
+        shortLabel: 'Home',
         label: 'Overview',
         icon: LayoutDashboardIcon,
         /**
@@ -92,6 +95,7 @@ export const NAV: readonly NavSection[] = [
     items: [
       {
         href: '/front-desk/register',
+        shortLabel: 'Register',
         label: 'Register patient',
         icon: UserRoundPlusIcon,
         permissions: ['visits.create'],
@@ -113,6 +117,7 @@ export const NAV: readonly NavSection[] = [
     items: [
       {
         href: '/billing/collect',
+        shortLabel: 'Collect',
         label: 'Collect payment',
         icon: CreditCardIcon,
         permissions: ['billing.collect'],
@@ -129,6 +134,7 @@ export const NAV: readonly NavSection[] = [
       },
       {
         href: '/billing/dues',
+        shortLabel: 'Dues',
         label: 'Outstanding dues',
         icon: WalletCardsIcon,
         permissions: ['billing.read'],
@@ -137,6 +143,7 @@ export const NAV: readonly NavSection[] = [
       },
       {
         href: '/billing/day-close',
+        shortLabel: 'Day close',
         label: 'Day close',
         icon: SlidersHorizontalIcon,
         permissions: ['reports.view'],
@@ -206,6 +213,7 @@ export const NAV: readonly NavSection[] = [
     items: [
       {
         href: '/admin/settings',
+        shortLabel: 'Settings',
         label: 'Hospital settings',
         icon: BuildingIcon,
         permissions: ['settings.manage'],
@@ -254,6 +262,7 @@ export const NAV: readonly NavSection[] = [
       },
       {
         href: '/admin/services',
+        shortLabel: 'Prices',
         label: 'Price list',
         icon: ReceiptIndianRupeeIcon,
         permissions: ['settings.manage'],
@@ -266,6 +275,7 @@ export const NAV: readonly NavSection[] = [
        */
       {
         href: '/admin/new-vs-return',
+        shortLabel: 'New vs return',
         label: 'New vs Return',
         icon: RepeatIcon,
         permissions: ['reports.patients'],
@@ -313,4 +323,40 @@ export function navLandings(held: PermissionSet): string[] {
  */
 export function landingFor(roleCode: string | null, held: PermissionSet): string {
   return roleHome(roleCode, held, navLandings(held));
+}
+
+/**
+ * Which destinations earn a slot in the phone's bottom tab bar, best first.
+ *
+ * The bar holds four tabs and a "More"; everything else lives in the More
+ * sheet. The order is "what does this person open fifty times a shift": the
+ * desk's register and queue before the money, the money before the records,
+ * administration last. A role only ever sees the ones it holds, so a doctor's
+ * bar is their queue and patients, and a cashier's is collect and invoices.
+ */
+const MOBILE_PRIORITY = [
+  '/',
+  '/front-desk/register',
+  '/front-desk/queue',
+  '/doctor/queue',
+  '/billing/collect',
+  '/patients',
+  '/billing/invoices',
+  '/billing/dues',
+  '/billing/day-close',
+  '/reports',
+  '/admin/staff',
+  '/admin/roster',
+];
+
+/** The tab bar's items: up to `slots` of the viewer's ready destinations. */
+export function mobileTabsFor(held: PermissionSet, slots: number): NavItem[] {
+  const items = navFor(held)
+    .flatMap((section) => section.items)
+    .filter((item) => item.status === 'ready');
+  const rank = (href: string) => {
+    const index = MOBILE_PRIORITY.indexOf(href);
+    return index === -1 ? MOBILE_PRIORITY.length : index;
+  };
+  return [...items].sort((a, b) => rank(a.href) - rank(b.href)).slice(0, slots);
 }

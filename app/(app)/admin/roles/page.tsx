@@ -47,7 +47,7 @@ export default async function RolesPage() {
     return (
       <div className="grid gap-6">
         <PageHeader title="Roles" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           Roles could not be loaded: {failed.message}
         </p>
       </div>

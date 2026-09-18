@@ -43,7 +43,7 @@ export function ErrorCard({
   description?: string;
 }) {
   return (
-    <Card className="mx-auto mt-12 max-w-md">
+    <Card className="mx-auto mt-6 w-full max-w-md md:mt-12">
       <CardContent className="grid gap-4 py-4 text-center">
         <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-destructive/10">
           <TriangleAlertIcon className="size-6 stroke-[1.5] text-destructive" />
@@ -52,7 +52,7 @@ export function ErrorCard({
           <p className="text-base font-semibold">{title}</p>
           <p className="text-sm leading-relaxed text-muted-foreground">{description}</p>
         </div>
-        <div className="flex flex-wrap items-center justify-center gap-2">
+        <div className="flex flex-col-reverse items-stretch justify-center gap-2 sm:flex-row sm:flex-wrap sm:items-center">
           <Button onClick={reset}>
             <RotateCwIcon data-icon="inline-start" />
             Try again

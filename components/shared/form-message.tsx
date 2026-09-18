@@ -1,4 +1,5 @@
-import { CircleCheckIcon, TriangleAlertIcon } from 'lucide-react';
+import { ArrowRightIcon, CircleCheckIcon, TriangleAlertIcon } from 'lucide-react';
+import Link from 'next/link';
 
 import type { ActionState } from '@/lib/action-state';
 import { cn } from '@/lib/cn';
@@ -32,7 +33,18 @@ export function FormMessage({ state, className }: { state: ActionState; classNam
       ) : (
         <CircleCheckIcon className="mt-0.5 size-4 shrink-0" />
       )}
-      <span>{state.message}</span>
+      <span className="grid gap-1.5">
+        <span>{state.message}</span>
+        {isError && state.link ? (
+          <Link
+            href={state.link.href}
+            className="inline-flex items-center gap-1 font-medium underline underline-offset-4"
+          >
+            {state.link.label}
+            <ArrowRightIcon className="size-3.5" aria-hidden />
+          </Link>
+        ) : null}
+      </span>
     </p>
   );
 }

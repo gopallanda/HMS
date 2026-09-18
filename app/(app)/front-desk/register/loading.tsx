@@ -11,8 +11,8 @@ export default function Loading() {
   return (
     <div className="grid animate-pulse gap-5" aria-busy="true" aria-label="Loading the register desk">
       <HeaderSkeleton />
-      <div className="h-12 rounded-xl border border-border/60 bg-card shadow-sm" />
-      <div className="h-[28rem] rounded-xl border border-border/60 bg-card shadow-sm" />
+      <div className="h-12 rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl" />
+      <div className="h-[28rem] rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl" />
     </div>
   );
 }

@@ -55,7 +55,7 @@ export default async function StaffPage() {
     return (
       <div className="grid gap-6">
         <PageHeader title="Staff" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           Staff could not be loaded: {failed.message}
         </p>
       </div>

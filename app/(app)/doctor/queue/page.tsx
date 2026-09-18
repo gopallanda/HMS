@@ -70,7 +70,7 @@ export default async function DoctorQueuePage() {
     return (
       <div className="grid gap-6">
         <PageHeader title="My queue" description={formatDate(today)} />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           Your queue could not be loaded: {error.message}
         </p>
       </div>
@@ -117,7 +117,7 @@ export default async function DoctorQueuePage() {
         description={`${session.staffName ?? 'Today'} · ${formatDate(today)}`}
       />
       {writtenError ? (
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           Your queue is shown, but the notes written so far could not be read:{' '}
           {writtenError.message}
         </p>

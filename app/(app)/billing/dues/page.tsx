@@ -83,7 +83,7 @@ export default async function DuesPage({
     return (
       <div className="grid gap-6">
         <PageHeader title="Outstanding dues" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           The dues list could not be loaded, so no total is shown rather than a wrong one:{' '}
           {error.message}
         </p>
@@ -137,7 +137,9 @@ export default async function DuesPage({
       {/* The three buckets, as filter chips carrying their own totals. A plain
           GET like the invoice filters: the URL is the state, so a list of the
           31-day debts can be bookmarked or sent to somebody. */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* Phone: a row that scrolls sideways -- three money figures do not fit
+          side by side in 360px, and stacked they push the list off screen. */}
+      <div className="-mx-4 flex snap-x gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-3 sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0">
         {byBucket.map((option) => (
           <Link
             key={option.key}
@@ -147,7 +149,7 @@ export default async function DuesPage({
                 : `/billing/dues?bucket=${option.key}${search === '' ? '' : `&q=${encodeURIComponent(search)}`}`
             }
             className={cn(
-              'rounded-xl border border-border/60 bg-card p-4 shadow-sm transition-colors hover:border-ring/60',
+              'w-[11.5rem] shrink-0 snap-start rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm transition-colors hover:border-ring/60 active:scale-[0.98] sm:w-auto sm:p-4 md:rounded-xl',
               selectedBucket === option.key && 'border-primary ring-1 ring-primary/40',
               option.key === 'old' && option.amount > 0 && 'border-l-4 border-l-destructive',
             )}
@@ -155,7 +157,7 @@ export default async function DuesPage({
             <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
               {option.label}
             </p>
-            <p className="mt-1.5 text-2xl leading-none font-bold tracking-tight tabular-nums">
+            <p className="mt-1.5 truncate text-xl leading-none font-bold tracking-tight tabular-nums sm:text-2xl">
               {formatMoney(option.amount)}
             </p>
             <p className="mt-1.5 text-xs text-muted-foreground">
@@ -166,7 +168,7 @@ export default async function DuesPage({
         ))}
       </div>
 
-      <form className="flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm md:p-4">
+      <form className="flex flex-wrap items-end gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm md:p-4 md:rounded-xl">
         {selectedBucket ? (
           <input type="hidden" name="bucket" value={selectedBucket} />
         ) : null}
@@ -202,7 +204,7 @@ export default async function DuesPage({
         canCollect={session.access.permissions.has('billing.collect')}
       />
 
-      <p className="text-xs text-muted-foreground">
+      <p className="px-1 text-xs text-muted-foreground md:px-0">
         Voided invoices are not here: the number stays consumed but the charges went back to the
         visit, so nothing is owed. Age is counted in IST days from the invoice date.
       </p>

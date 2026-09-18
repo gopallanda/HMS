@@ -1,4 +1,5 @@
 import {
+  ChevronRightIcon,
   CalendarCheckIcon,
   ShieldAlertIcon,
   WalletCardsIcon,
@@ -121,19 +122,19 @@ export default async function ReportsPage() {
       />
 
       {cards.length === 0 ? (
-        <p className="rounded-lg bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">
+        <p className="rounded-xl bg-muted/50 px-3.5 py-3 text-sm text-muted-foreground md:rounded-lg md:px-3 md:py-2.5">
           Your role can open this page but none of the reports behind it. Ask an administrator
           for billing.read or reports.view.
         </p>
       ) : (
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 md:gap-4 xl:grid-cols-3">
           {cards.map((card) => (
             <ReportCard key={card.href} {...card} />
           ))}
         </div>
       )}
 
-      <p className="text-xs text-muted-foreground">
+      <p className="px-1 text-xs text-muted-foreground md:px-0">
         Every figure here is the headline of the screen it links to, read at the same moment as
         the rest of this page. Days are IST calendar days, not the server&apos;s.
       </p>
@@ -160,11 +161,14 @@ function ReportCard({
   return (
     <Link
       href={href}
-      className="grid content-start gap-2 rounded-xl border border-border/60 bg-card p-4 shadow-sm transition-colors hover:border-ring/60 md:p-5"
+      className="group grid content-start gap-2 rounded-2xl border border-border/60 bg-card p-4 shadow-sm transition hover:border-ring/60 active:scale-[0.99] md:rounded-xl md:p-5"
     >
-      <span className="flex items-center gap-2">
-        <Icon className="size-4 text-muted-foreground" aria-hidden />
-        <span className="font-medium">{title}</span>
+      <span className="flex items-center gap-2.5 md:gap-2">
+        <span className="grid size-9 place-items-center rounded-xl bg-primary/10 text-primary md:size-auto md:bg-transparent md:text-muted-foreground">
+          <Icon className="size-[18px] md:size-4" aria-hidden />
+        </span>
+        <span className="flex-1 font-semibold md:font-medium">{title}</span>
+        <ChevronRightIcon className="size-4 text-muted-foreground md:hidden" aria-hidden />
       </span>
 
       {/* A failed read says so. A report that shows zero when it could not
@@ -175,14 +179,14 @@ function ReportCard({
         </span>
       ) : (
         <span>
-          <span className="text-2xl leading-none font-bold tracking-tight tabular-nums">
+          <span className="text-[26px] leading-none font-bold tracking-tight tabular-nums md:text-2xl">
             {figure}
           </span>
           <span className="ml-2 text-xs text-muted-foreground">{figureLabel}</span>
         </span>
       )}
 
-      <span className="text-sm text-muted-foreground">{description}</span>
+      <span className="line-clamp-2 text-sm text-muted-foreground md:line-clamp-none">{description}</span>
     </Link>
   );
 }

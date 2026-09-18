@@ -57,7 +57,7 @@ export default async function CollectPage({
     return (
       <div className="grid gap-6">
         <PageHeader title="Collect payment" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           The counter could not be loaded: {failed.message}
         </p>
       </div>
@@ -85,7 +85,7 @@ export default async function CollectPage({
       />
 
       {services.length === 0 ? (
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           The charge master is empty, so no charge can be added at the counter. An administrator
           has to add services before billing works.
         </p>

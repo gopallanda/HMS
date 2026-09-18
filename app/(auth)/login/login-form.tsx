@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useActionState, useRef, useState } from 'react';
 
 import { signIn } from './actions';
+import { PORTAL_CONFIG, type Portal } from '@/lib/auth/portals';
 import { Field } from '@/components/shared/field';
 import { FormMessage } from '@/components/shared/form-message';
 import { SubmitButton } from '@/components/shared/submit-button';
@@ -15,11 +16,10 @@ import { cn } from '@/lib/cn';
 /**
  * Which kind of identifier the person in front of the screen holds.
  *
- * NOT a role, and deliberately not one. Doctor, nurse, cashier and cleaner all
- * sign in the same way, through the same shell, and what they may open comes
- * from their permissions once they are in (CLAUDE.md 3.6) -- a "doctor login"
- * tab would promise an isolation that does not exist and could not be enforced
- * from a tab anyway.
+ * NOT a role. Which door somebody uses (admin, doctor, staff) is the portal,
+ * a separate page, checked by the action once the password is right -- see
+ * lib/auth/portals.ts. What they may open still comes from their permissions
+ * once they are in (CLAUDE.md 3.6). This switch appears on the admin door only.
  *
  * What genuinely differs is what somebody was HANDED. Staff got a username on a
  * slip of paper at the desk. Whoever created the hospital through /signup has
@@ -37,11 +37,16 @@ const MODES: {
   value: Mode;
   label: string;
   icon: typeof IdCardIcon;
-  field: { label: string; placeholder: string; hint: string; autoComplete: string };
+  field: {
+    label: string;
+    placeholder: string;
+    hint: string;
+    autoComplete: string;
+  };
 }[] = [
   {
     value: 'staff',
-    label: 'Staff',
+    label: 'Username',
     icon: IdCardIcon,
     field: {
       label: 'Username',
@@ -52,7 +57,7 @@ const MODES: {
   },
   {
     value: 'owner',
-    label: 'Owner',
+    label: 'Email',
     icon: MailIcon,
     field: {
       label: 'Email address',
@@ -63,8 +68,11 @@ const MODES: {
   },
 ];
 
-export function LoginForm({ next }: { next?: string }) {
+export function LoginForm({ next, portal }: { next?: string; portal: Portal }) {
   const [state, formAction] = useActionState(signIn, IDLE);
+  // Only the admin door has a founder behind it, so only it offers the email
+  // switch. Doctors and staff were all handed a username at the desk.
+  const allowsEmail = PORTAL_CONFIG[portal].allowsEmail;
   const [mode, setMode] = useState<Mode>('staff');
   /**
    * Controlled only so the value survives the remount below. An uncontrolled
@@ -89,40 +97,43 @@ export function LoginForm({ next }: { next?: string }) {
   return (
     <form action={formAction} className="grid gap-4">
       {next ? <input type="hidden" name="next" value={next} /> : null}
+      <input type="hidden" name="portal" value={portal} />
 
       <FormMessage state={state} />
 
       {/* Two entry modes for one field, so the box around them is what says
           they are alternatives rather than steps. */}
-      <div
-        role="radiogroup"
-        aria-label="How you sign in"
-        className="grid grid-cols-2 gap-1 rounded-lg bg-muted p-1"
-      >
-        {MODES.map((entry) => {
-          const Icon = entry.icon;
-          const selected = entry.value === mode;
-          return (
-            <button
-              key={entry.value}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => switchTo(entry.value)}
-              className={cn(
-                'flex items-center justify-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
-                'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                selected
-                  ? 'bg-background text-foreground shadow-sm'
-                  : 'text-muted-foreground hover:text-foreground',
-              )}
-            >
-              <Icon className="size-3.5" aria-hidden />
-              {entry.label}
-            </button>
-          );
-        })}
-      </div>
+      {allowsEmail ? (
+        <div
+          role="radiogroup"
+          aria-label="How you sign in"
+          className="grid grid-cols-2 gap-1 rounded-xl bg-muted p-1 md:rounded-lg"
+        >
+          {MODES.map((entry) => {
+            const Icon = entry.icon;
+            const selected = entry.value === mode;
+            return (
+              <button
+                key={entry.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => switchTo(entry.value)}
+                className={cn(
+                  'flex items-center justify-center gap-1.5 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors md:rounded-md md:py-1.5',
+                  'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
+                  selected
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                <Icon className="size-3.5" aria-hidden />
+                {entry.label}
+              </button>
+            );
+          })}
+        </div>
+      ) : null}
 
       <Field
         label={active.field.label}
@@ -168,16 +179,16 @@ export function LoginForm({ next }: { next?: string }) {
         />
       </Field>
 
-      <SubmitButton className="mt-2 w-full" size="lg" pendingLabel="Signing in...">
-        Sign in
-      </SubmitButton>
-
       <Link
         href="/forgot-password"
-        className="text-center text-xs text-muted-foreground underline-offset-4 hover:underline"
+        className="-mt-2 justify-self-end py-1 text-sm font-medium text-primary underline-offset-4 hover:underline md:py-0 md:text-xs md:font-normal md:text-muted-foreground"
       >
-        Forgotten your password?
+        Forgot password?
       </Link>
+
+      <SubmitButton className="mt-1 w-full" size="lg" pendingLabel="Signing in...">
+        Sign in
+      </SubmitButton>
     </form>
   );
 }

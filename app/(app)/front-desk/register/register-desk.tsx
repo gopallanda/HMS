@@ -4,6 +4,7 @@ import {
   BanknoteIcon,
   PencilIcon,
   PrinterIcon,
+  RotateCcwIcon,
   SearchIcon,
   TicketIcon,
   UserRoundPlusIcon,
@@ -19,6 +20,7 @@ import { KbdHint } from '@/components/shared/kbd';
 import { MIN_QUERY, usePatientSearch } from '@/components/shared/patient-search';
 import { SubmitButton } from '@/components/shared/submit-button';
 import { Button } from '@/components/ui/button';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -32,6 +34,7 @@ import { fieldError, IDLE } from '@/lib/action-state';
 import { PAYMENT_MODES, PAYMENT_MODE_LABEL, type PaymentMode } from '@/lib/billing';
 import { cn } from '@/lib/cn';
 import { ageGender, GENDERS, GENDER_LABEL, type Gender } from '@/lib/patients';
+import { todayIst } from '@/lib/utils/dates';
 import type { PatientSearchResult } from '@/lib/rpc/patients';
 import { formatMoney } from '@/lib/utils/money';
 
@@ -138,20 +141,31 @@ function MatchList({
     <div
       ref={listRef}
       onKeyDown={onKeyDown}
-      className="grid gap-1 rounded-xl border border-border/60 bg-muted/40 p-2"
+      className="grid gap-1.5 rounded-2xl border border-border/60 bg-muted/40 p-2 md:gap-1 md:rounded-xl"
     >
-      <p className="px-1.5 pb-0.5 text-xs text-muted-foreground">{note}</p>
+      <p className="px-1.5 pt-0.5 pb-1 text-xs leading-snug text-muted-foreground md:pt-0 md:pb-0.5">
+        {note}
+      </p>
       {matches.map((match) => (
         <button
           key={match.id}
           type="button"
           onClick={() => onPick(match)}
-          className="flex items-center gap-3 rounded-lg bg-background px-3 py-2 text-left text-sm transition-colors outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex items-center gap-3 rounded-xl bg-background px-3 py-2.5 text-left text-sm shadow-xs transition outline-none hover:bg-accent focus-visible:bg-accent focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99] md:rounded-lg md:py-2 md:shadow-none"
         >
+          {/* Phone: avatar, name over MRN and age, the mobile number trailing. */}
+          <span className="grid size-9 shrink-0 place-items-center rounded-full bg-primary/10 text-xs font-semibold text-primary sm:hidden">
+            {match.full_name.slice(0, 1).toUpperCase()}
+          </span>
           <span className="hidden font-mono text-xs text-muted-foreground sm:block">
             {match.mrn}
           </span>
-          <span className="min-w-0 flex-1 truncate font-medium">{match.full_name}</span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate font-medium">{match.full_name}</span>
+            <span className="mt-0.5 block truncate text-xs text-muted-foreground sm:hidden">
+              {ageGender(match.dob, match.gender)} · <span className="font-mono">{match.mrn}</span>
+            </span>
+          </span>
           <span className="hidden text-xs text-muted-foreground sm:block">
             {ageGender(match.dob, match.gender)}
           </span>
@@ -360,7 +374,7 @@ export function RegisterDesk({
   // ---- The success panel (block 4.4) ---------------------------------------
   if (done) {
     return (
-      <section className="mx-auto grid w-full max-w-2xl gap-5 rounded-2xl border border-success/30 bg-success/5 p-6 sm:p-8">
+      <section className="mx-auto grid w-full max-w-2xl gap-5 rounded-3xl border border-success/30 bg-success/5 p-5 sm:rounded-2xl sm:p-8">
         <div className="grid gap-1 text-center">
           <span className="text-xs font-semibold tracking-widest text-success uppercase">
             {done.payment_due ? 'Registered - payment due' : 'Registered'}
@@ -374,7 +388,7 @@ export function RegisterDesk({
           </span>
         </div>
 
-        <dl className="grid grid-cols-2 gap-x-6 gap-y-2 rounded-xl bg-background/70 px-4 py-3 text-sm sm:grid-cols-4">
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-2xl bg-background/70 px-4 py-3.5 text-sm sm:grid-cols-4 sm:gap-y-2 sm:rounded-xl sm:py-3">
           <Fact label="Patient" value={done.patient_name} />
           <Fact label="MRN" value={done.mrn} mono />
           <Fact label="Visit" value={done.visit_no} mono />
@@ -382,13 +396,13 @@ export function RegisterDesk({
         </dl>
 
         {done.payment_due ? (
-          <p className="rounded-lg bg-warning/10 px-3 py-2.5 text-sm text-warning">
+          <p className="rounded-xl bg-warning/10 px-3.5 py-3 text-sm text-warning sm:rounded-lg sm:px-3 sm:py-2.5">
             <strong className="font-semibold">Payment due.</strong> This visit carries a PAYMENT
             DUE badge on the queue until billing collects {formatMoney(done.grand_total)}.
           </p>
         ) : null}
 
-        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+        <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:justify-end sm:gap-2">
           <Button asChild variant="outline">
             <Link href="/front-desk/queue">Open the queue</Link>
           </Button>
@@ -441,7 +455,7 @@ export function RegisterDesk({
         >
           <div className="relative">
             <SearchIcon
-              className="pointer-events-none absolute top-1/2 left-3 size-4.5 -translate-y-1/2 text-muted-foreground"
+              className="pointer-events-none absolute top-1/2 left-4 size-5 -translate-y-1/2 text-muted-foreground md:left-3 md:size-4.5"
               aria-hidden
             />
             <Input
@@ -450,7 +464,7 @@ export function RegisterDesk({
               value={query}
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Phone, name or MRN"
-              className="h-11 pl-10 text-base md:h-11 md:pl-10 md:text-base"
+              className="h-13 rounded-2xl bg-card pl-12 text-base shadow-sm md:h-11 md:rounded-lg md:bg-background md:pl-10 md:text-base md:shadow-none"
               autoComplete="off"
               spellCheck={false}
               autoFocus
@@ -474,7 +488,7 @@ export function RegisterDesk({
         ) : null}
 
         {active && matches.length === 0 && !isFetching ? (
-          <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+          <p className="rounded-xl bg-muted/60 px-3.5 py-3 text-xs text-muted-foreground md:rounded-lg md:px-3 md:py-2">
             Nobody matches &ldquo;{query.trim()}&rdquo;. Fill in the details below to register
             them.
           </p>
@@ -482,7 +496,7 @@ export function RegisterDesk({
       </section>
 
       {/* ---- 2. Patient ----------------------------------------------------- */}
-      <section className="grid gap-4 rounded-xl border border-border/60 p-4 sm:p-5">
+      <section className={SECTION}>
         <SectionHead
           step="1"
           title="Patient"
@@ -490,15 +504,18 @@ export function RegisterDesk({
         />
 
         {chosen && !editingChosen ? (
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg bg-muted/60 px-3 py-2.5 text-sm">
-            <span className="font-medium">{chosen.full_name}</span>
-            <span className="text-xs text-muted-foreground">
-              {ageGender(chosen.dob, chosen.gender)}
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-primary/5 px-3 py-3 text-sm ring-1 ring-primary/15 md:rounded-lg md:bg-muted/60 md:py-2.5 md:ring-0">
+            <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-sm font-semibold text-primary-foreground md:hidden">
+              {chosen.full_name.slice(0, 1).toUpperCase()}
             </span>
-            <span className="font-mono text-xs text-muted-foreground">{chosen.mrn}</span>
-            {chosen.phone ? (
-              <span className="font-mono text-xs text-muted-foreground">{chosen.phone}</span>
-            ) : null}
+            <span className="grid min-w-0 flex-1 gap-0.5 md:flex md:flex-none md:items-center md:gap-3">
+              <span className="truncate font-semibold md:font-medium">{chosen.full_name}</span>
+              <span className="flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground md:gap-x-3">
+                <span>{ageGender(chosen.dob, chosen.gender)}</span>
+                <span className="font-mono">{chosen.mrn}</span>
+                {chosen.phone ? <span className="font-mono">{chosen.phone}</span> : null}
+              </span>
+            </span>
             <button
               type="button"
               onClick={() => {
@@ -507,7 +524,7 @@ export function RegisterDesk({
                 setNameTyped('');
                 searchInput.current?.focus();
               }}
-              className="ml-auto flex items-center gap-1 text-xs font-medium text-primary hover:underline"
+              className="flex w-full items-center justify-center gap-1 rounded-lg py-2 text-xs font-medium text-primary hover:underline max-md:mt-1 max-md:bg-background md:ml-auto md:w-auto md:py-0"
             >
               <PencilIcon className="size-3" />
               Not this patient
@@ -611,9 +628,9 @@ export function RegisterDesk({
               error={fieldError(state, 'dob') ?? fieldError(state, 'age_years')}
               className="sm:col-span-6"
             >
-              <div className="grid grid-cols-2 items-start gap-x-4">
+              <div className="grid grid-cols-[minmax(0,1fr)_6.5rem] items-start gap-x-3 sm:grid-cols-2 sm:gap-x-4">
                 <Field label="Date of birth" htmlFor="dob" collapse>
-                  <Input id="dob" name="dob" type="date" />
+                  <DatePicker id="dob" name="dob" typeable startView="years" max={todayIst()} />
                 </Field>
                 <Field label="or age in years" htmlFor="age_years" collapse>
                   <Input
@@ -641,7 +658,7 @@ export function RegisterDesk({
       </section>
 
       {/* ---- 3. Visit ------------------------------------------------------- */}
-      <section className="grid gap-4 rounded-xl border border-border/60 p-4 sm:p-5">
+      <section className={SECTION}>
         <SectionHead step="2" title="Visit" note="The doctor is required" />
 
         <div className="grid grid-cols-1 items-start gap-x-6 gap-y-5 sm:grid-cols-12">
@@ -667,7 +684,7 @@ export function RegisterDesk({
                 }
               }}
             >
-              <SelectTrigger id="department" className="h-10 w-full">
+              <SelectTrigger id="department" className="h-11 w-full">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -692,7 +709,7 @@ export function RegisterDesk({
             <Select value={doctorId} onValueChange={setDoctorId}>
               <SelectTrigger
                 id="doctor"
-                className="h-10 w-full"
+                className="h-11 w-full"
                 aria-invalid={fieldError(state, 'doctor_id') !== undefined}
               >
                 <SelectValue placeholder="Choose a doctor" />
@@ -714,7 +731,7 @@ export function RegisterDesk({
       </section>
 
       {/* ---- 4. Payment ----------------------------------------------------- */}
-      <section className="grid gap-4 rounded-xl border border-border/60 p-4 sm:p-5">
+      <section className={SECTION}>
         <SectionHead
           step="3"
           title="Payment"
@@ -742,7 +759,7 @@ export function RegisterDesk({
                 setFeeTouched(true);
                 setFee(event.target.value);
               }}
-              className="h-10 text-right tabular-nums"
+              className="h-11 text-right text-lg font-semibold tabular-nums md:text-sm md:font-normal"
               aria-invalid={fieldError(state, 'fee') !== undefined}
             />
           </Field>
@@ -755,7 +772,7 @@ export function RegisterDesk({
             hint={deferring ? 'Nothing is collected now.' : 'Required. Who collected it is you.'}
             className="sm:col-span-8"
           >
-            <div id="payment-mode" className="flex flex-wrap gap-2">
+            <div id="payment-mode" className="grid grid-cols-4 gap-2 sm:flex sm:flex-wrap">
               {PAYMENT_MODES.map((option) => (
                 <button
                   key={option}
@@ -764,11 +781,11 @@ export function RegisterDesk({
                   aria-pressed={!deferring && mode === option}
                   onClick={() => setMode(option)}
                   className={cn(
-                    'h-10 min-w-20 rounded-lg border px-4 text-sm font-medium transition-colors focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
+                    'h-11 rounded-xl border px-2 text-sm font-medium transition focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none active:scale-[0.97] sm:h-10 sm:min-w-20 sm:rounded-lg sm:px-4',
                     deferring
                       ? 'cursor-not-allowed border-border/60 text-muted-foreground/50'
                       : mode === option
-                        ? 'border-primary bg-primary/10 text-primary'
+                        ? 'border-primary bg-primary/10 font-semibold text-primary ring-1 ring-primary/30'
                         : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground',
                   )}
                 >
@@ -807,7 +824,7 @@ export function RegisterDesk({
             <button
               type="button"
               onClick={() => setDeferring(true)}
-              className="justify-self-start text-xs font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground"
+              className="justify-self-start py-1 text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground md:py-0 md:text-xs"
             >
               Patient cannot pay now
             </button>
@@ -816,7 +833,10 @@ export function RegisterDesk({
       </section>
 
       {/* ---- Footer --------------------------------------------------------- */}
-      <div className="sticky bottom-0 -mx-4 flex flex-col gap-3 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur sm:mx-0 sm:flex-row sm:items-center sm:rounded-xl sm:border sm:px-4">
+      {/* Phone: a floating bar docked above the tab bar -- the amount on the
+          left, the one button that matters on the right. From `md` it is the
+          full-width sticky footer with the shortcut hints. */}
+      <div className="sticky bottom-[calc(4.75rem+env(safe-area-inset-bottom))] z-20 flex items-center gap-3 rounded-2xl border border-border/60 bg-background/95 py-2.5 pr-2.5 pl-4 shadow-lg shadow-foreground/5 backdrop-blur md:bottom-0 md:rounded-xl md:px-4 md:py-3 md:shadow-none">
         <span className="hidden items-center gap-4 sm:flex">
           <KbdHint keys={['Ctrl', 'Enter']} always>
             register
@@ -826,7 +846,7 @@ export function RegisterDesk({
           </KbdHint>
         </span>
 
-        <span className="text-sm text-muted-foreground sm:ml-auto">
+        <span className="min-w-0 flex-1 text-sm text-muted-foreground sm:ml-auto sm:flex-none">
           {deferring ? (
             <>
               <BanknoteIcon className="mr-1 inline size-4 align-text-bottom" />
@@ -834,21 +854,30 @@ export function RegisterDesk({
             </>
           ) : (
             <>
-              Collecting{' '}
-              <strong className="font-semibold text-foreground tabular-nums">
+              <span className="block text-[11px] leading-tight font-medium tracking-wide uppercase sm:inline sm:text-sm sm:font-normal sm:tracking-normal sm:normal-case">
+                Collecting{' '}
+              </span>
+              <strong className="block truncate text-lg leading-tight font-bold text-foreground tabular-nums sm:inline sm:text-sm sm:font-semibold">
                 {formatMoney(Number(effectiveFee) || 0)}
               </strong>
             </>
           )}
         </span>
 
-        <div className="flex gap-2">
-          <Button type="button" variant="ghost" onClick={startNext}>
-            Cancel
+        <div className="flex shrink-0 gap-2">
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={startNext}
+            aria-label="Cancel and start over"
+            className="max-sm:w-11 max-sm:px-0"
+          >
+            <RotateCcwIcon className="sm:hidden" />
+            <span className="hidden sm:inline">Cancel</span>
           </Button>
           <SubmitButton pendingLabel="Registering...">
             <TicketIcon data-icon="inline-start" />
-            Register &amp; collect
+            Register<span className="hidden sm:inline">&nbsp;&amp; collect</span>
           </SubmitButton>
         </div>
       </div>
@@ -864,14 +893,20 @@ function newIds() {
   };
 }
 
+/** A step of the form: a white card on a phone, an outlined panel on the desk. */
+const SECTION =
+  'grid gap-4 rounded-2xl border border-border/60 bg-card p-4 shadow-sm md:rounded-xl md:bg-transparent md:p-5 md:shadow-none';
+
 function SectionHead({ step, title, note }: { step: string; title: string; note: string }) {
   return (
-    <div className="flex items-baseline gap-2.5">
-      <span className="grid size-5 shrink-0 place-items-center rounded-full bg-primary/10 text-[11px] font-bold text-primary">
+    <div className="flex items-center gap-2.5 md:items-baseline">
+      <span className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-xs font-bold text-primary-foreground md:size-5 md:bg-primary/10 md:text-[11px] md:text-primary">
         {step}
       </span>
-      <h2 className="text-sm font-semibold">{title}</h2>
-      <span className="text-xs text-muted-foreground">{note}</span>
+      <h2 className="text-base font-semibold md:text-sm">{title}</h2>
+      <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground md:ml-0 md:bg-transparent md:p-0 md:text-xs md:font-normal">
+        {note}
+      </span>
     </div>
   );
 }

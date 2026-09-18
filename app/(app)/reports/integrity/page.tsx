@@ -7,7 +7,7 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { Notice } from '@/components/shared/form-message';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/date-picker';
 import {
   Table,
   TableBody,
@@ -113,7 +113,7 @@ export default async function IntegrityPage({
     return (
       <div className="grid gap-6">
         <PageHeader title="Cash integrity" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           The report could not be run, so nothing is shown rather than a partial
           answer: {error.message}
         </p>
@@ -154,17 +154,20 @@ export default async function IntegrityPage({
       {/* The range. A plain GET like the invoice and dues filters: the URL is
           the state, so a month a manager wants a second opinion on can be
           bookmarked or pasted into a message. */}
-      <form className="flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm md:p-4">
-        <label className="grid gap-1.5">
+      <form className="grid grid-cols-2 items-end gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm md:flex md:flex-wrap md:rounded-xl md:p-4">
+        <div className="grid gap-1.5">
           <span className="text-sm font-medium">From</span>
-          <Input type="date" name="from" defaultValue={startDay} max={today} />
-        </label>
-        <label className="grid gap-1.5">
+          <DatePicker name="from" defaultValue={startDay} max={today} className="md:w-44" />
+        </div>
+        <div className="grid gap-1.5">
           <span className="text-sm font-medium">To</span>
-          <Input type="date" name="to" defaultValue={endDay} max={today} />
-        </label>
-        <Button type="submit">Show</Button>
-        <div className="ml-auto flex items-center gap-1.5">
+          <DatePicker name="to" defaultValue={endDay} max={today} className="md:w-44" />
+        </div>
+        <Button type="submit" className="col-span-2 md:col-span-1">
+          Show
+        </Button>
+        {/* Presets: a segmented row across the card on a phone. */}
+        <div className="col-span-2 grid grid-flow-col gap-1 rounded-xl bg-muted p-1 md:ml-auto md:flex md:items-center md:gap-1.5 md:rounded-none md:bg-transparent md:p-0">
           {RANGES.map((range) => {
             const presetFrom = shiftIstDay(today, -(range.days - 1));
             const active = startDay === presetFrom && endDay === today;
@@ -174,6 +177,7 @@ export default async function IntegrityPage({
                 asChild
                 variant={active ? 'secondary' : 'ghost'}
                 size="sm"
+                className="max-md:rounded-lg max-md:data-[variant=secondary]:bg-background max-md:data-[variant=secondary]:shadow-sm"
               >
                 <Link href={`/reports/integrity?from=${presetFrom}&to=${today}`}>
                   {range.label}
@@ -189,7 +193,7 @@ export default async function IntegrityPage({
           meaningless -- but a count of the events that reached backwards into
           a day somebody had already counted the drawer for. */}
       {report.afterCloseCount > 0 ? (
-        <div className="rounded-xl border border-destructive/40 border-l-4 border-l-destructive bg-destructive/5 px-4 py-3">
+        <div className="rounded-2xl border border-destructive/40 border-l-4 border-l-destructive bg-destructive/5 px-4 py-3 md:rounded-xl">
           <p className="text-sm font-semibold text-destructive">
             {report.afterCloseCount} of these happened after that day had already been
             closed
@@ -204,14 +208,15 @@ export default async function IntegrityPage({
 
       {/* Five headline figures, one per kind. Each carries its own count and
           its own money, and they are deliberately never summed. */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      {/* Phone: one swipeable row of five tiles instead of a five-deep stack. */}
+      <div className="-mx-4 flex snap-x gap-2.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none] sm:mx-0 sm:grid sm:grid-cols-2 sm:gap-3 sm:overflow-visible sm:px-0 sm:pb-0 xl:grid-cols-5">
         {INTEGRITY_KINDS.map((kind) => {
           const totals = report.totals[kind];
           return (
             <div
               key={kind}
               className={cn(
-                'rounded-xl border border-border/60 bg-card p-4 shadow-sm',
+                'w-[15rem] shrink-0 snap-start rounded-2xl border border-border/60 bg-card p-4 shadow-sm sm:w-auto md:rounded-xl',
                 totals.afterClose > 0 && 'border-l-4 border-l-destructive',
               )}
             >
@@ -238,7 +243,7 @@ export default async function IntegrityPage({
       </div>
 
       {report.eventCount === 0 ? (
-        <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+        <div className="rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl">
           <EmptyState
             icon={ShieldCheckIcon}
             title="Nothing to look at in this range"
@@ -251,8 +256,51 @@ export default async function IntegrityPage({
               range -- this is the half of the screen that turns five numbers
               into a question worth asking somebody. */}
           <section className="grid gap-2">
-            <h2 className="text-sm font-semibold">By person</h2>
-            <div className="overflow-x-auto rounded-xl border border-border/60 bg-card shadow-sm">
+            <h2 className="px-1 text-base font-semibold md:px-0 md:text-sm">By person</h2>
+
+            {/* Phone: a card per person with only the kinds they touched. */}
+            <div className="grid gap-2.5 md:hidden">
+              {report.people.map((person) => (
+                <div
+                  key={person.actorId ?? 'system'}
+                  className={cn(
+                    'rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm',
+                    person.afterClose > 0 && 'border-l-4 border-l-destructive',
+                  )}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="min-w-0 truncate font-semibold">{person.actorName}</span>
+                    <span className="shrink-0 text-xs text-muted-foreground">
+                      <strong className="text-sm font-bold text-foreground tabular-nums">
+                        {person.total}
+                      </strong>{' '}
+                      events
+                      {person.afterClose > 0 ? (
+                        <span className="ml-1.5 font-semibold text-destructive">
+                          · {person.afterClose} after close
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {INTEGRITY_KINDS.filter((kind) => person.byKind[kind].count > 0).map((kind) => (
+                      <span
+                        key={kind}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-muted/70 px-2 py-1 text-xs"
+                      >
+                        <span className="text-muted-foreground">{INTEGRITY_LABEL[kind]}</span>
+                        <span className="font-semibold tabular-nums">{person.byKind[kind].count}</span>
+                        <span className="text-muted-foreground tabular-nums">
+                          &#8377;{formatAmount(person.byKind[kind].amount)}
+                        </span>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="hidden overflow-x-auto rounded-2xl border border-border/60 bg-card shadow-sm md:block md:rounded-xl">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -317,7 +365,7 @@ export default async function IntegrityPage({
                 </TableBody>
               </Table>
             </div>
-            <p className="text-xs text-muted-foreground">
+            <p className="px-1 text-xs text-muted-foreground md:px-0">
               Counted over the whole range, not over the list below. Two figures in a
               cell: how many, and how much. The money in five columns measures five
               different things and is not meant to be added across.
@@ -325,7 +373,7 @@ export default async function IntegrityPage({
           </section>
 
           <section className="grid gap-2">
-            <h2 className="text-sm font-semibold">What happened</h2>
+            <h2 className="px-1 text-base font-semibold md:px-0 md:text-sm">What happened</h2>
 
             {capped ? (
               <Notice>
@@ -340,7 +388,7 @@ export default async function IntegrityPage({
         </>
       )}
 
-      <p className="text-xs text-muted-foreground">
+      <p className="px-1 text-xs text-muted-foreground md:px-0">
         Days are IST calendar days, not the server&apos;s. Events are placed by when
         they happened, so a bill voided today appears today even when the bill itself
         is from last month &mdash; the &ldquo;after close&rdquo; mark is what says it

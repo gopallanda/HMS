@@ -7,7 +7,7 @@ export default function Loading() {
       <HeaderSkeleton />
       <div className="grid gap-5 lg:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
         <TableSkeleton rows={6} />
-        <div className="h-96 rounded-xl border border-border/60 bg-card shadow-sm" />
+        <div className="hidden h-96 rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl lg:block" />
       </div>
     </div>
   );

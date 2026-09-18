@@ -12,6 +12,14 @@ import {
   resolveUsername,
   COOLDOWN_MINUTES,
 } from '@/lib/accounts/sign-in';
+import {
+  PORTAL_CONFIG,
+  portalSchema,
+  portalsFor,
+  wrongPortalMessage,
+  type Portal,
+} from '@/lib/auth/portals';
+import { loadAccess } from '@/lib/rbac/access';
 import { landingForCaller } from '@/lib/rbac/landing';
 import type { AppRole } from '@/lib/roles';
 import { provisionHospital } from '@/lib/rpc/onboarding';
@@ -47,7 +55,7 @@ function safeNext(value: FormDataEntryValue | null): string | null {
   if (typeof value !== 'string') return null;
   if (!value.startsWith('/')) return null;
   if (value.startsWith('//')) return null;
-  if (value === '/login') return null;
+  if (value === '/login' || value.startsWith('/login/')) return null;
   if (value === '/signup') return null;
   return value;
 }
@@ -61,6 +69,7 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
 
   const supabase = await createClient();
   const next = safeNext(formData.get('next'));
+  const portal = portalSchema.parse(formData.get('portal'));
 
   // ---- The founder path: an email --------------------------------------------
   //
@@ -109,14 +118,23 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
         redirect('/access-denied?reason=revoked');
       }
 
+      const refused = await refuseWrongPortal(supabase, portal);
+      if (refused) return refused;
+
       await recordSuccessfulSignIn(current.id);
 
       if (current.mustChangePassword) {
         redirect('/change-password');
       }
+    } else {
+      // No account row yet: a founder on their first sign-in. Same door check.
+      const refused = await refuseWrongPortal(supabase, portal);
+      if (refused) return refused;
     }
 
-    return finishSignIn(supabase, data.user.id, next, { repairFounderAccount: true });
+    return finishSignIn(supabase, data.user.id, next, {
+      repairFounderAccount: true,
+    });
   }
 
   // ---- The staff path: a username -----------------------------------------
@@ -127,7 +145,9 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
   // there is no account to throttle, and inventing one would leak which
   // usernames exist through timing.
   if (!account) {
-    return failure(BLENDED_FAILURE, { identifier: ['Check what you typed and try again.'] });
+    return failure(BLENDED_FAILURE, {
+      identifier: ['Check what you typed and try again.'],
+    });
   }
 
   if (isLockedOut(account)) {
@@ -147,7 +167,9 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
 
   if (error) {
     await recordFailedSignIn(account.id);
-    return failure(BLENDED_FAILURE, { identifier: ['Check what you typed and try again.'] });
+    return failure(BLENDED_FAILURE, {
+      identifier: ['Check what you typed and try again.'],
+    });
   }
 
   // Re-read rather than trusting what was resolved a moment ago: revoking
@@ -160,6 +182,9 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
     redirect('/access-denied?reason=revoked');
   }
 
+  const refused = await refuseWrongPortal(supabase, portal);
+  if (refused) return refused;
+
   await recordSuccessfulSignIn(current.id);
 
   if (current.mustChangePassword) {
@@ -169,6 +194,55 @@ export async function signIn(_previous: ActionState, formData: FormData): Promis
   }
 
   return finishSignIn(supabase, data.user.id, next);
+}
+
+/**
+ * Sends somebody who came through the wrong door back out of it.
+ *
+ * Runs only after the password has checked out, so the sentence it returns is
+ * seen by nobody who did not already know the password -- it cannot be used
+ * to discover which usernames are doctors.
+ *
+ * Deliberately before recordSuccessfulSignIn: a refused sign-in is not a
+ * login, and last_login_at should not say it was. The failure counters are
+ * left alone as well; the password was right, and locking a doctor out for
+ * trying the staff form five times would punish the wrong mistake.
+ *
+ * A login whose token carries no hospital yet is a founder whose hospital is
+ * provisioned further down, in finishSignIn. Founders are administrators, so
+ * only the admin door lets them through -- any other door would provision a
+ * hospital and then refuse its owner.
+ */
+async function refuseWrongPortal(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  portal: Portal,
+): Promise<ActionState | null> {
+  const { data: claimsData } = await supabase.auth.getClaims();
+  const appMetadata = (claimsData?.claims?.app_metadata ?? {}) as Record<string, unknown>;
+  const hospitalId = typeof appMetadata.hospital_id === 'string' ? appMetadata.hospital_id : null;
+  const role = typeof appMetadata.role === 'string' ? (appMetadata.role as AppRole) : null;
+
+  let allowed: Set<Portal>;
+  if (!hospitalId || !role) {
+    allowed = new Set<Portal>(['admin']);
+  } else {
+    const access = await loadAccess(supabase, role);
+    allowed = portalsFor(access.roleCode, role);
+  }
+
+  if (allowed.has(portal)) return null;
+
+  const belongs: Portal = allowed.has('admin')
+    ? 'admin'
+    : allowed.has('doctor')
+      ? 'doctor'
+      : 'staff';
+
+  await supabase.auth.signOut({ scope: 'local' });
+  return failure(wrongPortalMessage(portal, belongs), undefined, {
+    href: PORTAL_CONFIG[belongs].href,
+    label: `Go to ${PORTAL_CONFIG[belongs].label}`,
+  });
 }
 
 /**
@@ -208,8 +282,7 @@ async function finishSignIn(
 
   const { data: claimsData } = await supabase.auth.getClaims();
   const appMetadata = (claimsData?.claims?.app_metadata ?? {}) as Record<string, unknown>;
-  const hospitalId =
-    typeof appMetadata.hospital_id === 'string' ? appMetadata.hospital_id : null;
+  const hospitalId = typeof appMetadata.hospital_id === 'string' ? appMetadata.hospital_id : null;
   const role = typeof appMetadata.role === 'string' ? (appMetadata.role as AppRole) : null;
 
   if (!hospitalId || !role) {

@@ -113,17 +113,36 @@ export default async function OverviewPage() {
   ].filter((action) => reachable.has(action.href));
 
   return (
-    <div className="grid gap-6">
-      <div>
-        <h1 className="text-xl font-semibold tracking-tight md:text-2xl">
-          Good {greetingIst()}, {session.hospital.name}
+    <div className="grid gap-5 md:gap-6">
+      {/* On a phone the greeting is the screen's hero: a teal card with the
+          day on it. From `md` it is the plain title row it always was. */}
+      <div className="relative overflow-hidden rounded-3xl bg-primary p-5 text-primary-foreground shadow-lg shadow-primary/20 md:rounded-none md:bg-transparent md:p-0 md:text-foreground md:shadow-none">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -top-16 -right-10 size-48 rounded-full bg-white/10 md:hidden"
+        />
+        <div
+          aria-hidden
+          className="pointer-events-none absolute -bottom-20 left-10 size-40 rounded-full bg-white/5 md:hidden"
+        />
+        <p className="relative text-sm font-medium text-primary-foreground/80 md:hidden">
+          Good {greetingIst()}
+        </p>
+        <h1 className="relative mt-0.5 text-2xl leading-tight font-bold tracking-tight md:mt-0 md:text-2xl md:font-semibold">
+          <span className="hidden md:inline">Good {greetingIst()}, </span>
+          {session.hospital.name}
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {formatLongDate()} · Signed in as {roleLabel(session.role)}
+        <p className="relative mt-3 inline-flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-primary-foreground/85 md:mt-1 md:text-muted-foreground">
+          <span>{formatLongDate()}</span>
+          <span aria-hidden className="md:hidden">·</span>
+          <span className="rounded-full bg-white/15 px-2 py-0.5 text-xs font-medium md:rounded-none md:bg-transparent md:p-0 md:text-sm md:font-normal">
+            <span className="hidden md:inline">· Signed in as </span>
+            {roleLabel(session.role)}
+          </span>
         </p>
       </div>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
         <StatCard
           icon={Building2Icon}
           label="Departments"
@@ -156,8 +175,8 @@ export default async function OverviewPage() {
 
       {actions.length > 0 ? (
         <section className="grid gap-3">
-          <h2 className="text-lg font-medium">Quick actions</h2>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <h2 className="text-base font-semibold md:text-lg md:font-medium">Quick actions</h2>
+          <div className="grid grid-cols-2 gap-3 md:gap-4 lg:grid-cols-4">
             {actions.map((action) => (
               <QuickAction key={action.href} {...action} />
             ))}
@@ -165,7 +184,7 @@ export default async function OverviewPage() {
         </section>
       ) : null}
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-4 md:gap-6 lg:grid-cols-2">
         <Card>
           <CardHeader>
             <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
@@ -192,9 +211,14 @@ export default async function OverviewPage() {
                 {doctorRows.map((doctor) => (
                   <li
                     key={doctor.full_name}
-                    className="flex items-center justify-between gap-3 border-b border-border/60 py-2 text-sm last:border-0"
+                    className="flex items-center justify-between gap-3 border-b border-border/60 py-2.5 text-sm last:border-0 md:py-2"
                   >
-                    <span className="min-w-0 truncate">{doctor.full_name}</span>
+                    <span className="flex min-w-0 items-center gap-2.5">
+                      <span className="grid size-8 shrink-0 place-items-center rounded-full bg-success/10 text-xs font-semibold text-success md:hidden">
+                        {doctor.full_name.replace(/^dr\.?\s*/i, '').slice(0, 1).toUpperCase()}
+                      </span>
+                      <span className="truncate">{doctor.full_name}</span>
+                    </span>
                     <span className="shrink-0 font-medium tabular-nums">
                       {formatMoney(doctor.consultation_fee)}
                     </span>
@@ -239,7 +263,7 @@ export default async function OverviewPage() {
                 {setup.map((step) => (
                   <li
                     key={step.label}
-                    className="flex items-center justify-between gap-3 py-1 text-sm"
+                    className="flex items-center justify-between gap-3 py-1.5 text-sm md:py-1"
                   >
                     <span className="flex min-w-0 items-center gap-2.5">
                       <span
@@ -261,7 +285,7 @@ export default async function OverviewPage() {
                     ) : (
                       <Link
                         href={step.href}
-                        className="shrink-0 text-xs font-medium text-primary underline-offset-4 hover:underline"
+                        className="shrink-0 rounded-full bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary underline-offset-4 md:rounded-none md:bg-transparent md:p-0 md:font-medium md:hover:underline"
                       >
                         Open
                       </Link>

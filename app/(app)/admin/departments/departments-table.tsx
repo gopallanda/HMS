@@ -31,6 +31,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { fieldError, IDLE, type ActionState } from '@/lib/action-state';
+import { cn } from '@/lib/cn';
 
 export type DepartmentRow = {
   id: string;
@@ -88,29 +89,92 @@ export function DepartmentsTable({ departments }: { departments: DepartmentRow[]
   return (
     <>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Input
-          ref={searchInput}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search name or code"
-          className="w-full sm:w-64"
-          aria-label="Search departments"
-          autoFocus
-        />
-        <span className="text-xs text-muted-foreground">
+        {/* Phone: the search and a square "+" share one row. */}
+        <div className="flex w-full items-center gap-2 sm:contents">
+          <Input
+            ref={searchInput}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search name or code"
+            className="w-full bg-card sm:w-64 sm:bg-background"
+            aria-label="Search departments"
+            autoFocus
+          />
+          <Button
+            size="icon"
+            className="shrink-0 sm:hidden"
+            onClick={() => setEditing(blankDepartment())}
+            aria-label="New department"
+          >
+            <PlusIcon className="size-5" />
+          </Button>
+        </div>
+        <span className="px-1 text-xs text-muted-foreground sm:px-0">
           {filtered.length} of {departments.length} &middot; {activeCount} active
         </span>
         <span className="ml-auto flex items-center gap-4">
           <KbdHint keys="/">search</KbdHint>
           <KbdHint keys="N">new</KbdHint>
         </span>
-        <Button onClick={() => setEditing(blankDepartment())}>
+        <Button onClick={() => setEditing(blankDepartment())} className="max-sm:hidden">
           <PlusIcon data-icon="inline-start" />
           New department
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+      {/* Phone: one row per department, in a single inset list. */}
+      <div className="md:hidden">
+        {filtered.length === 0 ? (
+          <div className="rounded-2xl border border-border/60 bg-card shadow-sm">
+            <EmptyState
+              compact
+              icon={Building2Icon}
+              title={departments.length === 0 ? 'No departments yet' : `Nothing matches \u201c${query}\u201d`}
+              description={
+                departments.length === 0
+                  ? 'Create the ones patients are registered against \u2014 they drive the staff list and the day-close breakdown.'
+                  : undefined
+              }
+            />
+          </div>
+        ) : (
+          <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+            {filtered.map((department) => (
+              <li
+                key={department.id}
+                className={cn('flex items-center gap-3 px-3.5 py-3', !department.is_active && 'opacity-60')}
+              >
+                <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-primary/10 font-mono text-[11px] font-semibold text-primary">
+                  {department.code.slice(0, 4)}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-semibold">{department.name}</span>
+                  <Badge variant={department.is_active ? 'success' : 'outline'} className="mt-0.5">
+                    {department.is_active ? 'Active' : 'Inactive'}
+                  </Badge>
+                </span>
+                <Button size="icon-sm" variant="ghost" onClick={() => setEditing(department)} aria-label={`Edit ${department.name}`}>
+                  <PencilIcon />
+                </Button>
+                {department.is_active ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="px-2 text-destructive"
+                    onClick={() => setDeactivating(department)}
+                  >
+                    Deactivate
+                  </Button>
+                ) : (
+                  <ReactivateButton department={department} />
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm md:block md:rounded-xl">
         <Table>
           <TableHeader>
             <TableRow>

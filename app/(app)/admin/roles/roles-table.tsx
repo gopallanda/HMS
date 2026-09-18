@@ -69,17 +69,80 @@ export function RolesTable({ roles }: { roles: RoleRow[] }) {
   return (
     <>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <span className="text-xs text-muted-foreground">
+        <span className="px-1 text-xs text-muted-foreground sm:px-0">
           {roles.length} roles &middot; {roles.filter((role) => !role.can_login).length} that do not
           sign in
         </span>
-        <Button className="ml-auto" onClick={() => setEditing(blankRole())}>
+        <Button className="ml-auto max-sm:w-full" onClick={() => setEditing(blankRole())}>
           <PlusIcon data-icon="inline-start" />
           New role
         </Button>
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+      {/* Phone: a card per role. */}
+      <div className="grid gap-2.5 md:hidden">
+        {roles.length === 0 ? (
+          <div className="rounded-2xl border border-border/60 bg-card shadow-sm">
+            <EmptyState compact icon={ShieldIcon} title="No roles yet" />
+          </div>
+        ) : (
+          roles.map((role) => (
+            <div key={role.id} className="rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="flex items-center gap-1.5 text-[15px] font-semibold">
+                    <span className="truncate">{role.name}</span>
+                    {role.is_system ? (
+                      <LockIcon className="size-3.5 shrink-0 text-muted-foreground" aria-label="Built in" />
+                    ) : null}
+                  </p>
+                  <p className="font-mono text-xs text-muted-foreground">{role.code}</p>
+                </div>
+                {role.can_login ? (
+                  <Badge variant="secondary">Signs in</Badge>
+                ) : (
+                  <Badge variant="outline">
+                    <UserXIcon data-icon="inline-start" />
+                    No login
+                  </Badge>
+                )}
+              </div>
+              {role.description ? (
+                <p className="mt-2 line-clamp-2 text-xs text-muted-foreground">{role.description}</p>
+              ) : null}
+              <div className="mt-3 flex items-center gap-2 rounded-xl bg-muted/50 px-3 py-2 text-xs">
+                <span>
+                  <strong className="text-sm font-bold tabular-nums">{role.staff_count}</strong>{' '}
+                  <span className="text-muted-foreground">people</span>
+                </span>
+                <span className="text-muted-foreground">&middot;</span>
+                <span>
+                  <strong className="text-sm font-bold tabular-nums">{role.permissions.length}</strong>{' '}
+                  <span className="text-muted-foreground">permissions</span>
+                </span>
+              </div>
+              <div className="mt-3 flex items-center gap-2 *:flex-1">
+                <Button size="sm" variant="outline" onClick={() => setEditing(role)}>
+                  <PencilIcon data-icon="inline-start" />
+                  Edit
+                </Button>
+                {role.is_system ? null : (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="text-destructive"
+                    onClick={() => setDeleting(role)}
+                  >
+                    Delete
+                  </Button>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm md:block md:rounded-xl">
         <Table>
           <TableHeader>
             <TableRow>
@@ -289,7 +352,7 @@ function RoleDialog({
           {/* The whole point of block 1: some roles never touch the software.
               Saying so here is what hides the credentials section on the staff
               form and makes the provisioning action refuse. */}
-          <label className="flex items-start gap-2.5 rounded-lg border border-border/60 p-3 text-sm">
+          <label className="flex items-start gap-2.5 rounded-xl border border-border/60 p-3 text-sm sm:rounded-lg">
             <Checkbox
               name="can_login"
               checked={canLogin}
@@ -321,7 +384,7 @@ function RoleDialog({
             {PERMISSION_GROUPS.map((group) => {
               const all = group.permissions.every((permission) => held.has(permission));
               return (
-                <div key={group.key} className="grid gap-2 rounded-lg border border-border/60 p-3">
+                <div key={group.key} className="grid gap-2.5 rounded-xl border border-border/60 p-3 sm:gap-2 sm:rounded-lg">
                   <div className="flex items-start justify-between gap-3">
                     <div className="grid gap-0.5">
                       <span className="text-sm font-medium">{group.label}</span>
@@ -337,7 +400,7 @@ function RoleDialog({
                     </Button>
                   </div>
 
-                  <div className="grid gap-1.5 sm:grid-cols-2">
+                  <div className="grid gap-2.5 sm:grid-cols-2 sm:gap-1.5">
                     {group.permissions.map((permission) => (
                       <label key={permission} className="flex items-start gap-2 text-sm">
                         <Checkbox

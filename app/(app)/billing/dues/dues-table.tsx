@@ -1,6 +1,6 @@
 'use client';
 
-import { IndianRupeeIcon, PrinterIcon, WalletCardsIcon } from 'lucide-react';
+import { IndianRupeeIcon, PhoneIcon, PrinterIcon, WalletCardsIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -64,7 +64,7 @@ export function DuesTable({
 
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+      <div className="rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl">
         <EmptyState
           icon={WalletCardsIcon}
           title="Nothing outstanding"
@@ -87,17 +87,17 @@ export function DuesTable({
     <>
       {/* Cards below `lg`. The phone number is the point of this screen on a
           phone: somebody is standing up from the desk to make the call. */}
-      <div className="grid gap-2 lg:hidden">
+      <div className="grid gap-2.5 lg:hidden">
         {rows.map((row) => (
           <div
             key={row.id}
-            className="rounded-xl border border-border/60 bg-card p-3 shadow-sm"
+            className="rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm md:rounded-xl"
           >
             <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <Link
                   href={`/patients/${row.patient_id}`}
-                  className="block truncate font-medium underline-offset-4 hover:underline"
+                  className="block truncate text-[15px] font-semibold underline-offset-4 hover:underline"
                 >
                   {row.patient_name_snapshot}
                 </Link>
@@ -107,7 +107,7 @@ export function DuesTable({
                 </p>
               </div>
               <span className="shrink-0 text-right">
-                <span className="block font-bold text-destructive tabular-nums">
+                <span className="block text-base font-bold text-destructive tabular-nums">
                   &#8377;{formatAmount(row.balance)}
                 </span>
                 <span className={cn('block text-xs', BUCKET_TONE[bucketFor(row.age_days)])}>
@@ -116,13 +116,23 @@ export function DuesTable({
               </span>
             </div>
 
-            <div className="mt-2.5 flex items-center gap-2 border-t border-border/60 pt-2.5">
-              <span className="truncate font-mono text-xs text-muted-foreground">
-                {row.invoice_no} &middot; {formatDate(row.invoice_date)}
-              </span>
-              <div className="ml-auto flex items-center gap-1">
+            <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
+              {row.invoice_no} &middot; {formatDate(row.invoice_date)}
+            </p>
+
+            <div className="mt-3 flex items-center gap-2 border-t border-border/60 pt-3">
+              {row.patient_phone ? (
+                // The reason this screen is opened on a phone at all.
+                <Button asChild variant="outline" size="sm" className="flex-1">
+                  <a href={`tel:${row.patient_phone.replace(/[^\d+]/g, '')}`}>
+                    <PhoneIcon data-icon="inline-start" />
+                    Call
+                  </a>
+                </Button>
+              ) : null}
+              <div className="ml-auto flex flex-1 items-center justify-end gap-1">
                 {canCollect ? (
-                  <Button variant="outline" size="sm" onClick={() => setCollecting(row)}>
+                  <Button size="sm" className="flex-1" onClick={() => setCollecting(row)}>
                     <IndianRupeeIcon data-icon="inline-start" />
                     Collect
                   </Button>
@@ -139,7 +149,7 @@ export function DuesTable({
         ))}
       </div>
 
-      <div className="hidden overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm lg:block">
+      <div className="hidden overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm lg:block md:rounded-xl">
         <Table>
           <TableHeader>
             <TableRow>

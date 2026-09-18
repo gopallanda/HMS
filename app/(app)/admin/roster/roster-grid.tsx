@@ -20,6 +20,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
+import { TimePicker } from '@/components/ui/time-picker';
 import {
   Select,
   SelectContent,
@@ -30,6 +31,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { fieldError, IDLE } from '@/lib/action-state';
 import { cn } from '@/lib/cn';
+import { todayIst } from '@/lib/utils/dates';
 import {
   NON_WORKING_STATUSES,
   SHIFT_STATUSES,
@@ -92,6 +94,8 @@ function monthLabel(month: string): string {
   });
 }
 
+const WEEKDAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 function dayOfWeek(month: string, day: number): number {
   const [year, index] = month.split('-').map(Number);
   return new Date(Date.UTC(year, index - 1, day)).getUTCDay();
@@ -117,6 +121,23 @@ export function RosterGrid({
   const router = useRouter();
   const params = useSearchParams();
   const [editing, setEditing] = useState<{ person: RosterPerson; date: string } | null>(null);
+
+  /**
+   * The phone's day view. A 31-column month grid is a sideways scroll on a
+   * phone, so below `md` the month is a strip of days and the staff list shows
+   * the one picked -- today, when today is in the month on screen.
+   */
+  const today = todayIst();
+  const [pickedDay, setPickedDay] = useState(() =>
+    today.startsWith(`${month}-`) ? Number(today.slice(8, 10)) : 1,
+  );
+  const [shownMonth, setShownMonth] = useState(month);
+  if (shownMonth !== month) {
+    setShownMonth(month);
+    setPickedDay(today.startsWith(`${month}-`) ? Number(today.slice(8, 10)) : 1);
+  }
+  const selectedDay = Math.min(pickedDay, days);
+  const selectedDate = `${month}-${String(selectedDay).padStart(2, '0')}`;
 
   const byCell = useMemo(() => {
     const map = new Map<string, ShiftCell>();
@@ -146,7 +167,7 @@ export function RosterGrid({
   return (
     <>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="flex items-center gap-1">
+        <div className="flex w-full items-center gap-1 sm:w-auto">
           <Button
             size="icon"
             variant="outline"
@@ -155,7 +176,9 @@ export function RosterGrid({
           >
             <ChevronLeftIcon />
           </Button>
-          <span className="min-w-40 text-center text-sm font-medium">{monthLabel(month)}</span>
+          <span className="min-w-40 flex-1 text-center text-base font-semibold sm:flex-none sm:text-sm sm:font-medium">
+            {monthLabel(month)}
+          </span>
           <Button
             size="icon"
             variant="outline"
@@ -175,7 +198,7 @@ export function RosterGrid({
             go({ department: value === ALL_DEPARTMENTS ? null : value })
           }
         >
-          <SelectTrigger className="w-56" aria-label="Filter by department">
+          <SelectTrigger className="w-full sm:w-56" aria-label="Filter by department">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -188,11 +211,11 @@ export function RosterGrid({
           </SelectContent>
         </Select>
 
-        <span className="text-xs text-muted-foreground">
+        <span className="px-1 text-xs text-muted-foreground sm:px-0">
           {people.length} staff &middot; {shifts.length} shifts recorded
         </span>
 
-        <span className="ml-auto flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+        <span className="ml-auto hidden flex-wrap items-center gap-2 text-[11px] text-muted-foreground md:flex">
           {SHIFT_STATUSES.map((status) => (
             <span key={status} className="flex items-center gap-1">
               <span
@@ -210,7 +233,7 @@ export function RosterGrid({
       </div>
 
       {people.length === 0 ? (
-        <div className="rounded-xl border border-border/60 bg-card">
+        <div className="rounded-2xl border border-border/60 bg-card md:rounded-xl">
           <EmptyState
             icon={UsersIcon}
             title="Nobody to roster"
@@ -222,90 +245,193 @@ export function RosterGrid({
           />
         </div>
       ) : (
-        <div className="overflow-x-auto rounded-xl border border-border/60 bg-card shadow-sm">
-          <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
-            <thead>
-              <tr>
-                <th className="sticky left-0 z-10 bg-card px-3 py-2 text-left text-xs font-medium text-muted-foreground">
-                  Staff
-                </th>
-                {dayNumbers.map((day) => {
-                  const weekday = dayOfWeek(month, day);
-                  return (
-                    <th
-                      key={day}
+        <>
+          {/* ---- Phone: pick a day, see everybody on it ---------------------- */}
+          <div className="grid gap-3 md:hidden">
+            <div
+              role="tablist"
+              aria-label="Day of the month"
+              className="-mx-4 flex snap-x gap-1.5 overflow-x-auto px-4 pb-1 [scrollbar-width:none]"
+              ref={(node) => {
+                // Bring the picked day into view on first paint.
+                node
+                  ?.querySelector<HTMLElement>('[aria-selected="true"]')
+                  ?.scrollIntoView({ inline: 'center', block: 'nearest' });
+              }}
+            >
+              {dayNumbers.map((day) => {
+                const date = `${month}-${String(day).padStart(2, '0')}`;
+                const weekday = dayOfWeek(month, day);
+                const active = day === selectedDay;
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setPickedDay(day)}
+                    className={cn(
+                      'flex w-12 shrink-0 snap-center flex-col items-center gap-0.5 rounded-2xl border py-2 transition',
+                      active
+                        ? 'border-primary bg-primary text-primary-foreground shadow-md shadow-primary/25'
+                        : 'border-border/60 bg-card',
+                      !active && weekday === 0 && 'bg-muted/60',
+                    )}
+                  >
+                    <span
                       className={cn(
-                        'w-8 px-0 py-2 text-center text-[11px] font-medium text-muted-foreground',
-                        weekday === 0 && 'bg-muted/40',
+                        'text-[10px] font-semibold tracking-wide uppercase',
+                        active ? 'text-primary-foreground/80' : 'text-muted-foreground',
                       )}
                     >
-                      {day}
-                    </th>
-                  );
-                })}
-                <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">
-                  Hours
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {people.map((person) => (
-                <tr key={person.id} className="even:bg-muted/25">
-                  <th
-                    scope="row"
-                    className="sticky left-0 z-10 bg-inherit px-3 py-1.5 text-left font-normal"
-                  >
-                    <span className="block max-w-56 truncate font-medium">{person.full_name}</span>
-                    <span className="block text-[11px] text-muted-foreground">
-                      {person.role_name}
-                      {person.employee_code ? ` · ${person.employee_code}` : ''}
+                      {WEEKDAY_SHORT[weekday]}
                     </span>
-                  </th>
+                    <span className="text-base leading-none font-bold tabular-nums">{day}</span>
+                    <span
+                      aria-hidden
+                      className={cn(
+                        'mt-0.5 size-1 rounded-full',
+                        date === today ? (active ? 'bg-primary-foreground' : 'bg-primary') : 'bg-transparent',
+                      )}
+                    />
+                  </button>
+                );
+              })}
+            </div>
 
-                  {dayNumbers.map((day) => {
-                    const date = `${month}-${String(day).padStart(2, '0')}`;
-                    const shift = byCell.get(`${person.id}:${date}`);
-                    const weekday = dayOfWeek(month, day);
-
-                    return (
-                      <td
-                        key={day}
-                        className={cn('p-0.5 text-center', weekday === 0 && 'bg-muted/40')}
-                      >
-                        <button
-                          type="button"
-                          disabled={!canWrite}
-                          onClick={() => setEditing({ person, date })}
-                          title={
-                            shift
-                              ? `${SHIFT_STATUS_LABEL[shift.status]}${shift.hours ? ` · ${shift.hours}h` : ''}`
-                              : 'Nothing recorded'
-                          }
-                          aria-label={`${person.full_name}, ${date}: ${
-                            shift ? SHIFT_STATUS_LABEL[shift.status] : 'nothing recorded'
-                          }`}
+            <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+              {people.map((person) => {
+                const shift = byCell.get(`${person.id}:${selectedDate}`);
+                return (
+                  <li key={person.id}>
+                    <button
+                      type="button"
+                      disabled={!canWrite}
+                      onClick={() => setEditing({ person, date: selectedDate })}
+                      className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-colors active:bg-muted/60 disabled:cursor-default"
+                    >
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{person.full_name}</span>
+                        <span className="block truncate text-xs text-muted-foreground">
+                          {person.role_name} &middot; {(totals.get(person.id) ?? 0).toFixed(1)}h this month
+                        </span>
+                      </span>
+                      {shift ? (
+                        <span
                           className={cn(
-                            'grid size-7 place-items-center rounded font-mono text-[11px] font-semibold transition-colors',
-                            shift
-                              ? STATUS_STYLE[shift.status]
-                              : 'text-muted-foreground/40 hover:bg-muted',
-                            canWrite ? 'cursor-pointer' : 'cursor-default',
+                            'flex shrink-0 flex-col items-end gap-0.5 rounded-xl px-2.5 py-1.5 text-right',
+                            STATUS_STYLE[shift.status],
                           )}
                         >
-                          {shift ? STATUS_MARK[shift.status] : '·'}
-                        </button>
-                      </td>
+                          <span className="text-xs font-semibold">{SHIFT_STATUS_LABEL[shift.status]}</span>
+                          {shift.start_time || shift.hours ? (
+                            <span className="text-[11px] tabular-nums opacity-80">
+                              {shift.start_time
+                                ? `${shift.start_time.slice(0, 5)}–${shift.end_time?.slice(0, 5) ?? ''}`
+                                : `${shift.hours}h`}
+                            </span>
+                          ) : null}
+                        </span>
+                      ) : (
+                        <span className="shrink-0 rounded-xl border border-dashed border-border px-2.5 py-1.5 text-xs text-muted-foreground">
+                          {canWrite ? 'Add' : 'Nothing'}
+                        </span>
+                      )}
+                      {canWrite ? (
+                        <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
+                      ) : null}
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+
+          <div className="hidden overflow-x-auto rounded-2xl border border-border/60 bg-card shadow-sm md:block md:rounded-xl">
+            <table className="w-max min-w-full border-separate border-spacing-0 text-sm">
+              <thead>
+                <tr>
+                  <th className="sticky left-0 z-10 bg-card px-3 py-2 text-left text-xs font-medium text-muted-foreground">
+                    Staff
+                  </th>
+                  {dayNumbers.map((day) => {
+                    const weekday = dayOfWeek(month, day);
+                    return (
+                      <th
+                        key={day}
+                        className={cn(
+                          'w-8 px-0 py-2 text-center text-[11px] font-medium text-muted-foreground',
+                          weekday === 0 && 'bg-muted/40',
+                        )}
+                      >
+                        {day}
+                      </th>
                     );
                   })}
-
-                  <td className="px-3 py-1.5 text-right tabular-nums">
-                    {(totals.get(person.id) ?? 0).toFixed(2)}
-                  </td>
+                  <th className="px-3 py-2 text-right text-xs font-medium text-muted-foreground">
+                    Hours
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {people.map((person) => (
+                  <tr key={person.id} className="even:bg-muted/25">
+                    <th
+                      scope="row"
+                      className="sticky left-0 z-10 bg-inherit px-3 py-1.5 text-left font-normal"
+                    >
+                      <span className="block max-w-56 truncate font-medium">{person.full_name}</span>
+                      <span className="block text-[11px] text-muted-foreground">
+                        {person.role_name}
+                        {person.employee_code ? ` · ${person.employee_code}` : ''}
+                      </span>
+                    </th>
+
+                    {dayNumbers.map((day) => {
+                      const date = `${month}-${String(day).padStart(2, '0')}`;
+                      const shift = byCell.get(`${person.id}:${date}`);
+                      const weekday = dayOfWeek(month, day);
+
+                      return (
+                        <td
+                          key={day}
+                          className={cn('p-0.5 text-center', weekday === 0 && 'bg-muted/40')}
+                        >
+                          <button
+                            type="button"
+                            disabled={!canWrite}
+                            onClick={() => setEditing({ person, date })}
+                            title={
+                              shift
+                                ? `${SHIFT_STATUS_LABEL[shift.status]}${shift.hours ? ` · ${shift.hours}h` : ''}`
+                                : 'Nothing recorded'
+                            }
+                            aria-label={`${person.full_name}, ${date}: ${
+                              shift ? SHIFT_STATUS_LABEL[shift.status] : 'nothing recorded'
+                            }`}
+                            className={cn(
+                              'grid size-7 place-items-center rounded font-mono text-[11px] font-semibold transition-colors',
+                              shift
+                                ? STATUS_STYLE[shift.status]
+                                : 'text-muted-foreground/40 hover:bg-muted',
+                              canWrite ? 'cursor-pointer' : 'cursor-default',
+                            )}
+                          >
+                            {shift ? STATUS_MARK[shift.status] : '·'}
+                          </button>
+                        </td>
+                      );
+                    })}
+
+                    <td className="px-3 py-1.5 text-right tabular-nums">
+                      {(totals.get(person.id) ?? 0).toFixed(2)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
 
       {editing ? (
@@ -391,24 +517,25 @@ function ShiftDialog({
               anyway. */}
           {working ? (
             <>
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
                 <Field label="From" htmlFor="shift-start" error={fieldError(state, 'start_time')}>
-                  <Input
+                  <TimePicker
                     id="shift-start"
                     name="start_time"
-                    type="time"
+                    placeholder="Start"
                     defaultValue={shift?.start_time?.slice(0, 5) ?? ''}
                   />
                 </Field>
                 <Field label="To" htmlFor="shift-end" error={fieldError(state, 'end_time')}>
-                  <Input
+                  <TimePicker
                     id="shift-end"
                     name="end_time"
-                    type="time"
+                    placeholder="End"
                     defaultValue={shift?.end_time?.slice(0, 5) ?? ''}
                   />
                 </Field>
                 <Field
+                  className="col-span-2 sm:col-span-1"
                   label="Hours"
                   htmlFor="shift-hours"
                   error={fieldError(state, 'hours')}

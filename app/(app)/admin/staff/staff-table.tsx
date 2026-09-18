@@ -214,16 +214,29 @@ export function StaffTable({
   return (
     <>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Input
-          ref={searchInput}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search name, role, code, username"
-          className="w-full sm:w-72"
-          aria-label="Search staff"
-          autoFocus
-        />
-        <span className="text-xs text-muted-foreground">
+        {/* Phone: the search and a square "+" share one row. */}
+        <div className="flex w-full items-center gap-2 sm:contents">
+          <Input
+            ref={searchInput}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search name, role, code, username"
+            className="w-full bg-card sm:w-72 sm:bg-background"
+            aria-label="Search staff"
+            autoFocus
+          />
+          {can.create ? (
+            <Button
+              onClick={() => setEditing(blankStaff())}
+              size="icon"
+              className="shrink-0 sm:hidden"
+              aria-label="New staff"
+            >
+              <PlusIcon className="size-5" />
+            </Button>
+          ) : null}
+        </div>
+        <span className="px-1 text-xs text-muted-foreground sm:px-0">
           {filtered.length} of {staff.length} &middot; {doctorCount} doctors &middot; {noLoginCount}{' '}
           without a login
         </span>
@@ -232,14 +245,134 @@ export function StaffTable({
           {can.create ? <KbdHint keys="N">new</KbdHint> : null}
         </span>
         {can.create ? (
-          <Button onClick={() => setEditing(blankStaff())}>
+          <Button onClick={() => setEditing(blankStaff())} className="max-sm:hidden">
             <PlusIcon data-icon="inline-start" />
             New staff
           </Button>
         ) : null}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+      {/* Phone: a card per person. Same rows, same buttons as the table. */}
+      <div className="grid gap-2.5 md:hidden">
+        {filtered.length === 0 ? (
+          <div className="rounded-2xl border border-border/60 bg-card shadow-sm">
+            <EmptyState
+              compact
+              icon={UsersIcon}
+              title={staff.length === 0 ? 'No staff yet' : `Nothing matches “${query}”`}
+              description={
+                staff.length === 0
+                  ? 'Add the doctors first — their consultation fee is what seeds the charge on every new visit.'
+                  : undefined
+              }
+            />
+          </div>
+        ) : (
+          filtered.map((person) => {
+            const role = roleById.get(person.role_id);
+            const account = accountByStaff.get(person.id);
+            const usesSoftware = (role?.can_login ?? false) && person.can_login !== false;
+            const offerLogin =
+              (can.provision || can.resetPassword) &&
+              usesSoftware &&
+              person.is_active &&
+              (account || person.user_id === null);
+
+            return (
+              <div
+                key={person.id}
+                className={cn(
+                  'rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm',
+                  !person.is_active && 'opacity-60',
+                )}
+              >
+                <div className="flex items-start gap-3">
+                  <span className="grid size-11 shrink-0 place-items-center rounded-full bg-primary/10 text-sm font-semibold text-primary">
+                    {initials(person.full_name)}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold">{person.full_name}</p>
+                    <div className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                      <Badge variant="secondary">{role?.name ?? 'Unknown'}</Badge>
+                      <span className="truncate">{departmentName(person.department_id)}</span>
+                    </div>
+                  </div>
+                  {chargesConsultationFee(role?.code) ? (
+                    <span className="shrink-0 text-right">
+                      <span className="block text-sm font-semibold tabular-nums">
+                        &#8377;{formatAmount(person.consultation_fee)}
+                      </span>
+                      <span className="block text-[10px] tracking-wider text-muted-foreground uppercase">
+                        Fee
+                      </span>
+                    </span>
+                  ) : null}
+                </div>
+
+                <dl className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-muted/50 px-3 py-2.5 text-xs">
+                  <div className="min-w-0">
+                    <dt className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      Code
+                    </dt>
+                    <dd className="mt-0.5 truncate font-mono">{person.employee_code ?? '-'}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      Phone
+                    </dt>
+                    <dd className="mt-0.5 truncate font-mono">{person.phone ?? '-'}</dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      Login
+                    </dt>
+                    <dd className="mt-0.5 min-w-0 truncate">
+                      <LoginCell
+                        account={account}
+                        usesSoftware={usesSoftware}
+                        legacyLogin={person.user_id !== null && !account}
+                      />
+                    </dd>
+                  </div>
+                </dl>
+
+                {can.update || offerLogin || can.deactivate ? (
+                  <div className="mt-3 flex items-center gap-2 *:flex-1">
+                    {can.update ? (
+                      <Button size="sm" variant="outline" onClick={() => setEditing(person)}>
+                        <PencilIcon data-icon="inline-start" />
+                        Edit
+                      </Button>
+                    ) : null}
+                    {offerLogin ? (
+                      <Button size="sm" variant="outline" onClick={() => setCredentialsFor(person)}>
+                        <KeyRoundIcon data-icon="inline-start" />
+                        {account ? 'Login' : 'Issue login'}
+                      </Button>
+                    ) : null}
+                    {can.deactivate ? (
+                      person.is_active ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => setDeactivating(person)}
+                        >
+                          Deactivate
+                        </Button>
+                      ) : (
+                        <ReactivateButton person={person} />
+                      )
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm md:block md:rounded-xl">
         <Table>
           <TableHeader>
             <TableRow>
@@ -524,7 +657,7 @@ function StaffDialog({
             <CopyRow label="Temporary password" value={credentials.password} mono />
           </div>
 
-          <p className="rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground">
+          <p className="rounded-xl bg-muted px-3.5 py-3 text-xs text-muted-foreground sm:rounded-lg sm:px-3 sm:py-2.5">
             {credentials.staffName} has to choose their own password before they can reach any
             screen, so nobody else -- you included -- can open their pages afterwards.
           </p>
@@ -1005,7 +1138,7 @@ function CredentialsDialog({
             <input type="hidden" name="staff_id" value={person.id} />
 
             {provisionState.status === 'error' ? (
-              <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+              <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
                 {provisionState.message}
               </p>
             ) : null}

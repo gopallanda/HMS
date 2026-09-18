@@ -54,7 +54,7 @@ export default async function QueuePage() {
     return (
       <div className="grid gap-6">
         <PageHeader title="Queue" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           The queue could not be loaded: {error.message}
         </p>
       </div>
@@ -109,15 +109,15 @@ export default async function QueuePage() {
         title="Queue"
         description={`Tokens issued today, ${formatDate(today)}.`}
         actions={
-          <div className="flex flex-wrap gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-wrap">
             {needRepair > 0 ? (
-              <Button asChild variant="outline">
+              <Button asChild variant="outline" className="border-warning/40 text-warning">
                 <Link href="/front-desk/incomplete">
                   {needRepair} need a doctor
                 </Link>
               </Button>
             ) : null}
-            <Button asChild>
+            <Button asChild className={needRepair > 0 ? undefined : 'col-span-2'}>
               <Link href="/front-desk/register">Register patient</Link>
             </Button>
           </div>

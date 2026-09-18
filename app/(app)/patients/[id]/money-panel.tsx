@@ -79,10 +79,13 @@ export function MoneyPanel({
   return (
     <SectionCard id="money" title="Billing" count={invoices.length}>
       <div className="grid gap-3">
-        <dl className="grid grid-cols-3 gap-2">
+        {/* Phone: Outstanding across the top -- the figure somebody acts on --
+            with billed and collected side by side under it. */}
+        <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           <Total label="Billed" value={billed} />
           <Total label="Collected" value={collected} />
           <Total
+            className="col-span-2 row-start-1 sm:col-span-1 sm:row-start-auto"
             label="Outstanding"
             value={outstanding}
             // The only figure on this page that is allowed to be loud, and only
@@ -100,79 +103,137 @@ export function MoneyPanel({
             description="Charges raised on a visit appear here once they have been collected."
           />
         ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-40">Invoice</TableHead>
-                <TableHead className="hidden w-32 sm:table-cell">Date</TableHead>
-                <TableHead className="hidden lg:table-cell">Visit</TableHead>
-                <TableHead className="w-24 text-right">Total &#8377;</TableHead>
-                <TableHead className="hidden w-24 text-right sm:table-cell">Paid &#8377;</TableHead>
-                <TableHead className="w-24 text-right">Balance &#8377;</TableHead>
-                <TableHead className="w-24">Status</TableHead>
-                <TableHead className="w-20" />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+          <>
+            <ul className="-mx-3 -mb-3 divide-y divide-border/60 border-t border-border/60 sm:hidden">
               {invoices.map((invoice) => (
-                <TableRow key={invoice.id} className={cn(invoice.status === 'void' && 'opacity-60')}>
-                  <TableCell
-                    className={cn('font-mono text-xs', invoice.status === 'void' && 'line-through')}
-                  >
-                    {invoice.invoice_no}
-                  </TableCell>
-                  <TableCell className="hidden tabular-nums sm:table-cell">
-                    {formatDate(invoice.invoice_date)}
-                  </TableCell>
-                  <TableCell className="hidden font-mono text-xs text-muted-foreground lg:table-cell">
-                    {invoice.visit_no ?? '-'}
-                    {invoice.token_no !== null ? ` · ${invoice.token_no}` : ''}
-                  </TableCell>
-                  <TableCell className="text-right tabular-nums">
-                    {formatAmount(invoice.grand_total)}
-                  </TableCell>
-                  <TableCell className="hidden text-right tabular-nums sm:table-cell">
-                    {formatAmount(invoice.paid_total)}
-                  </TableCell>
-                  <TableCell
-                    className={cn(
-                      'text-right font-medium tabular-nums',
-                      invoice.status !== 'void' && invoice.balance > 0 && 'text-destructive',
-                    )}
-                  >
-                    {invoice.status === 'void' ? '-' : formatAmount(invoice.balance)}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]}>
-                      {INVOICE_STATUS_LABEL[invoice.status]}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center justify-end gap-0.5">
-                      {canCollect && invoice.status !== 'void' && invoice.balance > 0 ? (
-                        <CollectBalanceButton
-                          target={{
-                            invoiceId: invoice.id,
-                            invoiceNo: invoice.invoice_no,
-                            patientName,
-                            balance: invoice.balance,
-                          }}
-                        />
-                      ) : null}
-                      <Link
-                        href={`/print/receipt/${invoice.id}?autoprint=0`}
-                        className="text-muted-foreground transition-colors hover:text-foreground"
-                        aria-label={`Print ${invoice.invoice_no}`}
-                        title={`Print ${invoice.invoice_no}`}
-                      >
-                        <PrinterIcon className="size-4" />
-                      </Link>
-                    </div>
-                  </TableCell>
-                </TableRow>
+                <li
+                  key={invoice.id}
+                  className={cn('flex items-center gap-3 px-3.5 py-3', invoice.status === 'void' && 'opacity-60')}
+                >
+                  <div className="min-w-0 flex-1">
+                    <p
+                      className={cn(
+                        'truncate font-mono text-xs font-medium',
+                        invoice.status === 'void' && 'line-through',
+                      )}
+                    >
+                      {invoice.invoice_no}
+                    </p>
+                    <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                      <span className="tabular-nums">{formatDate(invoice.invoice_date)}</span>
+                      <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]}>
+                        {INVOICE_STATUS_LABEL[invoice.status]}
+                      </Badge>
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="text-sm font-semibold tabular-nums">
+                      &#8377;{formatAmount(invoice.grand_total)}
+                    </p>
+                    {invoice.status !== 'void' && invoice.balance > 0 ? (
+                      <p className="text-xs font-medium text-destructive tabular-nums">
+                        &#8377;{formatAmount(invoice.balance)} due
+                      </p>
+                    ) : null}
+                  </div>
+                  <div className="flex shrink-0 items-center">
+                    {canCollect && invoice.status !== 'void' && invoice.balance > 0 ? (
+                      <CollectBalanceButton
+                        target={{
+                          invoiceId: invoice.id,
+                          invoiceNo: invoice.invoice_no,
+                          patientName,
+                          balance: invoice.balance,
+                        }}
+                      />
+                    ) : null}
+                    <Link
+                      href={`/print/receipt/${invoice.id}?autoprint=0`}
+                      className="grid size-9 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label={`Print ${invoice.invoice_no}`}
+                    >
+                      <PrinterIcon className="size-4" />
+                    </Link>
+                  </div>
+                </li>
               ))}
-            </TableBody>
-          </Table>
+            </ul>
+            <div className="hidden sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-40">Invoice</TableHead>
+                    <TableHead className="hidden w-32 sm:table-cell">Date</TableHead>
+                    <TableHead className="hidden lg:table-cell">Visit</TableHead>
+                    <TableHead className="w-24 text-right">Total &#8377;</TableHead>
+                    <TableHead className="hidden w-24 text-right sm:table-cell">Paid &#8377;</TableHead>
+                    <TableHead className="w-24 text-right">Balance &#8377;</TableHead>
+                    <TableHead className="w-24">Status</TableHead>
+                    <TableHead className="w-20" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {invoices.map((invoice) => (
+                    <TableRow key={invoice.id} className={cn(invoice.status === 'void' && 'opacity-60')}>
+                      <TableCell
+                        className={cn('font-mono text-xs', invoice.status === 'void' && 'line-through')}
+                      >
+                        {invoice.invoice_no}
+                      </TableCell>
+                      <TableCell className="hidden tabular-nums sm:table-cell">
+                        {formatDate(invoice.invoice_date)}
+                      </TableCell>
+                      <TableCell className="hidden font-mono text-xs text-muted-foreground lg:table-cell">
+                        {invoice.visit_no ?? '-'}
+                        {invoice.token_no !== null ? ` · ${invoice.token_no}` : ''}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">
+                        {formatAmount(invoice.grand_total)}
+                      </TableCell>
+                      <TableCell className="hidden text-right tabular-nums sm:table-cell">
+                        {formatAmount(invoice.paid_total)}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'text-right font-medium tabular-nums',
+                          invoice.status !== 'void' && invoice.balance > 0 && 'text-destructive',
+                        )}
+                      >
+                        {invoice.status === 'void' ? '-' : formatAmount(invoice.balance)}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]}>
+                          {INVOICE_STATUS_LABEL[invoice.status]}
+                        </Badge>
+                      </TableCell>
+                      <TableCell>
+                        <div className="flex items-center justify-end gap-0.5">
+                          {canCollect && invoice.status !== 'void' && invoice.balance > 0 ? (
+                            <CollectBalanceButton
+                              target={{
+                                invoiceId: invoice.id,
+                                invoiceNo: invoice.invoice_no,
+                                patientName,
+                                balance: invoice.balance,
+                              }}
+                            />
+                          ) : null}
+                          <Link
+                            href={`/print/receipt/${invoice.id}?autoprint=0`}
+                            className="text-muted-foreground transition-colors hover:text-foreground"
+                            aria-label={`Print ${invoice.invoice_no}`}
+                            title={`Print ${invoice.invoice_no}`}
+                          >
+                            <PrinterIcon className="size-4" />
+                          </Link>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
         )}
       </div>
     </SectionCard>
@@ -183,22 +244,27 @@ function Total({
   label,
   value,
   tone = 'plain',
+  className,
 }: {
   label: string;
   value: number;
   tone?: 'plain' | 'due' | 'settled';
+  className?: string;
 }) {
   return (
     <div
       className={cn(
-        'rounded-lg border border-border/60 px-3 py-2',
+        'min-w-0 rounded-xl border border-border/60 px-3 py-2.5 sm:rounded-lg sm:py-2',
         tone === 'due' && 'border-destructive/30 bg-destructive/5',
+        className,
       )}
     >
-      <dt className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</dt>
+      <dt className="text-[11px] font-medium tracking-wide text-muted-foreground uppercase sm:text-xs">
+        {label}
+      </dt>
       <dd
         className={cn(
-          'mt-0.5 text-xl leading-none font-bold tracking-tight tabular-nums',
+          'mt-1 truncate text-lg leading-none font-bold tracking-tight tabular-nums sm:mt-0.5 sm:text-xl',
           tone === 'due' && 'text-destructive',
           tone === 'settled' && 'text-success',
         )}

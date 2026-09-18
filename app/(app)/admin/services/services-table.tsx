@@ -179,16 +179,36 @@ export function ServicesTable({
   return (
     <>
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <Input
-          ref={searchInput}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search service"
-          className="w-full sm:w-64"
-          aria-label="Search services"
-          autoFocus
-        />
-        <span className="text-xs text-muted-foreground">
+        {/* Phone: search, the standard list and "+" share one row. */}
+        <div className="flex w-full items-center gap-2 sm:contents">
+          <Input
+            ref={searchInput}
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search service"
+            className="w-full bg-card sm:w-64 sm:bg-background"
+            aria-label="Search services"
+            autoFocus
+          />
+          <Button
+            variant="outline"
+            size="icon"
+            className="shrink-0 sm:hidden"
+            onClick={() => setStarter(true)}
+            aria-label="Load the standard list"
+          >
+            <SparklesIcon className="size-5" />
+          </Button>
+          <Button
+            size="icon"
+            className="shrink-0 sm:hidden"
+            onClick={() => setEditing(blankService(category === ALL ? null : category))}
+            aria-label="New service"
+          >
+            <PlusIcon className="size-5" />
+          </Button>
+        </div>
+        <span className="px-1 text-xs text-muted-foreground sm:px-0">
           {filtered.length} of {services.length} &middot; {activeCount} active
         </span>
         <span className="ml-auto flex items-center gap-4">
@@ -198,11 +218,14 @@ export function ServicesTable({
         {/* Always offered, not only on an empty list: it adds what is missing
             and touches nothing that exists, so a hospital three months in can
             still pull the eleven lab tests it never got round to typing. */}
-        <Button variant="outline" onClick={() => setStarter(true)}>
+        <Button variant="outline" onClick={() => setStarter(true)} className="max-sm:hidden">
           <SparklesIcon data-icon="inline-start" />
           Standard list
         </Button>
-        <Button onClick={() => setEditing(blankService(category === ALL ? null : category))}>
+        <Button
+          onClick={() => setEditing(blankService(category === ALL ? null : category))}
+          className="max-sm:hidden"
+        >
           <PlusIcon data-icon="inline-start" />
           New service
         </Button>
@@ -212,7 +235,11 @@ export function ServicesTable({
           the primary way this list is narrowed, and one click is cheaper than
           open-read-pick. Counts sit on the chip so an empty category is
           obvious before it is clicked. */}
-      <div role="group" aria-label="Filter by category" className="flex flex-wrap gap-1.5">
+      <div
+        role="group"
+        aria-label="Filter by category"
+        className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none] sm:mx-0 sm:flex-wrap sm:overflow-visible sm:px-0"
+      >
         <CategoryChip
           label="All"
           count={services.length}
@@ -230,7 +257,91 @@ export function ServicesTable({
         ))}
       </div>
 
-      <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+      {/* Phone: one card per category, one row per service. */}
+      <div className="grid gap-4 md:hidden">
+        {groups.length === 0 ? (
+          <div className="rounded-2xl border border-border/60 bg-card shadow-sm">
+            <EmptyState
+              compact
+              icon={ReceiptIndianRupeeIcon}
+              title={services.length === 0 ? 'No services yet' : `Nothing matches “${query}”`}
+              description={
+                services.length === 0
+                  ? 'Nothing can be billed until this list exists. Load the standard list and edit the prices to your own rates.'
+                  : undefined
+              }
+              action={
+                services.length === 0 ? (
+                  <Button onClick={() => setStarter(true)}>
+                    <SparklesIcon data-icon="inline-start" />
+                    Load the standard list
+                  </Button>
+                ) : undefined
+              }
+            />
+          </div>
+        ) : (
+          groups.map((group) => (
+            <section key={group.key} className="grid gap-2">
+              <h3 className="px-1 text-[11px] font-semibold tracking-widest text-muted-foreground uppercase">
+                {SERVICE_CATEGORY_LABEL[group.key]}
+                <span className="ml-1.5 font-normal opacity-70">{group.rows.length}</span>
+              </h3>
+              <ul className="divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm">
+                {group.rows.map((service) => (
+                  <li
+                    key={service.id}
+                    className={cn('grid gap-2 px-3.5 py-3', !service.is_active && 'opacity-60')}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-sm font-semibold">{service.name}</p>
+                        <p className="mt-0.5 flex items-center gap-2 text-xs text-muted-foreground">
+                          <span>GST {service.tax_rate.toFixed(0)}%</span>
+                          <Badge variant={service.is_active ? 'success' : 'outline'}>
+                            {service.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-right text-sm font-bold tabular-nums">
+                        &#8377;{formatAmount(service.price)}
+                        {SERVICE_UNIT_SUFFIX[service.unit] ? (
+                          <span className="block text-[11px] font-normal text-muted-foreground">
+                            {SERVICE_UNIT_SUFFIX[service.unit]}
+                          </span>
+                        ) : null}
+                      </span>
+                    </div>
+                    {priceIsAdvisory(service.category) ? (
+                      <ConsultationNote doctors={doctors} />
+                    ) : null}
+                    <div className="flex items-center gap-2 *:flex-1">
+                      <Button size="sm" variant="outline" onClick={() => setEditing(service)}>
+                        <PencilIcon data-icon="inline-start" />
+                        Edit
+                      </Button>
+                      {service.is_active ? (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive"
+                          onClick={() => setDeactivating(service)}
+                        >
+                          Deactivate
+                        </Button>
+                      ) : (
+                        <ReactivateButton service={service} />
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          ))
+        )}
+      </div>
+
+      <div className="hidden overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm md:block md:rounded-xl">
         <Table>
           <TableHeader>
             <TableRow>
@@ -399,7 +510,7 @@ function CategoryChip({
       aria-pressed={selected}
       onClick={onSelect}
       className={cn(
-        'inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs transition-all focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none',
+        'inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border px-3.5 text-sm font-medium transition-all focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none sm:h-auto sm:px-3 sm:py-1 sm:text-xs sm:font-normal',
         selected
           ? 'border-transparent bg-primary text-primary-foreground shadow-sm'
           : 'border-border bg-background text-muted-foreground hover:text-foreground',

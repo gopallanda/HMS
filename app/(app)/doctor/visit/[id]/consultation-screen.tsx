@@ -177,7 +177,7 @@ export function ConsultationScreen({
           <CardContent className="grid gap-3 text-sm">
             <div className="flex items-start justify-between gap-2">
               <div className="flex min-w-0 items-center gap-2.5">
-                <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-sm font-bold text-primary-foreground tabular-nums">
+                <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-primary text-lg font-bold text-primary-foreground tabular-nums lg:size-10 lg:rounded-full lg:text-sm">
                   {visit.token_no}
                 </span>
                 <div className="min-w-0">
@@ -201,13 +201,13 @@ export function ConsultationScreen({
                 doctor is the last person who sees the patient before they walk
                 out, so this is the last chance anybody has to mention it. */}
             {visit.payment_due ? (
-              <p className="rounded-lg bg-warning/10 px-2.5 py-2 text-xs text-warning">
+              <p className="rounded-xl bg-warning/10 px-3 py-2.5 text-xs text-warning lg:rounded-lg lg:px-2.5 lg:py-2">
                 <strong className="font-semibold tracking-wide uppercase">Payment due</strong>
                 {visit.defer_reason ? ` - ${visit.defer_reason}` : ''}
               </p>
             ) : null}
 
-            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-1.5 border-t border-border/60 pt-3 text-xs">
+            <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-2 border-t border-border/60 pt-3 text-sm lg:gap-y-1.5 lg:text-xs">
               <dt className="text-muted-foreground">Age</dt>
               <dd className="tabular-nums">
                 {formatAge(visit.patient_dob)}{' '}
@@ -279,14 +279,14 @@ export function ConsultationScreen({
       {/* ------------------------------------------------------------------ */}
       {/* Vitals and notes                                                    */}
       {/* ------------------------------------------------------------------ */}
-      <form ref={formRef} action={action} className="grid content-start gap-4 pb-20 lg:pb-0">
+      <form ref={formRef} action={action} className="grid content-start gap-4 pb-24 lg:pb-0">
         <input type="hidden" name="id" value={recordId} />
         <input type="hidden" name="visit_id" value={visit.id} />
 
         <FormMessage state={state} />
 
         {readOnly ? (
-          <p className="flex items-start gap-2 rounded-lg bg-muted px-3 py-2.5 text-xs text-muted-foreground">
+          <p className="flex items-start gap-2 rounded-xl bg-muted px-3.5 py-3 text-xs text-muted-foreground lg:rounded-lg lg:px-3 lg:py-2.5">
             <LockIcon className="mt-0.5 size-3.5 shrink-0" />
             <span>
               This visit is booked to {visit.doctor_name ?? 'another doctor'}, so it is shown
@@ -298,7 +298,7 @@ export function ConsultationScreen({
         <Card>
           <CardContent className="grid gap-3">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-lg font-medium">Vitals</h2>
+              <h2 className="text-base font-semibold md:text-lg md:font-medium">Vitals</h2>
               <p className="text-xs text-muted-foreground">
                 Leave a box empty if it was not taken.
               </p>
@@ -339,7 +339,7 @@ export function ConsultationScreen({
         <Card>
           <CardContent className="grid gap-2">
             <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-lg font-medium">Consultation notes</h2>
+              <h2 className="text-base font-semibold md:text-lg md:font-medium">Consultation notes</h2>
               {consultation ? (
                 <p className="text-xs text-muted-foreground">
                   Last saved {formatTime(consultation.updated_at)}
@@ -358,7 +358,7 @@ export function ConsultationScreen({
                 'Complaint, findings, impression, advice.\n\nFree text for now -- structured history and prescriptions come in a later phase.'
               }
               aria-invalid={fieldError(state, 'notes') !== undefined}
-              className="min-h-64 font-mono text-sm leading-relaxed"
+              className="min-h-56 font-mono text-sm leading-relaxed md:min-h-64"
             />
             {fieldError(state, 'notes') ? (
               <p className="text-xs font-medium text-destructive">{fieldError(state, 'notes')}</p>
@@ -375,7 +375,7 @@ export function ConsultationScreen({
           <Card>
             <CardContent className="grid gap-3">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="text-lg font-medium">Prescription</h2>
+                <h2 className="text-base font-semibold md:text-lg md:font-medium">Prescription</h2>
                 {prescription.length > 0 ? (
                   <Button asChild variant="outline" size="sm">
                     <Link href={`/print/prescription/${visit.id}?autoprint=0`}>
@@ -407,8 +407,9 @@ export function ConsultationScreen({
         {readOnly ? null : (
           // Sticky at the bottom of a phone screen: the notes box is taller
           // than the viewport, and a Save button that scrolled off the end of
-          // it is a note that never gets saved.
-          <div className="fixed inset-x-0 bottom-0 z-20 flex flex-wrap items-center gap-2 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-background/80 lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
+          // it is a note that never gets saved. Below `md` it docks on top of
+          // the tab bar rather than underneath it.
+          <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 flex items-center gap-2 border-t border-border/60 bg-background/95 px-4 py-3 backdrop-blur supports-backdrop-filter:bg-background/80 max-md:*:data-[slot=button]:flex-1 md:bottom-0 md:flex-wrap lg:static lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none">
             {/*
               Two submit buttons, each carrying its own name and value: the
               browser puts the one that was pressed into the FormData, so what
@@ -430,7 +431,7 @@ export function ConsultationScreen({
 
             {isClosed ? null : (
               <SubmitButton name="visit_status" value="completed" pendingLabel="Completing...">
-                Save &amp; complete visit
+                Save &amp; complete<span className="hidden sm:inline">&nbsp;visit</span>
               </SubmitButton>
             )}
 
@@ -442,7 +443,7 @@ export function ConsultationScreen({
         )}
 
         {consultation ? (
-          <p className="text-xs text-muted-foreground">
+          <p className="px-1 text-xs text-muted-foreground lg:px-0">
             Record created {formatDateTime(consultation.created_at)}. Edits are kept in the audit
             log; nothing here is deleted.
           </p>

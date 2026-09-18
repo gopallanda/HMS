@@ -18,6 +18,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
 import {
   Select,
@@ -29,6 +30,7 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { fieldError, IDLE, type ActionState } from '@/lib/action-state';
 import { GENDERS, GENDER_LABEL, type Gender } from '@/lib/patients';
+import { todayIst } from '@/lib/utils/dates';
 
 export type EditablePatient = {
   id: string;
@@ -172,10 +174,13 @@ function EditDialog({ patient, onClose }: { patient: EditablePatient; onClose: (
 
           <div className="grid gap-4 sm:grid-cols-3">
             <Field label="Date of birth" htmlFor="edit-dob" error={fieldError(state, 'dob')}>
-              <Input
+              <DatePicker
                 id="edit-dob"
                 name="dob"
-                type="date"
+                typeable
+                clearable
+                startView="years"
+                max={todayIst()}
                 defaultValue={patient.dob}
                 aria-invalid={fieldError(state, 'dob') !== undefined}
               />

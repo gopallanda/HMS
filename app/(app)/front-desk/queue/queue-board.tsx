@@ -215,15 +215,26 @@ export function QueueBoard({
 
   return (
     <>
+      {/* Phone: the counts are a row of chips that scrolls sideways, with the
+          live indicator on its own line above them. */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        {VISIT_STATUSES.map((status) => (
-          <span key={status} className="flex items-center gap-1.5 text-xs">
-            <Badge variant={VISIT_STATUS_VARIANT[status]}>{counts.get(status) ?? 0}</Badge>
-            <span className="text-muted-foreground">{VISIT_STATUS_LABEL[status]}</span>
-          </span>
-        ))}
+        <div className="-mx-4 flex w-[calc(100%+2rem)] gap-2 overflow-x-auto px-4 [scrollbar-width:none] md:mx-0 md:w-auto md:flex-wrap md:gap-x-3 md:overflow-visible md:px-0">
+          {VISIT_STATUSES.map((status) => (
+            <span
+              key={status}
+              className="flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-card py-1 pr-3 pl-1 text-xs shadow-xs md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none"
+            >
+              <Badge variant={VISIT_STATUS_VARIANT[status]} className="min-w-6 md:min-w-0">
+                {counts.get(status) ?? 0}
+              </Badge>
+              <span className="font-medium text-muted-foreground md:font-normal">
+                {VISIT_STATUS_LABEL[status]}
+              </span>
+            </span>
+          ))}
+        </div>
 
-        <span className="ml-auto flex items-center gap-2 text-xs text-muted-foreground">
+        <span className="order-first flex items-center gap-2 text-xs text-muted-foreground md:order-none md:ml-auto">
           {/* The dot pulses only while the channel is actually subscribed. A
               board that animates whether or not it is connected is a board
               nobody checks -- and this one is read from across the room. */}
@@ -247,7 +258,7 @@ export function QueueBoard({
           at a counter, so the same rows render as cards. One source of data,
           two shapes -- not two lists that can disagree. */}
       {entries.length === 0 ? (
-        <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+        <div className="rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl">
           <EmptyState
             icon={CalendarClockIcon}
             title="Nobody has been registered today yet"
@@ -255,45 +266,44 @@ export function QueueBoard({
           />
         </div>
       ) : (
-        <div className="grid gap-2 md:hidden">
+        <div className="grid gap-2.5 md:hidden">
           {entries.map((entry) => (
             <div
               key={entry.id}
               className={cn(
-                'flex items-start gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm',
+                'flex items-start gap-3 rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm',
                 entry.status === 'cancelled' && 'opacity-60',
               )}
             >
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-base font-bold text-primary-foreground tabular-nums">
+              {/* The token leads, big: it is what gets called across the room. */}
+              <span
+                className={cn(
+                  'grid size-12 shrink-0 place-items-center rounded-2xl text-lg font-bold tabular-nums',
+                  entry.status === 'waiting' || entry.status === 'in_consultation'
+                    ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                    : 'bg-muted text-muted-foreground',
+                )}
+              >
                 {entry.token_no}
               </span>
               <div className="min-w-0 flex-1">
                 <div className="flex items-start justify-between gap-2">
                   <Link
                     href={`/patients/${entry.patient_id}`}
-                    className="min-w-0 truncate font-medium underline-offset-4 hover:underline"
+                    className="min-w-0 truncate text-[15px] font-semibold underline-offset-4 hover:underline"
                   >
                     {entry.patient_name}
                   </Link>
-                  <span className="flex shrink-0 items-center gap-1.5">
-                    {entry.payment_due ? (
-                      <PaymentDue
-                        reason={entry.defer_reason}
-                        due={canCollect ? dues[entry.id] : undefined}
-                        onCollect={setCollecting}
-                      />
-                    ) : null}
-                    <Badge variant={VISIT_STATUS_VARIANT[entry.status]}>
-                      {VISIT_STATUS_LABEL[entry.status]}
-                    </Badge>
-                  </span>
+                  <Badge variant={VISIT_STATUS_VARIANT[entry.status]} className="shrink-0">
+                    {VISIT_STATUS_LABEL[entry.status]}
+                  </Badge>
                 </div>
                 <p className="mt-0.5 truncate text-xs text-muted-foreground">
                   {ageGender(entry.patient_dob, entry.patient_gender)} &middot;{' '}
                   <span className="font-mono">{entry.patient_mrn}</span>
                 </p>
-                <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
-                  <span className="text-muted-foreground">
+                <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+                  <span className="truncate font-medium text-foreground/80">
                     {entry.doctor_name ?? 'No doctor'}
                   </span>
                   {entry.visit_type === 'opd' ? null : (
@@ -302,17 +312,26 @@ export function QueueBoard({
                   <span className="ml-auto text-muted-foreground tabular-nums">
                     {formatTime(entry.visited_at)}
                   </span>
-                  <span className="font-medium tabular-nums">
+                  <span className="font-semibold tabular-nums">
                     &#8377;{formatAmount(entry.charge_total)}
                   </span>
                 </p>
+                {entry.payment_due ? (
+                  <div className="mt-2">
+                    <PaymentDue
+                      reason={entry.defer_reason}
+                      due={canCollect ? dues[entry.id] : undefined}
+                      onCollect={setCollecting}
+                    />
+                  </div>
+                ) : null}
 
                 {/* The card carries the same two actions as the table row.
                     A phone at the counter is not a read-only view of the
                     queue -- it is what a clerk standing beside the door has. */}
                 {(entry.status === 'waiting' || entry.status === 'in_consultation') &&
                 (canManage || canCancel) ? (
-                  <div className="mt-2 flex items-center gap-1 border-t border-border/60 pt-2">
+                  <div className="mt-3 flex items-center gap-2 border-t border-border/60 pt-3 *:flex-1">
                     {canManage ? (
                       <TransferDialog
                         visitId={entry.id}
@@ -339,7 +358,7 @@ export function QueueBoard({
 
       <div
         className={cn(
-          'rounded-xl border border-border/60 bg-card shadow-sm',
+          'rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl',
           entries.length === 0 ? 'hidden' : 'hidden md:block',
         )}
       >
@@ -459,7 +478,7 @@ export function QueueBoard({
         </Table>
       </div>
 
-      <p className="text-xs text-muted-foreground">
+      <p className="px-1 text-xs text-muted-foreground md:px-0">
         Tokens restart at 1 every day. Visit numbers do not &mdash; they run for the financial
         year.
       </p>

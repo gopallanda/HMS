@@ -212,6 +212,9 @@ export function DoctorQueue({
    */
   const active = Math.min(highlight, Math.max(open.length - 1, 0));
 
+  /** The phone's hero card: whoever is in the room, else whoever is next. */
+  const focus = withDoctor ?? nextUp;
+
   // Keep the highlighted row visible when the queue is longer than the screen.
   useEffect(() => {
     listRef.current
@@ -258,27 +261,73 @@ export function DoctorQueue({
 
   return (
     <>
+      {/* Phone: who is in the room, or who is next, as the screen's hero --
+          the one fact a doctor glances down for between patients. */}
+      {focus ? (
+        <button
+          type="button"
+          onClick={() => openVisit(focus.id)}
+          className={cn(
+            'flex items-center gap-4 rounded-3xl p-4 text-left shadow-lg transition active:scale-[0.99] md:hidden',
+            withDoctor
+              ? 'bg-primary text-primary-foreground shadow-primary/20'
+              : 'border border-border/60 bg-card shadow-foreground/5',
+          )}
+        >
+          <span
+            className={cn(
+              'grid size-16 shrink-0 place-items-center rounded-2xl text-3xl font-bold tabular-nums',
+              withDoctor ? 'bg-white/15' : 'bg-primary text-primary-foreground',
+            )}
+          >
+            {focus.token_no}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span
+              className={cn(
+                'block text-[11px] font-semibold tracking-widest uppercase',
+                withDoctor ? 'text-primary-foreground/75' : 'text-muted-foreground',
+              )}
+            >
+              {withDoctor ? 'With you now' : 'Next up'}
+            </span>
+            <span className="mt-0.5 block truncate text-lg font-bold">
+              {focus.patient_name}
+            </span>
+            <span
+              className={cn(
+                'block truncate text-xs',
+                withDoctor ? 'text-primary-foreground/80' : 'text-muted-foreground',
+              )}
+            >
+              {ageGender(focus.patient_dob, focus.patient_gender)}{' '}
+              &middot; Tap to open notes
+            </span>
+          </span>
+        </button>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2 text-xs">
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card py-1 pr-3 pl-1 shadow-xs md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none">
           <Badge>{open.length}</Badge>
           <span className="text-muted-foreground">
             {open.length === 1 ? 'patient waiting' : 'patients waiting'}
           </span>
         </span>
-        <span className="flex items-center gap-1.5">
+        <span className="flex items-center gap-1.5 rounded-full border border-border/60 bg-card py-1 pr-3 pl-1 shadow-xs md:rounded-none md:border-0 md:bg-transparent md:p-0 md:shadow-none">
           <Badge variant="outline">{closed.filter((e) => e.status === 'completed').length}</Badge>
           <span className="text-muted-foreground">seen today</span>
         </span>
 
         {withDoctor ? (
-          <span className="flex items-center gap-1.5">
+          <span className="hidden items-center gap-1.5 md:flex">
             <Badge variant="info">Token {withDoctor.token_no}</Badge>
             <span className="truncate text-muted-foreground">
               with you &middot; {withDoctor.patient_name}
             </span>
           </span>
         ) : nextUp ? (
-          <span className="flex items-center gap-1.5">
+          <span className="hidden items-center gap-1.5 md:flex">
             <Badge variant="warning">Token {nextUp.token_no}</Badge>
             <span className="truncate text-muted-foreground">
               next &middot; {nextUp.patient_name}
@@ -304,7 +353,7 @@ export function DoctorQueue({
       </div>
 
       {open.length === 0 ? (
-        <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+        <div className="rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl">
           <EmptyState
             icon={CoffeeIcon}
             title="Nobody is waiting for you right now"
@@ -314,7 +363,7 @@ export function DoctorQueue({
       ) : (
         // Below `md` the row becomes a card. A doctor reads this on a phone
         // between consultations, where a seven-column table is a scroll.
-        <div className="grid gap-2 md:hidden">
+        <div className="grid gap-2.5 md:hidden">
           {open.map((entry, index) => (
             // role="button" rather than a real one: the row now CONTAINS
             // buttons, and a button inside a button is invalid markup that
@@ -334,16 +383,23 @@ export function DoctorQueue({
               }}
               onFocus={() => setHighlight(index)}
               className={cn(
-                'flex w-full cursor-pointer items-start gap-3 rounded-xl border bg-card p-3 text-left shadow-sm transition-colors',
-                index === active ? 'border-primary/40 bg-primary/5' : 'border-border/60',
+                'flex w-full cursor-pointer items-start gap-3 rounded-2xl border bg-card p-3.5 text-left shadow-sm transition active:scale-[0.99]',
+                entry.status === 'in_consultation' ? 'border-primary/40 bg-primary/5' : 'border-border/60',
               )}
             >
-              <span className="grid size-10 shrink-0 place-items-center rounded-full bg-primary text-base font-bold text-primary-foreground tabular-nums">
+              <span
+                className={cn(
+                  'grid size-12 shrink-0 place-items-center rounded-2xl text-lg font-bold tabular-nums',
+                  entry.status === 'in_consultation'
+                    ? 'bg-primary text-primary-foreground shadow-sm shadow-primary/30'
+                    : 'bg-primary/10 text-primary',
+                )}
+              >
                 {entry.token_no}
               </span>
               <span className="min-w-0 flex-1">
                 <span className="flex items-start justify-between gap-2">
-                  <span className="min-w-0 truncate font-medium">{entry.patient_name}</span>
+                  <span className="min-w-0 truncate text-[15px] font-semibold">{entry.patient_name}</span>
                   <Badge variant={VISIT_STATUS_VARIANT[entry.status]} className="shrink-0">
                     {VISIT_STATUS_LABEL[entry.status]}
                   </Badge>
@@ -372,7 +428,7 @@ export function DoctorQueue({
                   entry={entry}
                   pending={pendingVisit === entry.id}
                   onMove={move}
-                  className="mt-2.5 w-full"
+                  className="mt-3 w-full border-t border-border/60 pt-3"
                   block
                 />
               </span>
@@ -383,7 +439,7 @@ export function DoctorQueue({
 
       <div
         className={cn(
-          'overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm',
+          'overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl',
           open.length === 0 ? 'hidden' : 'hidden md:block',
         )}
       >
@@ -479,10 +535,10 @@ export function DoctorQueue({
 
       {closed.length > 0 ? (
         <section className="grid gap-2">
-          <h2 className="text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase">
+          <h2 className="px-1 text-xs font-semibold tracking-widest text-muted-foreground/60 uppercase md:px-0">
             Earlier today
           </h2>
-          <ul className="grid overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
+          <ul className="grid overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl">
             {closed.map((entry) => (
               <li key={entry.id}>
                 <div
@@ -496,11 +552,11 @@ export function DoctorQueue({
                     }
                   }}
                   className={cn(
-                    'flex w-full cursor-pointer items-center gap-3 border-b border-border/60 px-3 py-2 text-left text-xs transition-colors last:border-0 hover:bg-muted/50',
+                    'flex w-full cursor-pointer items-center gap-3 border-b border-border/60 px-3.5 py-3 text-left text-sm transition-colors last:border-0 hover:bg-muted/50 active:bg-muted/60 md:px-3 md:py-2 md:text-xs',
                     entry.status === 'cancelled' && 'opacity-60',
                   )}
                 >
-                  <span className="grid size-7 shrink-0 place-items-center rounded-full bg-muted text-xs font-semibold tabular-nums">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted text-xs font-semibold tabular-nums md:size-7 md:rounded-full">
                     {entry.token_no}
                   </span>
                   <span className="min-w-0 flex-1 truncate font-medium">
@@ -548,7 +604,7 @@ export function DoctorQueue({
         </section>
       ) : null}
 
-      <p className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+      <p className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-1 text-xs text-muted-foreground md:px-0">
         <KbdHint keys={['\u2191', '\u2193']}>move</KbdHint>
         <KbdHint keys="Enter">open notes</KbdHint>
         <KbdHint keys="S">call in</KbdHint>
@@ -602,7 +658,7 @@ function QueueActions({
           variant="outline"
           size="sm"
           disabled={pending}
-          className={cn(block && 'flex-1')}
+          className={cn(block && 'h-11 flex-1 rounded-xl text-sm')}
           onClick={(event) => act(event, 'in_consultation')}
           aria-label={`Call in token ${entry.token_no}`}
         >
@@ -615,7 +671,7 @@ function QueueActions({
         type="button"
         size="sm"
         disabled={pending}
-        className={cn(block && 'flex-1')}
+        className={cn(block && 'h-11 flex-1 rounded-xl text-sm')}
         onClick={(event) => act(event, 'completed')}
         aria-label={`Complete token ${entry.token_no}`}
       >

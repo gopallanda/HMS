@@ -102,7 +102,7 @@ export function VisitTimeline({
               room for what happened and when, not for a table (CLAUDE.md 7). */}
           <div className="grid gap-2 md:hidden">
             {rows.map((visit) => (
-              <div key={visit.id} className="rounded-lg border border-border/60 p-3 text-sm">
+              <div key={visit.id} className="rounded-xl border border-border/60 bg-background p-3 text-sm">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="font-medium tabular-nums">
@@ -131,7 +131,7 @@ export function VisitTimeline({
                 {clinical ? (
                   <Link
                     href={`/doctor/visit/${visit.id}`}
-                    className="mt-2 inline-block text-xs font-medium text-primary underline-offset-4 hover:underline"
+                    className="mt-2.5 flex h-9 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary"
                   >
                     Open consultation
                   </Link>

@@ -27,16 +27,16 @@ const buttonVariants = cva(
       // row of the queue on the second (CLAUDE.md 7).
       size: {
         default:
-          "h-10 gap-1.5 px-3 md:h-8 md:px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+          "h-11 gap-1.5 rounded-xl px-4 md:h-8 md:rounded-lg md:px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         xs: "h-6 gap-1 rounded-[min(var(--radius-md),10px)] px-2 text-xs in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-9 gap-1 rounded-[min(var(--radius-md),12px)] px-3 text-[0.8rem] md:h-7 md:px-2.5 in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
-        lg: "h-11 gap-1.5 px-4 text-base md:h-9 md:px-3 md:text-sm has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        icon: "size-10 md:size-8",
+        sm: "h-9 gap-1 rounded-[min(var(--radius-md),12px)] px-3.5 text-[0.8rem] md:h-7 md:px-2.5 in-data-[slot=button-group]:rounded-lg has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3.5",
+        lg: "h-12 gap-2 rounded-xl px-5 text-base md:h-9 md:rounded-lg md:px-3 md:text-sm has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        icon: "size-11 rounded-xl md:size-8 md:rounded-lg",
         "icon-xs":
           "size-6 rounded-[min(var(--radius-md),10px)] in-data-[slot=button-group]:rounded-lg [&_svg:not([class*='size-'])]:size-3",
         "icon-sm":
           "size-9 rounded-[min(var(--radius-md),12px)] md:size-7 in-data-[slot=button-group]:rounded-lg",
-        "icon-lg": "size-11 md:size-9",
+        "icon-lg": "size-12 rounded-xl md:size-9 md:rounded-lg",
       },
     },
     defaultVariants: {

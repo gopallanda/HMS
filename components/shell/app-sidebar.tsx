@@ -1,19 +1,11 @@
 'use client';
 
-import { MenuIcon } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useState } from 'react';
 
 import { HospitalMark } from '@/components/shell/hospital-mark';
+import { MobileNav } from '@/components/shell/mobile-nav';
 import { UserMenu } from '@/components/shell/user-menu';
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetTitle,
-  SheetTrigger,
-} from '@/components/ui/sheet';
 import { cn } from '@/lib/cn';
 import { navFor, type NavItem } from '@/lib/nav';
 import { toPermissionSet } from '@/lib/rbac/permissions';
@@ -196,43 +188,10 @@ export function AppSidebar(props: {
   userName: string | null;
   userEmail: string | null;
 }) {
-  const pathname = usePathname();
-  const [open, setOpen] = useState(false);
-  const [openedAt, setOpenedAt] = useState(pathname);
-
-  // Next's client router does not unmount the layout between pages, so a drawer
-  // opened on one screen would still be open on the next one. Closed during
-  // render rather than in an effect: an effect would paint the new page with
-  // the old drawer still over it for one frame.
-  if (openedAt !== pathname) {
-    setOpenedAt(pathname);
-    if (open) setOpen(false);
-  }
-
   return (
     <>
-      {/* Phone: a sticky bar with the drawer trigger. Sticky rather than fixed
-          so it never overlaps the first row of a table. */}
-      <header className="sticky top-0 z-30 flex items-center gap-2 border-b border-sidebar-border bg-sidebar/95 px-3 py-2 backdrop-blur supports-backdrop-filter:bg-sidebar/80 md:hidden">
-        <Sheet open={open} onOpenChange={setOpen}>
-          <SheetTrigger className="grid size-10 shrink-0 place-items-center rounded-lg text-sidebar-foreground transition-colors hover:bg-sidebar-accent focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
-            <MenuIcon className="size-5 stroke-[1.5]" />
-            <span className="sr-only">Open navigation</span>
-          </SheetTrigger>
-          <SheetContent side="left" className="custom-scrollbar">
-            <SheetTitle className="sr-only">Navigation</SheetTitle>
-            <SheetDescription className="sr-only">
-              Modules available to you in {props.hospitalName}.
-            </SheetDescription>
-            <SidebarBody {...props} showLabels onNavigate={() => setOpen(false)} />
-          </SheetContent>
-        </Sheet>
-
-        <HospitalMark name={props.hospitalName} logoUrl={props.logoUrl} size={28} />
-        <span className="min-w-0 flex-1 truncate text-sm font-semibold">
-          {props.hospitalName}
-        </span>
-      </header>
+      {/* Phone: an app bar and a bottom tab bar instead of the rail. */}
+      <MobileNav {...props} />
 
       {/* Tablet: icons only. Desktop: the full rail. */}
       <aside className="sticky top-0 hidden h-svh w-16 shrink-0 flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex lg:w-60">

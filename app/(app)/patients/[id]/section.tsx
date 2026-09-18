@@ -25,10 +25,10 @@ export function SectionCard({
   return (
     <section
       id={id}
-      className="scroll-mt-6 overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm"
+      className="scroll-mt-6 overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-border/60 px-4 py-3">
-        <h2 className="text-sm font-semibold tracking-tight">
+        <h2 className="text-base font-semibold tracking-tight md:text-sm">
           {title}
           {count !== undefined ? (
             <span className="ml-1.5 font-normal text-muted-foreground tabular-nums">{count}</span>
@@ -49,7 +49,7 @@ export function SectionCard({
  */
 export function SectionError({ children }: { children: React.ReactNode }) {
   return (
-    <p className="flex items-start gap-2 rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+    <p className="flex items-start gap-2 rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
       <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" aria-hidden />
       <span className="min-w-0">{children}</span>
     </p>

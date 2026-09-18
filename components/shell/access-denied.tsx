@@ -30,7 +30,7 @@ export function AccessDenied({
   audience?: string;
 }) {
   return (
-    <Card className="mx-auto mt-12 max-w-md">
+    <Card className="mx-auto mt-6 w-full max-w-md md:mt-12">
       <CardContent className="grid gap-4 py-4 text-center">
         <span className="mx-auto grid size-12 place-items-center rounded-2xl bg-primary/10">
           <ShieldIcon className="size-6 stroke-[1.5] text-primary" />

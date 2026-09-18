@@ -5,6 +5,7 @@ import { useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { SuggestInput } from '@/components/ui/suggest-input';
 import { cn } from '@/lib/cn';
 import { FREQUENCY_SUGGESTIONS, type PrescriptionLine } from '@/lib/consultations';
 
@@ -125,11 +126,15 @@ export function PrescriptionEditor({
           <div
             key={line.key}
             className={cn(
-              'grid gap-2 rounded-lg border border-border/60 p-2.5',
+              // Phone: a card per drug -- name across the top, the four
+              // measures two by two, instructions under them, labels on every
+              // card because a stacked form has no header row to lean on.
+              'relative grid grid-cols-2 gap-2.5 rounded-2xl border border-border/60 bg-background p-3 sm:gap-2 sm:rounded-lg sm:p-2.5',
               'sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]',
             )}
           >
             <Field
+              className="col-span-2 pr-12 sm:col-span-1 sm:pr-0"
               label="Drug"
               value={line.drug}
               onChange={(value) => update(line.key, 'drug', value)}
@@ -165,7 +170,7 @@ export function PrescriptionEditor({
               disabled={readOnly}
               maxLength={60}
               showLabel={index === 0}
-              list="prescription-frequencies"
+              suggestions={FREQUENCY_SUGGESTIONS}
             />
             <Field
               label="Duration"
@@ -177,7 +182,7 @@ export function PrescriptionEditor({
               showLabel={index === 0}
             />
 
-            <div className={cn('flex items-end', index === 0 && 'sm:pt-5.5')}>
+            <div className={cn('absolute top-2 right-2 flex items-end sm:static', index === 0 && 'sm:pt-5.5')}>
               {readOnly ? null : (
                 <Button
                   type="button"
@@ -192,7 +197,7 @@ export function PrescriptionEditor({
               )}
             </div>
 
-            <div className="sm:col-span-6">
+            <div className="col-span-2 sm:col-span-6">
               <Field
                 label="Instructions"
                 value={line.notes}
@@ -207,21 +212,13 @@ export function PrescriptionEditor({
         ))}
       </div>
 
-      {/* The abbreviations an Indian OPD writes, offered as suggestions rather
-          than as a select: a doctor who wants "1-0-1" must still be able to
-          type it. */}
-      <datalist id="prescription-frequencies">
-        {FREQUENCY_SUGGESTIONS.map((option) => (
-          <option key={option} value={option} />
-        ))}
-      </datalist>
-
       <div className="flex flex-wrap items-center gap-2">
         {readOnly ? null : (
           <Button
             type="button"
             variant="outline"
             size="sm"
+            className="max-sm:h-11 max-sm:w-full max-sm:rounded-xl max-sm:border-dashed max-sm:text-sm"
             onClick={addLine}
             disabled={lines.length >= MAX_LINES}
           >
@@ -252,9 +249,11 @@ function Field({
   disabled,
   maxLength,
   showLabel,
-  list,
+  suggestions,
   autoFocusable,
+  className,
 }: {
+  className?: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
@@ -262,32 +261,47 @@ function Field({
   disabled: boolean;
   maxLength: number;
   showLabel: boolean;
-  list?: string;
+  /**
+   * The abbreviations an Indian OPD writes, offered as suggestions rather than
+   * as a select: a doctor who wants "1-0-1" must still be able to type it.
+   */
+  suggestions?: readonly string[];
   autoFocusable?: boolean;
 }) {
   return (
-    <label className="grid min-w-0 gap-1">
+    <label className={cn('grid min-w-0 gap-1', className)}>
       <span
         className={cn(
           'text-xs font-medium text-muted-foreground',
-          showLabel ? 'block' : 'sr-only',
+          showLabel ? 'block' : 'block sm:sr-only',
         )}
       >
         {label}
       </span>
-      <Input
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        placeholder={placeholder}
-        disabled={disabled}
-        maxLength={maxLength}
-        list={list}
-        autoComplete="off"
-        // The drug field is what a doctor tabs into; the rest follow in DOM
-        // order, which is the order they are written in.
-        data-prescription-first={autoFocusable ? '' : undefined}
-        className="h-9 md:h-9"
-      />
+      {suggestions ? (
+        <SuggestInput
+          value={value}
+          onValueChange={onChange}
+          suggestions={suggestions}
+          placeholder={placeholder}
+          disabled={disabled}
+          maxLength={maxLength}
+          className="h-11 sm:h-9 md:h-9"
+        />
+      ) : (
+        <Input
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+          maxLength={maxLength}
+          autoComplete="off"
+          // The drug field is what a doctor tabs into; the rest follow in DOM
+          // order, which is the order they are written in.
+          data-prescription-first={autoFocusable ? '' : undefined}
+          className="h-11 sm:h-9 md:h-9"
+        />
+      )}
     </label>
   );
 }

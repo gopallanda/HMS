@@ -28,13 +28,13 @@ function Bar({ className }: { className?: string }) {
 /** Title band, matching PageHeader's height so nothing jumps on swap. */
 export function HeaderSkeleton() {
   return (
-    <div className="flex flex-col gap-3 border-b border-border/60 pb-4 sm:flex-row sm:items-start sm:justify-between">
+    <div className="flex flex-col gap-3 pt-1 sm:flex-row sm:items-start sm:justify-between md:border-b md:border-border/60 md:pt-0 md:pb-4">
       <div className="grid gap-2">
-        <Bar className="h-6 w-48" />
+        <Bar className="h-7 w-48 md:h-6" />
         <Bar className="h-3.5 w-72 max-w-full" />
       </div>
       <div className="flex gap-2">
-        <Bar className="h-9 w-28 rounded-lg" />
+        <Bar className="h-11 w-full rounded-xl sm:h-9 sm:w-28 sm:rounded-lg" />
       </div>
     </div>
   );
@@ -43,11 +43,11 @@ export function HeaderSkeleton() {
 /** The filter bar most screens carry: day, status, search, Apply. */
 export function FilterSkeleton() {
   return (
-    <div className="flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm md:p-4">
-      <Bar className="h-10 w-44 rounded-lg" />
-      <Bar className="h-10 w-32 rounded-lg" />
-      <Bar className="h-10 min-w-40 flex-1 rounded-lg" />
-      <Bar className="h-10 w-20 rounded-lg" />
+    <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm md:rounded-xl md:p-4">
+      <Bar className="h-11 w-full rounded-xl sm:h-10 sm:w-44 sm:rounded-lg" />
+      <Bar className="hidden h-10 w-32 rounded-lg sm:block" />
+      <Bar className="hidden h-10 min-w-40 flex-1 rounded-lg sm:block" />
+      <Bar className="hidden h-10 w-20 rounded-lg sm:block" />
     </div>
   );
 }
@@ -55,9 +55,9 @@ export function FilterSkeleton() {
 /** A card row: the summary figures at the top of day close and the dashboard. */
 export function StatsSkeleton({ count = 4 }: { count?: number }) {
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+    <div className="grid grid-cols-2 gap-3 md:gap-4 xl:grid-cols-4">
       {Array.from({ length: count }, (_, index) => (
-        <div key={index} className="grid gap-2 rounded-xl border border-border/60 bg-card p-4 shadow-sm md:p-5">
+        <div key={index} className="grid gap-2 rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm md:rounded-xl md:p-5">
           <Bar className="h-3 w-20" />
           <Bar className="h-7 w-32" />
           <Bar className="h-3 w-24" />
@@ -70,17 +70,23 @@ export function StatsSkeleton({ count = 4 }: { count?: number }) {
 /** A data table with a header rule and `rows` bands. */
 export function TableSkeleton({ rows = 6 }: { rows?: number }) {
   return (
-    <div className="overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm">
-      <div className="border-b border-border/60 bg-muted/40 px-4 py-2.5">
+    <div className="overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl">
+      <div className="hidden border-b border-border/60 bg-muted/40 px-4 py-2.5 md:block">
         <Bar className="h-3 w-32" />
       </div>
       <div className="divide-y divide-border/60">
         {Array.from({ length: rows }, (_, index) => (
-          <div key={index} className="flex items-center gap-4 px-4 py-3.5">
-            <Bar className="w-36 shrink-0" />
-            <Bar className="min-w-0 flex-1" />
-            <Bar className="hidden w-24 shrink-0 sm:block" />
-            <Bar className="w-16 shrink-0" />
+          <div key={index} className="flex items-center gap-3 px-4 py-3.5 md:gap-4">
+            {/* Phone rows are list rows: an avatar, two lines, a trailing figure. */}
+            <Bar className="size-10 shrink-0 rounded-full md:hidden" />
+            <div className="grid min-w-0 flex-1 gap-1.5 md:hidden">
+              <Bar className="w-3/5" />
+              <Bar className="h-3 w-2/5" />
+            </div>
+            <Bar className="hidden w-36 shrink-0 md:block" />
+            <Bar className="hidden min-w-0 flex-1 md:block" />
+            <Bar className="hidden w-24 shrink-0 lg:block" />
+            <Bar className="w-14 shrink-0 md:w-16" />
           </div>
         ))}
       </div>
@@ -104,7 +110,7 @@ export function ScreenSkeleton({
   rows?: number;
 }) {
   return (
-    <div className="grid animate-pulse gap-5" aria-busy="true" aria-label="Loading">
+    <div className="grid animate-pulse gap-4 md:gap-5" aria-busy="true" aria-label="Loading">
       <HeaderSkeleton />
       {filters ? <FilterSkeleton /> : null}
       {stats > 0 ? <StatsSkeleton count={stats} /> : null}

@@ -1,6 +1,6 @@
 'use client';
 
-import { ImageIcon, Trash2Icon } from 'lucide-react';
+import { ImageIcon, ImageUpIcon, Trash2Icon } from 'lucide-react';
 import { useActionState, useState } from 'react';
 
 import { removeHospitalLogo, saveHospitalSettings } from './actions';
@@ -55,7 +55,7 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
   }
 
   return (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
+    <div className="grid gap-4 md:gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
       <Card>
         <CardHeader>
           <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
@@ -143,24 +143,37 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
                   <label
                     key={option}
                     className={cn(
-                      'grid cursor-pointer gap-0.5 rounded-lg border px-3 py-2.5 transition-colors',
+                      'grid cursor-pointer gap-0.5 rounded-xl border px-3.5 py-3 transition has-focus-visible:ring-3 has-focus-visible:ring-ring/50 active:scale-[0.99] sm:rounded-lg sm:px-3 sm:py-2.5',
                       receiptDefault === option
-                        ? 'border-primary bg-primary/5'
+                        ? 'border-primary bg-primary/5 ring-1 ring-primary/30'
                         : 'border-border hover:border-primary/40',
                     )}
                   >
-                    <span className="flex items-center gap-2">
+                    <span className="flex items-center gap-2.5 sm:gap-2">
+                      {/* The native radio still posts receipt_default; the
+                          drawn circle is what people see. */}
                       <input
                         type="radio"
                         name="receipt_default"
                         value={option}
                         checked={receiptDefault === option}
                         onChange={() => setReceiptDefault(option)}
-                        className="size-3.5 accent-primary"
+                        className="sr-only"
                       />
+                      <span
+                        aria-hidden
+                        className={cn(
+                          'grid size-[18px] shrink-0 place-items-center rounded-full border-2 transition-colors sm:size-3.5 sm:border-[1.5px]',
+                          receiptDefault === option ? 'border-primary' : 'border-input',
+                        )}
+                      >
+                        {receiptDefault === option ? (
+                          <span className="size-2 rounded-full bg-primary sm:size-1.5" />
+                        ) : null}
+                      </span>
                       <span className="text-sm font-medium">{PRINT_FORMAT_LABEL[option]}</span>
                     </span>
-                    <span className="pl-5.5 text-xs text-muted-foreground">
+                    <span className="pl-7 text-xs text-muted-foreground sm:pl-5.5">
                       {PRINT_FORMAT_NOTE[option]}
                     </span>
                   </label>
@@ -169,7 +182,9 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
             </fieldset>
 
             <div className="flex flex-wrap items-center gap-3 border-t border-border/60 pt-4">
-              <SubmitButton pendingLabel="Saving...">Save changes</SubmitButton>
+              <SubmitButton pendingLabel="Saving..." className="max-sm:w-full">
+                Save changes
+              </SubmitButton>
               <span className="text-xs text-muted-foreground">
                 Saves the logo selected alongside too.
               </span>
@@ -178,7 +193,10 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
         </CardContent>
       </Card>
 
-      <Card className="h-fit">
+      {/* First on a phone: the logo is saved by the Save button in the other
+          card, so picking it before scrolling down to that button is the order
+          that works. Beside the form from `lg`. */}
+      <Card className="order-first h-fit lg:order-none">
         <CardHeader>
           <CardTitle className="text-xs font-medium tracking-wider text-muted-foreground uppercase">
             Logo
@@ -208,6 +226,8 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
 
           {/* Outside the form element, but posted with it via form=, so one
               Save covers the text fields and the logo together. */}
+          {/* The native file input stays for the form post and the OS picker;
+              the label drawn over it is the control people press. */}
           <Input
             id="logo"
             name="logo"
@@ -215,8 +235,15 @@ export function SettingsForm({ hospital }: { hospital: Hospital }) {
             type="file"
             accept={LOGO_ACCEPT}
             onChange={onPickLogo}
-            className="h-auto cursor-pointer py-2 text-xs file:mr-3 file:cursor-pointer file:rounded-md file:bg-muted file:px-2.5 file:py-1"
+            className="peer sr-only"
           />
+          <label
+            htmlFor="logo"
+            className="flex h-11 cursor-pointer items-center justify-center gap-2 rounded-xl border border-input bg-background text-sm font-medium transition-colors peer-focus-visible:ring-3 peer-focus-visible:ring-ring/50 hover:bg-muted active:scale-[0.99] md:h-9 md:rounded-lg"
+          >
+            <ImageUpIcon className="size-4" aria-hidden />
+            {preview ? 'Choose a different logo' : 'Choose a logo'}
+          </label>
 
           {logoError ? <p className="text-xs font-medium text-destructive">{logoError}</p> : null}
           {fieldError(state, 'logo') ? (

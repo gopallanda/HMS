@@ -1,4 +1,4 @@
-import { ArrowLeftIcon } from 'lucide-react';
+import { ArrowLeftIcon, ChevronLeftIcon } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -42,7 +42,7 @@ export default async function ConsultationPage({
     return (
       <div className="grid gap-6">
         <PageHeader title="Consultation" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           This visit could not be loaded: {error.message}
         </p>
       </div>
@@ -89,7 +89,7 @@ export default async function ConsultationPage({
     return (
       <div className="grid gap-6">
         <PageHeader title={visit.patient_name} description={visit.visit_no} />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           The notes already on this visit could not be read, so the form is not being opened --
           saving now could overwrite them. {consultation.error.message}
         </p>
@@ -105,13 +105,22 @@ export default async function ConsultationPage({
 
   return (
     <div className="grid gap-5">
+      {/* A phone gets an app-style back link above the title instead of a
+          full-width button under it. */}
+      <Link
+        href="/doctor/queue"
+        className="-mb-3 flex items-center gap-1 justify-self-start text-sm font-medium text-primary md:hidden"
+      >
+        <ChevronLeftIcon className="size-4.5" />
+        My queue
+      </Link>
       <PageHeader
         title={visit.patient_name}
         description={`${visit.visit_no} · Token ${visit.token_no} · ${formatDate(
           visit.visited_at,
         )} ${formatTime(visit.visited_at)}`}
         actions={
-          <Button asChild variant="outline">
+          <Button asChild variant="outline" className="max-md:hidden">
             <Link href="/doctor/queue">
               <ArrowLeftIcon data-icon="inline-start" />
               My queue

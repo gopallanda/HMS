@@ -78,7 +78,7 @@ export function ClinicalPanel({
             return (
               <li
                 key={consultation.id}
-                className="rounded-lg border border-border/60 px-3 py-2.5 text-sm"
+                className="rounded-xl border border-border/60 bg-background px-3 py-2.5 text-sm md:rounded-lg"
               >
                 <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                   <span className="font-medium tabular-nums">
@@ -101,9 +101,12 @@ export function ClinicalPanel({
                 </div>
 
                 {vitals.length > 0 ? (
-                  <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+                  <div className="mt-2 flex flex-wrap gap-1.5 text-xs md:gap-x-3 md:gap-y-1">
                     {vitals.map((vital) => (
-                      <span key={vital.label} className="text-muted-foreground">
+                      <span
+                        key={vital.label}
+                        className="rounded-md bg-muted/70 px-1.5 py-0.5 text-muted-foreground md:rounded-none md:bg-transparent md:p-0"
+                      >
                         {vital.label}{' '}
                         <span className="font-medium text-foreground tabular-nums">
                           {vital.value}

@@ -6,7 +6,14 @@ import { EmptyState } from '@/components/shared/empty-state';
 import { Notice } from '@/components/shared/form-message';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { DatePicker } from '@/components/ui/date-picker';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   Table,
   TableBody,
@@ -134,37 +141,48 @@ export default async function NewVsReturnPage({
   ]);
 
   const filterForm = (
-    <form className="flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm md:p-4">
-      <label className="grid gap-1.5">
+    <form className="grid grid-cols-2 items-end gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm md:flex md:flex-wrap md:rounded-xl md:p-4">
+      <div className="grid gap-1.5">
         <span className="text-sm font-medium">From</span>
-        <Input type="date" name="from" defaultValue={startDay} max={today} />
-      </label>
-      <label className="grid gap-1.5">
+        <DatePicker name="from" defaultValue={startDay} max={today} className="md:w-44" />
+      </div>
+      <div className="grid gap-1.5">
         <span className="text-sm font-medium">To</span>
-        <Input type="date" name="to" defaultValue={endDay} max={today} />
-      </label>
-      <label className="grid gap-1.5">
+        <DatePicker name="to" defaultValue={endDay} max={today} className="md:w-44" />
+      </div>
+      <div className="col-span-2 grid gap-1.5 md:col-span-1">
         <span className="text-sm font-medium">Came back within</span>
-        <select
-          name="window"
-          defaultValue={String(windowDays)}
-          className="h-9 rounded-md border border-input bg-background px-2.5 text-sm shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          {RETURN_WINDOWS.map((days) => (
-            <option key={days} value={days}>
-              {days} days
-            </option>
-          ))}
-        </select>
-      </label>
+        {/* A named Radix Select posts through its hidden native select, so
+            this stays a plain GET form. */}
+        <Select name="window" defaultValue={String(windowDays)}>
+          <SelectTrigger className="w-full md:w-32">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            {RETURN_WINDOWS.map((days) => (
+              <SelectItem key={days} value={String(days)}>
+                {days} days
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
       {doctorId ? <input type="hidden" name="doctor" value={doctorId} /> : null}
-      <Button type="submit">Show</Button>
-      <div className="ml-auto flex items-center gap-1.5">
+      <Button type="submit" className="col-span-2 md:col-span-1">
+        Show
+      </Button>
+      <div className="col-span-2 grid grid-flow-col gap-1 rounded-xl bg-muted p-1 md:ml-auto md:flex md:items-center md:gap-1.5 md:rounded-none md:bg-transparent md:p-0">
         {RANGES.map((range) => {
           const presetFrom = shiftIstDay(today, -(range.days - 1));
           const active = startDay === presetFrom && endDay === today;
           return (
-            <Button key={range.days} asChild variant={active ? 'secondary' : 'ghost'} size="sm">
+            <Button
+              key={range.days}
+              asChild
+              variant={active ? 'secondary' : 'ghost'}
+              size="sm"
+              className="max-md:rounded-lg max-md:data-[variant=secondary]:bg-background max-md:data-[variant=secondary]:shadow-sm"
+            >
               <Link href={reportHref({ from: presetFrom, to: today, window: windowDays })}>
                 {range.label}
               </Link>
@@ -180,7 +198,7 @@ export default async function NewVsReturnPage({
       <div className="grid gap-5">
         <PageHeader title="New vs Return" />
         {filterForm}
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           The report could not be run, so nothing is shown rather than a partial answer:{' '}
           {report.error.message}
         </p>
@@ -214,7 +232,7 @@ export default async function NewVsReturnPage({
       ) : null}
 
       {summary.visits === 0 ? (
-        <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+        <div className="rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl">
           <EmptyState
             icon={RepeatIcon}
             title="No visits in this range"
@@ -223,7 +241,7 @@ export default async function NewVsReturnPage({
         </div>
       ) : (
         <>
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
             <Tile
               label="Visits"
               value={String(summary.visits)}
@@ -253,9 +271,9 @@ export default async function NewVsReturnPage({
           <WeeklyChart weeks={weeks} />
 
           <section className="grid gap-2">
-            <h2 className="text-sm font-semibold">By doctor</h2>
+            <h2 className="px-1 text-base font-semibold md:px-0 md:text-sm">By doctor</h2>
             {doctors.length === 0 ? (
-              <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm text-muted-foreground">
+              <p className="rounded-xl bg-muted/60 px-3.5 py-3 text-sm text-muted-foreground md:rounded-lg md:px-3 md:py-2">
                 None of these visits has a doctor on it.
               </p>
             ) : (
@@ -268,7 +286,7 @@ export default async function NewVsReturnPage({
                 }
               />
             )}
-            <p className="text-xs text-muted-foreground">
+            <p className="px-1 text-xs text-muted-foreground md:px-0">
               Grouped by department, because that is the fair comparison: a GP who cures a fever
               should not see that patient again, and a diabetologist should see theirs every
               month. A low return rate is a question to ask, not a verdict. Click a doctor to list
@@ -279,7 +297,7 @@ export default async function NewVsReturnPage({
           {doctorId ? (
             <section id="lost" className="grid scroll-mt-4 gap-2">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h2 className="text-sm font-semibold">
+                <h2 className="px-1 text-base font-semibold md:px-0 md:text-sm">
                   New patients of {selected?.doctorName ?? 'this doctor'} who did not come back
                   within {windowDays} days
                 </h2>
@@ -296,7 +314,7 @@ export default async function NewVsReturnPage({
                   patients.read. Ask an administrator to add it to your role.
                 </Notice>
               ) : lost?.error ? (
-                <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+                <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
                   The list could not be loaded: {lost.error.message}
                 </p>
               ) : (
@@ -307,7 +325,7 @@ export default async function NewVsReturnPage({
         </>
       )}
 
-      <p className="text-xs text-muted-foreground">
+      <p className="px-1 text-xs text-muted-foreground md:px-0">
         Worked out from visit history; nobody marks N or R. <strong>New</strong> is a
         patient&apos;s first visit to this hospital. <strong>New to doctor</strong> is somebody
         the hospital knows seeing that doctor for the first time. <strong>Repeat</strong> is a
@@ -323,10 +341,14 @@ export default async function NewVsReturnPage({
 
 function Tile({ label, value, detail }: { label: string; value: string; detail: string }) {
   return (
-    <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
-      <p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">{label}</p>
+    <div className="min-w-0 rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm md:rounded-xl md:p-4">
+      <p className="line-clamp-1 text-[11px] font-medium tracking-wide text-muted-foreground uppercase md:text-xs">
+        {label}
+      </p>
       <p className="mt-1.5 text-2xl leading-none font-bold tracking-tight tabular-nums">{value}</p>
-      <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">{detail}</p>
+      <p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-muted-foreground md:line-clamp-none">
+        {detail}
+      </p>
     </div>
   );
 }
@@ -349,15 +371,15 @@ function WeeklyChart({ weeks }: { weeks: MixWeek[] }) {
 
   return (
     <section className="grid gap-2">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold">Week by week</h2>
+      <div className="flex flex-wrap items-baseline justify-between gap-2 px-1 md:px-0">
+        <h2 className="text-base font-semibold md:text-sm">Week by week</h2>
         <div className="flex items-center gap-4 text-xs text-muted-foreground">
           <LegendKey className="bg-chart-1" label="New" value={totalNew} />
           <LegendKey className="bg-chart-3" label="Returning" value={totalReturning} />
         </div>
       </div>
 
-      <div className="rounded-xl border border-border/60 bg-card p-4 shadow-sm">
+      <div className="rounded-2xl border border-border/60 bg-card p-4 shadow-sm md:rounded-xl">
         <div
           role="img"
           aria-label={`Weekly visits: ${totalNew} new and ${totalReturning} returning in total. The same figures are in the table below.`}
@@ -458,68 +480,107 @@ function DoctorTable({
   hrefFor: (doctorId: string) => string;
 }) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-border/60 bg-card shadow-sm">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="min-w-44">Doctor</TableHead>
-            <TableHead className="text-right">Visits</TableHead>
-            <TableHead className="text-right">Patients</TableHead>
-            <TableHead className="text-right">New to hospital</TableHead>
-            <TableHead className="text-right">New to doctor</TableHead>
-            <TableHead className="text-right">Repeat</TableHead>
-            <TableHead className="text-right">Came back ≤ {windowDays}d</TableHead>
-            <TableHead className="text-right">Went to another doctor</TableHead>
-            <TableHead className="text-right">Visits per patient</TableHead>
-            <TableHead className="text-right">Median days between</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {doctors.map((doctor) => (
-            <TableRow
+    <>
+      {/* Phone: the four figures that matter per doctor; the full ten columns
+          are on the desk. Tapping a card opens the lost-patient list. */}
+      <div className="grid gap-2.5 md:hidden">
+        {doctors.map((doctor) => {
+          const rate = doctor.cohortMatured === 0 ? null : percent(doctor.cameBack, doctor.cohortMatured);
+          return (
+            <Link
               key={doctor.doctorId}
+              href={hrefFor(doctor.doctorId)}
               className={cn(
-                'even:bg-muted/25',
-                doctor.doctorId === selectedId && 'border-l-4 border-l-primary bg-primary/5',
+                'rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm transition active:scale-[0.99]',
+                doctor.doctorId === selectedId && 'border-primary/50 bg-primary/5 ring-1 ring-primary/30',
               )}
             >
-              <TableCell>
-                <Link
-                  href={hrefFor(doctor.doctorId)}
-                  className="font-medium text-primary hover:underline"
-                >
-                  {doctor.doctorName}
-                </Link>
-                <span className="block text-xs text-muted-foreground">
-                  {doctor.departmentName ?? 'No department'}
-                </span>
-              </TableCell>
-              <TableCell className="text-right font-medium tabular-nums">{doctor.visits}</TableCell>
-              <TableCell className="text-right tabular-nums">{doctor.patients}</TableCell>
-              <TableCell className="text-right tabular-nums">{doctor.newToHospital}</TableCell>
-              <TableCell className="text-right tabular-nums">{doctor.newToDoctor}</TableCell>
-              <TableCell className="text-right tabular-nums">{doctor.repeatVisits}</TableCell>
-              <RateCell part={doctor.cameBack} whole={doctor.cohortMatured} cohort={doctor.cohort} />
-              <RateCell
-                part={doctor.wentElsewhere}
-                whole={doctor.cohortMatured}
-                cohort={doctor.cohort}
-              />
-              <TableCell className="text-right tabular-nums">
-                {(doctor.visits / Math.max(1, doctor.patients)).toFixed(1)}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">
-                {doctor.medianGapDays === null ? (
-                  <span className="text-muted-foreground/40">&mdash;</span>
-                ) : (
-                  doctor.medianGapDays
-                )}
-              </TableCell>
+              <p className="truncate text-[15px] font-semibold">{doctor.doctorName}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {doctor.departmentName ?? 'No department'}
+              </p>
+              <dl className="mt-3 grid grid-cols-4 gap-2 rounded-xl bg-muted/50 px-3 py-2.5 text-center">
+                {[
+                  ['Visits', String(doctor.visits)],
+                  ['New', String(doctor.newToHospital)],
+                  ['Repeat', String(doctor.repeatVisits)],
+                  [`≤ ${windowDays}d`, rate === null ? '—' : `${rate}%`],
+                ].map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <dt className="truncate text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                      {label}
+                    </dt>
+                    <dd className="mt-0.5 text-sm font-bold tabular-nums">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </Link>
+          );
+        })}
+      </div>
+      <div className="hidden overflow-x-auto rounded-2xl border border-border/60 bg-card shadow-sm md:block md:rounded-xl">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="min-w-44">Doctor</TableHead>
+              <TableHead className="text-right">Visits</TableHead>
+              <TableHead className="text-right">Patients</TableHead>
+              <TableHead className="text-right">New to hospital</TableHead>
+              <TableHead className="text-right">New to doctor</TableHead>
+              <TableHead className="text-right">Repeat</TableHead>
+              <TableHead className="text-right">Came back ≤ {windowDays}d</TableHead>
+              <TableHead className="text-right">Went to another doctor</TableHead>
+              <TableHead className="text-right">Visits per patient</TableHead>
+              <TableHead className="text-right">Median days between</TableHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+          </TableHeader>
+          <TableBody>
+            {doctors.map((doctor) => (
+              <TableRow
+                key={doctor.doctorId}
+                className={cn(
+                  'even:bg-muted/25',
+                  doctor.doctorId === selectedId && 'border-l-4 border-l-primary bg-primary/5',
+                )}
+              >
+                <TableCell>
+                  <Link
+                    href={hrefFor(doctor.doctorId)}
+                    className="font-medium text-primary hover:underline"
+                  >
+                    {doctor.doctorName}
+                  </Link>
+                  <span className="block text-xs text-muted-foreground">
+                    {doctor.departmentName ?? 'No department'}
+                  </span>
+                </TableCell>
+                <TableCell className="text-right font-medium tabular-nums">{doctor.visits}</TableCell>
+                <TableCell className="text-right tabular-nums">{doctor.patients}</TableCell>
+                <TableCell className="text-right tabular-nums">{doctor.newToHospital}</TableCell>
+                <TableCell className="text-right tabular-nums">{doctor.newToDoctor}</TableCell>
+                <TableCell className="text-right tabular-nums">{doctor.repeatVisits}</TableCell>
+                <RateCell part={doctor.cameBack} whole={doctor.cohortMatured} cohort={doctor.cohort} />
+                <RateCell
+                  part={doctor.wentElsewhere}
+                  whole={doctor.cohortMatured}
+                  cohort={doctor.cohort}
+                />
+                <TableCell className="text-right tabular-nums">
+                  {(doctor.visits / Math.max(1, doctor.patients)).toFixed(1)}
+                </TableCell>
+                <TableCell className="text-right tabular-nums">
+                  {doctor.medianGapDays === null ? (
+                    <span className="text-muted-foreground/40">&mdash;</span>
+                  ) : (
+                    doctor.medianGapDays
+                  )}
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </>
   );
 }
 
@@ -552,7 +613,7 @@ function RateCell({ part, whole, cohort }: { part: number; whole: number; cohort
 function LostPatients({ rows, windowDays }: { rows: LostPatientRow[]; windowDays: number }) {
   if (rows.length === 0) {
     return (
-      <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+      <div className="rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl">
         <EmptyState
           icon={UserRoundCheckIcon}
           title="Nobody to list"
@@ -564,7 +625,41 @@ function LostPatients({ rows, windowDays }: { rows: LostPatientRow[]; windowDays
 
   return (
     <div className="grid gap-2">
-      <div className="overflow-x-auto rounded-xl border border-border/60 bg-card shadow-sm">
+      <div className="grid gap-2.5 md:hidden">
+        {rows.map((row) => (
+          <div key={row.patient_id} className="rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <Link
+                  href={`/patients/${row.patient_id}`}
+                  className="block truncate text-[15px] font-semibold text-primary"
+                >
+                  {row.full_name}
+                </Link>
+                <p className="truncate font-mono text-xs text-muted-foreground">
+                  {row.mrn} &middot; first seen {formatDate(row.first_visit_at)}
+                </p>
+              </div>
+              {row.phone ? (
+                <Button asChild variant="outline" size="sm" className="shrink-0">
+                  <a href={`tel:${row.phone.replace(/[^\d+]/g, '')}`}>Call</a>
+                </Button>
+              ) : null}
+            </div>
+            <p className="mt-2 flex flex-wrap gap-1.5 text-xs">
+              <span className="rounded-md bg-muted/70 px-1.5 py-0.5">
+                {row.new_to_hospital ? 'New patient' : 'Seen before'}
+              </span>
+              {row.seen_other_doctor ? (
+                <span className="rounded-md bg-warning/10 px-1.5 py-0.5 font-medium text-warning">
+                  Saw another doctor within {windowDays} days
+                </span>
+              ) : null}
+            </p>
+          </div>
+        ))}
+      </div>
+      <div className="hidden overflow-x-auto rounded-2xl border border-border/60 bg-card shadow-sm md:block md:rounded-xl">
         <Table>
           <TableHeader>
             <TableRow>

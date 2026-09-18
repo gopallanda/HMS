@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { CancelVisitDialog } from '../cancel-visit-dialog';
 import { TransferDialog, type TransferDoctor } from './transfer-dialog';
 import { EmptyState } from '@/components/shared/empty-state';
+import { MobileActions, MobileCard, MobileList } from '@/components/shared/mobile-list';
 import { PageHeader } from '@/components/shared/page-header';
 import { AccessDenied } from '@/components/shell/access-denied';
 import { Button } from '@/components/ui/button';
@@ -76,7 +77,7 @@ export default async function IncompleteVisitsPage() {
     return (
       <div className="grid gap-6">
         <PageHeader title="Visits needing a doctor" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           The list could not be loaded: {visitResult.error.message}
         </p>
       </div>
@@ -101,7 +102,7 @@ export default async function IncompleteVisitsPage() {
       />
 
       {visits.length === 0 ? (
-        <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+        <div className="rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl">
           <EmptyState
             icon={CircleCheckIcon}
             title="Nothing to repair"
@@ -109,84 +110,144 @@ export default async function IncompleteVisitsPage() {
           />
         </div>
       ) : (
-        <div className="rounded-xl border border-border/60 bg-card shadow-sm">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-36">Registered</TableHead>
-                <TableHead className="w-24">Visit</TableHead>
-                <TableHead>Patient</TableHead>
-                <TableHead className="w-24">Age / sex</TableHead>
-                <TableHead className="w-36">Department</TableHead>
-                <TableHead className="w-28">Payment</TableHead>
-                <TableHead className="w-32 text-right">Repair</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {visits.map((visit) => (
-                <TableRow key={visit.id}>
-                  <TableCell className="text-xs text-muted-foreground tabular-nums">
-                    {formatDateTime(visit.visited_at)}
-                  </TableCell>
-                  <TableCell className="font-mono text-xs">{visit.visit_no}</TableCell>
-                  <TableCell>
+        <>
+          <MobileList>
+            {visits.map((visit) => (
+              <MobileCard key={visit.id}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
                     <Link
                       href={`/patients/${visit.patient_id}`}
-                      className="font-medium underline-offset-4 hover:underline"
+                      className="block truncate text-[15px] font-semibold underline-offset-4 hover:underline"
                     >
                       {visit.patient_name}
                     </Link>
-                    <span className="block font-mono text-xs text-muted-foreground">
-                      {visit.patient_mrn}
-                      {visit.patient_phone ? ` - ${visit.patient_phone}` : ''}
+                    <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                      {ageGender(visit.patient_dob, visit.patient_gender)} &middot;{' '}
+                      <span className="font-mono">{visit.patient_mrn}</span>
+                    </p>
+                  </div>
+                  {visit.payment_due ? (
+                    <span className="shrink-0 rounded-full bg-warning/10 px-2 py-0.5 text-[10px] font-bold tracking-wide text-warning uppercase">
+                      Due
                     </span>
-                  </TableCell>
-                  <TableCell className="text-xs tabular-nums">
-                    {ageGender(visit.patient_dob, visit.patient_gender)}
-                  </TableCell>
-                  <TableCell className="truncate text-xs">
-                    {visit.department_name ?? '-'}
-                  </TableCell>
-                  <TableCell className="text-xs">
-                    {visit.payment_due ? (
-                      <span className="font-bold tracking-wide text-warning uppercase">Due</span>
-                    ) : (
-                      <span className="text-muted-foreground">Settled</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {canManage ? (
-                        <TransferDialog
-                          visitId={visit.id}
-                          patientName={visit.patient_name}
-                          currentDoctor={null}
-                          doctors={doctors}
-                          trigger="Assign a doctor"
-                        />
-                      ) : null}
-                      {/* The other honest answer to a visit nobody can place:
-                          it should never have been open. Cancelling says so,
-                          with a reason, instead of leaving the row here for
-                          somebody to guess a doctor for later. */}
-                      {canCancel ? (
-                        <CancelVisitDialog
-                          visitId={visit.id}
-                          visitNo={visit.visit_no}
-                          patientName={visit.patient_name}
-                          tokenNo={visit.token_no}
-                        />
-                      ) : null}
-                      {!canManage && !canCancel ? (
-                        <span className="text-xs text-muted-foreground">Ask the front desk</span>
-                      ) : null}
-                    </div>
-                  </TableCell>
+                  ) : (
+                    <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold text-muted-foreground uppercase">
+                      Settled
+                    </span>
+                  )}
+                </div>
+                <p className="mt-2 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                  <span className="font-mono text-foreground/80">{visit.visit_no}</span>
+                  <span>&middot;</span>
+                  <span>{visit.department_name ?? 'No department'}</span>
+                  <span className="ml-auto tabular-nums">{formatDateTime(visit.visited_at)}</span>
+                </p>
+                {canManage || canCancel ? (
+                  <MobileActions>
+                    {canManage ? (
+                      <TransferDialog
+                        visitId={visit.id}
+                        patientName={visit.patient_name}
+                        currentDoctor={null}
+                        doctors={doctors}
+                        trigger="Assign a doctor"
+                      />
+                    ) : null}
+                    {canCancel ? (
+                      <CancelVisitDialog
+                        visitId={visit.id}
+                        visitNo={visit.visit_no}
+                        patientName={visit.patient_name}
+                        tokenNo={visit.token_no}
+                      />
+                    ) : null}
+                  </MobileActions>
+                ) : (
+                  <p className="mt-2 text-xs text-muted-foreground">Ask the front desk to repair this.</p>
+                )}
+              </MobileCard>
+            ))}
+          </MobileList>
+          <div className="hidden rounded-2xl border border-border/60 bg-card shadow-sm md:block md:rounded-xl">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-36">Registered</TableHead>
+                  <TableHead className="w-24">Visit</TableHead>
+                  <TableHead>Patient</TableHead>
+                  <TableHead className="w-24">Age / sex</TableHead>
+                  <TableHead className="w-36">Department</TableHead>
+                  <TableHead className="w-28">Payment</TableHead>
+                  <TableHead className="w-32 text-right">Repair</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </div>
+              </TableHeader>
+              <TableBody>
+                {visits.map((visit) => (
+                  <TableRow key={visit.id}>
+                    <TableCell className="text-xs text-muted-foreground tabular-nums">
+                      {formatDateTime(visit.visited_at)}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">{visit.visit_no}</TableCell>
+                    <TableCell>
+                      <Link
+                        href={`/patients/${visit.patient_id}`}
+                        className="font-medium underline-offset-4 hover:underline"
+                      >
+                        {visit.patient_name}
+                      </Link>
+                      <span className="block font-mono text-xs text-muted-foreground">
+                        {visit.patient_mrn}
+                        {visit.patient_phone ? ` - ${visit.patient_phone}` : ''}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-xs tabular-nums">
+                      {ageGender(visit.patient_dob, visit.patient_gender)}
+                    </TableCell>
+                    <TableCell className="truncate text-xs">
+                      {visit.department_name ?? '-'}
+                    </TableCell>
+                    <TableCell className="text-xs">
+                      {visit.payment_due ? (
+                        <span className="font-bold tracking-wide text-warning uppercase">Due</span>
+                      ) : (
+                        <span className="text-muted-foreground">Settled</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        {canManage ? (
+                          <TransferDialog
+                            visitId={visit.id}
+                            patientName={visit.patient_name}
+                            currentDoctor={null}
+                            doctors={doctors}
+                            trigger="Assign a doctor"
+                          />
+                        ) : null}
+                        {/* The other honest answer to a visit nobody can place:
+                            it should never have been open. Cancelling says so,
+                            with a reason, instead of leaving the row here for
+                            somebody to guess a doctor for later. */}
+                        {canCancel ? (
+                          <CancelVisitDialog
+                            visitId={visit.id}
+                            visitNo={visit.visit_no}
+                            patientName={visit.patient_name}
+                            tokenNo={visit.token_no}
+                          />
+                        ) : null}
+                        {!canManage && !canCancel ? (
+                          <span className="text-xs text-muted-foreground">Ask the front desk</span>
+                        ) : null}
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </>
       )}
     </div>
   );

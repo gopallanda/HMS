@@ -23,7 +23,7 @@ export function MoneyInput({ className, ...props }: React.ComponentProps<typeof 
     <div className="flex w-full items-stretch">
       <span
         aria-hidden
-        className="flex shrink-0 items-center rounded-l-lg border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground"
+        className="flex shrink-0 items-center rounded-l-xl border border-r-0 border-input bg-muted px-3.5 text-sm font-medium text-muted-foreground md:rounded-l-lg md:px-3"
       >
         ₹
       </span>

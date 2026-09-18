@@ -91,10 +91,20 @@ export function PatientResultRow({
       onMouseMove={onHover}
       onClick={onPick}
       className={cn(
-        'flex cursor-pointer items-center gap-3 border-b border-border/60 px-3 py-2.5 text-sm transition-colors last:border-0 sm:px-4',
+        'flex cursor-pointer items-center gap-3 border-b border-border/60 px-3.5 py-3 text-sm transition-colors last:border-0 active:bg-muted/60 sm:px-4 sm:py-2.5',
         selected ? 'bg-primary/10' : 'hover:bg-muted/60',
       )}
     >
+      {/* Phone: an avatar, so the list reads as people rather than rows. */}
+      <span
+        aria-hidden
+        className={cn(
+          'grid size-10 shrink-0 place-items-center rounded-full text-sm font-semibold sm:hidden',
+          selected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary',
+        )}
+      >
+        {patient.full_name.slice(0, 1).toUpperCase()}
+      </span>
       <span className="min-w-0 flex-1">
         <span className="flex items-baseline gap-2">
           <span className="truncate font-medium">{patient.full_name}</span>

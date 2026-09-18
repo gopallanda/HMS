@@ -87,67 +87,120 @@ export function PaymentsDialog({
           <ReverseForm payment={reversing} onDone={() => setReversing(null)} />
         ) : (
           <div className="grid gap-3">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-40">Taken</TableHead>
-                  <TableHead className="w-24">Mode</TableHead>
-                  <TableHead>Reference</TableHead>
-                  <TableHead className="w-32">By</TableHead>
-                  <TableHead className="w-28 text-right">Amount &#8377;</TableHead>
-                  <TableHead className="w-28 text-right" />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {payments.map((payment) => (
-                  <TableRow
-                    key={payment.id}
-                    className={cn(payment.is_reversed && 'opacity-60')}
-                  >
-                    <TableCell className="text-xs tabular-nums">
-                      {formatDateTime(payment.paid_at)}
-                    </TableCell>
-                    <TableCell className="text-xs">
+            {/* Phone: one row per payment, amount trailing. */}
+            <ul className="grid divide-y divide-border/60 overflow-hidden rounded-2xl border border-border/60 sm:hidden">
+              {payments.map((payment) => (
+                <li
+                  key={payment.id}
+                  className={cn('grid gap-1 px-3.5 py-3', payment.is_reversed && 'opacity-60')}
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="text-sm font-semibold">
                       {PAYMENT_MODE_LABEL[payment.mode]}
-                    </TableCell>
-                    <TableCell className="truncate font-mono text-xs text-muted-foreground">
-                      {payment.reference ?? '-'}
-                      {payment.reversal_reason ? (
-                        <span className="block font-sans" title={payment.reversal_reason}>
-                          {payment.reversal_reason}
-                        </span>
-                      ) : null}
-                    </TableCell>
-                    <TableCell className="truncate text-xs">
-                      {payment.collected_by_name ?? 'Login with no staff record'}
-                    </TableCell>
-                    <TableCell
+                    </span>
+                    <span
                       className={cn(
-                        'text-right tabular-nums',
+                        'text-sm font-bold tabular-nums',
                         payment.is_reversed && 'line-through',
                       )}
                     >
-                      {formatAmount(payment.amount)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {payment.is_reversed ? (
-                        <Badge variant="outline">Reversed</Badge>
-                      ) : canReverse ? (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => setReversing(payment)}
-                        >
-                          <Undo2Icon data-icon="inline-start" />
-                          Reverse
-                        </Button>
+                      {formatMoney(payment.amount)}
+                    </span>
+                  </div>
+                  <p className="truncate text-xs text-muted-foreground">
+                    {formatDateTime(payment.paid_at)} &middot;{' '}
+                    {payment.collected_by_name ?? 'Login with no staff record'}
+                  </p>
+                  {payment.reference || payment.reversal_reason ? (
+                    <p className="truncate font-mono text-xs text-muted-foreground">
+                      {payment.reference ?? ''}
+                      {payment.reversal_reason ? (
+                        <span className="block font-sans">{payment.reversal_reason}</span>
                       ) : null}
-                    </TableCell>
+                    </p>
+                  ) : null}
+                  {payment.is_reversed ? (
+                    <Badge variant="outline" className="mt-1">
+                      Reversed
+                    </Badge>
+                  ) : canReverse ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="mt-1 justify-self-start px-2 text-destructive hover:text-destructive"
+                      onClick={() => setReversing(payment)}
+                    >
+                      <Undo2Icon data-icon="inline-start" />
+                      Reverse
+                    </Button>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+
+            <div className="hidden sm:block">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-40">Taken</TableHead>
+                    <TableHead className="w-24">Mode</TableHead>
+                    <TableHead>Reference</TableHead>
+                    <TableHead className="w-32">By</TableHead>
+                    <TableHead className="w-28 text-right">Amount &#8377;</TableHead>
+                    <TableHead className="w-28 text-right" />
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                </TableHeader>
+                <TableBody>
+                  {payments.map((payment) => (
+                    <TableRow
+                      key={payment.id}
+                      className={cn(payment.is_reversed && 'opacity-60')}
+                    >
+                      <TableCell className="text-xs tabular-nums">
+                        {formatDateTime(payment.paid_at)}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {PAYMENT_MODE_LABEL[payment.mode]}
+                      </TableCell>
+                      <TableCell className="truncate font-mono text-xs text-muted-foreground">
+                        {payment.reference ?? '-'}
+                        {payment.reversal_reason ? (
+                          <span className="block font-sans" title={payment.reversal_reason}>
+                            {payment.reversal_reason}
+                          </span>
+                        ) : null}
+                      </TableCell>
+                      <TableCell className="truncate text-xs">
+                        {payment.collected_by_name ?? 'Login with no staff record'}
+                      </TableCell>
+                      <TableCell
+                        className={cn(
+                          'text-right tabular-nums',
+                          payment.is_reversed && 'line-through',
+                        )}
+                      >
+                        {formatAmount(payment.amount)}
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {payment.is_reversed ? (
+                          <Badge variant="outline">Reversed</Badge>
+                        ) : canReverse ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => setReversing(payment)}
+                          >
+                            <Undo2Icon data-icon="inline-start" />
+                            Reverse
+                          </Button>
+                        ) : null}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
 
             {/* Said plainly, on the screen that offers the button, because the
                 alternative is a cashier who believes the software refunded
@@ -198,7 +251,7 @@ function ReverseForm({
 
       <FormMessage state={state} />
 
-      <p className="rounded-lg border border-border/60 px-3 py-2 text-sm">
+      <p className="rounded-xl border border-border/60 px-3.5 py-3 text-sm sm:rounded-lg sm:px-3 sm:py-2">
         {formatMoney(payment.amount)} by {PAYMENT_MODE_LABEL[payment.mode]} on{' '}
         {formatDateTime(payment.paid_at)}
         {payment.reference ? `, ref ${payment.reference}` : ''}.

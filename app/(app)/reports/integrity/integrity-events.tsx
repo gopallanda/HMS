@@ -57,12 +57,12 @@ const KIND_TONE: Record<IntegrityKind, BadgeVariant> = {
 export function IntegrityEvents({ events }: { events: IntegrityEvent[] }) {
   return (
     <>
-      <div className="grid gap-2 lg:hidden">
+      <div className="grid gap-2.5 lg:hidden">
         {events.map((event) => (
           <div
             key={event.id}
             className={cn(
-              'rounded-xl border border-border/60 bg-card p-3 shadow-sm',
+              'rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm md:rounded-xl',
               event.afterClose && 'border-l-4 border-l-destructive',
             )}
           >
@@ -91,7 +91,7 @@ export function IntegrityEvents({ events }: { events: IntegrityEvent[] }) {
               </span>
             </div>
 
-            <p className="mt-2.5 border-t border-border/60 pt-2.5 text-sm">
+            <p className="mt-3 rounded-xl bg-muted/50 px-3 py-2.5 text-sm">
               {event.reason ?? (
                 <span className="text-muted-foreground italic">No reason recorded</span>
               )}
@@ -100,15 +100,25 @@ export function IntegrityEvents({ events }: { events: IntegrityEvent[] }) {
               <p className="mt-1 text-xs text-muted-foreground">{event.detail}</p>
             ) : null}
 
-            <p className="mt-2 truncate font-mono text-xs text-muted-foreground">
-              {event.invoiceNo}
-              {event.patientName ? ` · ${event.patientName}` : ''}
-            </p>
+            <div className="mt-2 flex items-center gap-2">
+              <p className="min-w-0 flex-1 truncate font-mono text-xs text-muted-foreground">
+                {event.invoiceNo}
+                {event.patientName ? ` · ${event.patientName}` : ''}
+              </p>
+              {event.invoiceId ? (
+                <Button asChild variant="ghost" size="sm" className="shrink-0 text-primary">
+                  <Link href={`/print/receipt/${event.invoiceId}?autoprint=0`}>
+                    <PrinterIcon data-icon="inline-start" />
+                    Bill
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
           </div>
         ))}
       </div>
 
-      <div className="hidden overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm lg:block">
+      <div className="hidden overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm lg:block md:rounded-xl">
         <Table>
           <TableHeader>
             <TableRow>

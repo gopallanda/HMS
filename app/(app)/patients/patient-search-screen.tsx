@@ -125,7 +125,7 @@ export function PatientSearchScreen({
 
   return (
     <div className="grid gap-3">
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+      <div className="flex items-center gap-2">
         <div className="relative min-w-0 flex-1">
           {/* The md: variants on the input's padding are not decoration
               (defect 1). Input carries `md:px-2.5` of its own, and a media-query
@@ -140,7 +140,7 @@ export function PatientSearchScreen({
             onChange={(event) => setQuery(event.target.value)}
             onKeyDown={onSearchKeyDown}
             placeholder="Phone, name or MRN"
-            className="h-12 rounded-xl border-transparent bg-muted/60 pr-12 pl-12 text-base shadow-none transition-all focus-visible:border-primary focus-visible:bg-background focus-visible:shadow-md md:h-12 md:pr-12 md:pl-12 md:text-base"
+            className="h-12 rounded-2xl border-border/60 bg-card pr-12 pl-12 text-base shadow-sm transition-all focus-visible:border-primary focus-visible:bg-background focus-visible:shadow-md md:h-12 md:rounded-xl md:border-transparent md:bg-muted/60 md:pr-12 md:pl-12 md:text-base md:shadow-none"
             aria-label="Search patients"
             aria-controls="patient-results"
             autoComplete="off"
@@ -153,17 +153,21 @@ export function PatientSearchScreen({
         </div>
 
         {canRegister ? (
-          <Button asChild variant="outline" className="h-12 shrink-0 rounded-xl md:h-12">
-            <Link href="/front-desk/register">
-              <UserRoundPlusIcon data-icon="inline-start" />
-              Register a patient
+          <Button
+            asChild
+            className="size-12 shrink-0 rounded-2xl px-0 sm:w-auto sm:px-4 md:h-12 md:rounded-xl"
+            variant="default"
+          >
+            <Link href="/front-desk/register" aria-label="Register a patient">
+              <UserRoundPlusIcon className="size-5 sm:size-4" />
+              <span className="hidden sm:inline">Register a patient</span>
             </Link>
           </Button>
         ) : null}
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-        <span className="text-xs text-muted-foreground" role="status" aria-live="polite">
+        <span className="px-1 text-xs text-muted-foreground md:px-0" role="status" aria-live="polite">
           {!active
             ? recent === null
               ? `Type ${MIN_QUERY} characters or more`
@@ -181,7 +185,7 @@ export function PatientSearchScreen({
       </div>
 
       {error ? (
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           Search failed: {error.message}
         </p>
       ) : null}
@@ -191,7 +195,7 @@ export function PatientSearchScreen({
         id="patient-results"
         role="listbox"
         aria-label="Matching patients"
-        className="custom-scrollbar max-h-[32rem] overflow-y-auto rounded-xl border border-border/60 bg-card shadow-sm"
+        className="custom-scrollbar overflow-y-auto rounded-2xl border border-border/60 bg-card shadow-sm md:max-h-[32rem] md:rounded-xl"
       >
         {!active && recent === null ? (
           <EmptyState

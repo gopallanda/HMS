@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from '@tanstack/react-query';
-import { PlusIcon, ReceiptIcon, SearchIcon, Trash2Icon } from 'lucide-react';
+import { ChevronLeftIcon, PlusIcon, ReceiptIcon, SearchIcon, Trash2Icon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useActionState, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
@@ -408,9 +408,11 @@ export function CollectDesk({
       {/* ------------------------------------------------------------------ */}
       {/* Who is at the counter                                              */}
       {/* ------------------------------------------------------------------ */}
-      <section className="grid content-start gap-2.5">
+      {/* Below `lg` the two panes stack, so a phone shows one at a time: the
+          visit list until somebody is picked, then the bill with a way back. */}
+      <section className={cn('grid content-start gap-2.5', selected !== null && 'max-lg:hidden')}>
         <div className="relative">
-          <SearchIcon className="pointer-events-none absolute inset-y-0 left-3.5 my-auto size-4 text-muted-foreground" />
+          <SearchIcon className="pointer-events-none absolute inset-y-0 left-4 my-auto size-4.5 text-muted-foreground lg:left-3.5 lg:size-4" />
           <Input
             ref={searchInput}
             value={query}
@@ -420,7 +422,7 @@ export function CollectDesk({
             }}
             onKeyDown={onSearchKeyDown}
             placeholder="Token, name, MRN or phone"
-            className="h-11 rounded-xl border-transparent bg-muted/60 pr-10 pl-10 shadow-none md:pr-10 md:pl-10 transition-all focus-visible:border-primary focus-visible:bg-background focus-visible:shadow-md md:h-11"
+            className="h-13 rounded-2xl border-border/60 bg-card pr-10 pl-11 shadow-sm transition-all focus-visible:border-primary focus-visible:bg-background focus-visible:shadow-md md:h-11 md:rounded-xl md:border-transparent md:bg-muted/60 md:pr-10 md:pl-10 md:shadow-none"
             aria-label="Find a visit to bill"
             autoComplete="off"
             spellCheck={false}
@@ -435,7 +437,7 @@ export function CollectDesk({
           ref={listRef}
           role="listbox"
           aria-label="Today's visits"
-          className="custom-scrollbar max-h-[32rem] overflow-y-auto rounded-xl border border-border/60 bg-card shadow-sm"
+          className="custom-scrollbar overflow-y-auto rounded-2xl border border-border/60 bg-card shadow-sm lg:max-h-[32rem] lg:rounded-xl"
         >
           {filtered.length === 0 ? (
             <EmptyState
@@ -458,7 +460,7 @@ export function CollectDesk({
                 onMouseMove={() => setHighlight(index)}
                 onClick={() => selectVisit(visit.visit_id)}
                 className={cn(
-                  'flex w-full items-center gap-2.5 border-b border-border/60 px-3 py-2.5 text-left text-sm transition-colors last:border-0',
+                  'flex w-full items-center gap-3 border-b border-border/60 px-3.5 py-3 text-left text-sm transition-colors last:border-0 active:bg-muted/60 lg:gap-2.5 lg:px-3 lg:py-2.5',
                   visit.visit_id === selectedId
                     ? 'bg-primary/10'
                     : index === highlight
@@ -468,7 +470,7 @@ export function CollectDesk({
               >
                 <span
                   className={cn(
-                    'grid size-8 shrink-0 place-items-center rounded-full text-sm font-bold tabular-nums',
+                    'grid size-10 shrink-0 place-items-center rounded-xl text-sm font-bold tabular-nums lg:size-8 lg:rounded-full',
                     visit.visit_id === selectedId
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-foreground',
@@ -484,7 +486,9 @@ export function CollectDesk({
                 </span>
                 <span className="shrink-0 text-right text-xs tabular-nums">
                   {visit.pending_count > 0 ? (
-                    <span className="font-medium">{formatAmount(visit.pending_total)}</span>
+                    <span className="rounded-full bg-primary/10 px-2 py-1 font-semibold text-primary lg:bg-transparent lg:p-0 lg:font-medium lg:text-foreground">
+                      &#8377;{formatAmount(visit.pending_total)}
+                    </span>
                   ) : (
                     <span className="text-muted-foreground">
                       {visit.invoice_count > 0 ? 'billed' : '-'}
@@ -507,7 +511,7 @@ export function CollectDesk({
       {/* The bill                                                           */}
       {/* ------------------------------------------------------------------ */}
       {selected === null ? (
-        <section className="rounded-xl border border-border/60 bg-card shadow-sm">
+        <section className="hidden rounded-2xl border border-border/60 bg-card shadow-sm lg:block md:rounded-xl">
           <EmptyState
             icon={ReceiptIcon}
             title="Pick a visit to bill"
@@ -519,15 +523,26 @@ export function CollectDesk({
           ref={formRef}
           action={action}
           onKeyDown={onFormKeyDown}
-          className="grid content-start gap-4 rounded-xl border border-border/60 bg-card p-4 shadow-sm md:p-5"
+          className="grid content-start gap-4 rounded-2xl border border-border/60 bg-card p-4 shadow-sm md:rounded-xl md:p-5"
         >
           <input type="hidden" name="invoice_id" value={invoiceId} />
           <input type="hidden" name="visit_id" value={selected.visit_id} />
           <input type="hidden" name="items" value={JSON.stringify(payload)} />
           <input type="hidden" name="mode" value={mode} />
 
+          <button
+            type="button"
+            onClick={() => selectVisit(null)}
+            className="-mt-1 -ml-1 flex items-center gap-1 justify-self-start rounded-lg py-1 pr-2 text-sm font-medium text-primary lg:hidden"
+          >
+            <ChevronLeftIcon className="size-4.5" />
+            All visits
+          </button>
+
           <header className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-b border-border/60 pb-3">
-            <span className="text-base font-semibold">{selected.patient_name}</span>
+            <span className="w-full text-lg font-bold tracking-tight sm:w-auto sm:text-base sm:font-semibold">
+              {selected.patient_name}
+            </span>
             <span className="font-mono text-xs text-muted-foreground">
               {selected.patient_mrn}
             </span>
@@ -549,7 +564,7 @@ export function CollectDesk({
           <FormMessage state={state} />
 
           {state.stale ? (
-            <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-xs text-destructive">
+            <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-xs text-destructive md:rounded-lg md:px-3 md:py-2.5">
               Nothing was charged. Reload this visit to see what is actually still pending.{' '}
               <button
                 type="button"
@@ -567,7 +582,125 @@ export function CollectDesk({
           {/* -------------------------------------------------------------- */}
           {/* Lines                                                          */}
           {/* -------------------------------------------------------------- */}
-          <div className="custom-scrollbar overflow-x-auto rounded-xl border border-border/60">
+          {/* Phone: each line is a row of its own -- the seven-column table
+              below would be a sideways scroll. Same state, same handlers. */}
+          <div className="grid overflow-hidden rounded-2xl border border-border/60 md:hidden">
+            {charges.isPending ? (
+              <p className="px-3 py-8 text-center text-xs text-muted-foreground">Loading charges...</p>
+            ) : null}
+            {charges.error ? (
+              <p className="px-3 py-8 text-center text-xs text-destructive">
+                The pending charges could not be read: {charges.error.message}
+              </p>
+            ) : null}
+            {pending.map((charge) => {
+              const included = !dropped.has(charge.id);
+              return (
+                <label
+                  key={charge.id}
+                  className={cn(
+                    'flex items-start gap-3 border-b border-border/60 px-3.5 py-3 last:border-0',
+                    !included && 'opacity-45',
+                  )}
+                >
+                  <Checkbox
+                    className="mt-0.5"
+                    checked={included}
+                    aria-label={`Include ${charge.description}`}
+                    onCheckedChange={(value) =>
+                      setDropped((current) => {
+                        const next = new Set(current);
+                        if (value === true) next.delete(charge.id);
+                        else next.add(charge.id);
+                        return next;
+                      })
+                    }
+                  />
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{charge.description}</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground tabular-nums">
+                      {charge.qty} &times; &#8377;{formatAmount(charge.unit_price)}
+                      {charge.tax_rate > 0 ? ` · GST ${charge.tax_rate}%` : ''}
+                    </span>
+                  </span>
+                  <span className="shrink-0 text-sm font-semibold tabular-nums">
+                    &#8377;{formatAmount(charge.amount)}
+                  </span>
+                </label>
+              );
+            })}
+            {adHoc.map((line) => {
+              const qty = parseMoney(line.qty) ?? 0;
+              const price = parseMoney(line.unit_price) ?? 0;
+              return (
+                <div key={line.key} className="grid gap-2 border-b border-border/60 bg-primary/[0.03] px-3.5 py-3 last:border-0">
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={line.description}
+                      onChange={(event) =>
+                        setAdHoc((current) =>
+                          current.map((item) =>
+                            item.key === line.key ? { ...item, description: event.target.value } : item,
+                          ),
+                        )
+                      }
+                      aria-label="Charge description"
+                      maxLength={200}
+                    />
+                    <button
+                      type="button"
+                      onClick={() =>
+                        setAdHoc((current) => current.filter((item) => item.key !== line.key))
+                      }
+                      aria-label={`Remove ${line.description}`}
+                      className="grid size-11 shrink-0 place-items-center rounded-xl text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2Icon className="size-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-[4.5rem_minmax(0,1fr)] gap-2">
+                    <Input
+                      value={line.qty}
+                      onChange={(event) =>
+                        setAdHoc((current) =>
+                          current.map((item) =>
+                            item.key === line.key ? { ...item, qty: event.target.value } : item,
+                          ),
+                        )
+                      }
+                      inputMode="decimal"
+                      className="text-right tabular-nums"
+                      aria-label="Quantity"
+                    />
+                    <MoneyInput
+                      value={line.unit_price}
+                      onChange={(event) =>
+                        setAdHoc((current) =>
+                          current.map((item) =>
+                            item.key === line.key ? { ...item, unit_price: event.target.value } : item,
+                          ),
+                        )
+                      }
+                      aria-label="Rate"
+                    />
+                  </div>
+                  <p className="flex justify-between text-xs text-muted-foreground">
+                    <span>{line.tax_rate > 0 ? `GST ${line.tax_rate}%` : 'GST exempt'}</span>
+                    <span className="text-sm font-semibold text-foreground tabular-nums">
+                      &#8377;{formatAmount(lineAmount(qty, price))}
+                    </span>
+                  </p>
+                </div>
+              );
+            })}
+            {!charges.isPending && lines.length === 0 ? (
+              <p className="px-3 py-8 text-center text-xs text-muted-foreground">
+                Nothing pending on this visit. Add a charge below to raise a bill.
+              </p>
+            ) : null}
+          </div>
+
+          <div className="custom-scrollbar hidden overflow-x-auto rounded-xl border border-border/60 md:block">
             <table className="w-full min-w-[42rem] text-sm">
               <thead>
                 <tr className="border-b border-border/60 bg-muted/40 text-xs tracking-wide text-muted-foreground uppercase">
@@ -741,7 +874,7 @@ export function CollectDesk({
             <Select key={picker} onValueChange={addService}>
               <SelectTrigger
                 ref={serviceTrigger}
-                className="h-10 w-full sm:w-80 md:h-9"
+                className="h-11 w-full border-dashed sm:w-80 md:h-9 md:border-solid"
                 aria-label="Add a charge"
               >
                 <SelectValue placeholder="Add a charge from the service list" />
@@ -763,7 +896,7 @@ export function CollectDesk({
                 })}
               </SelectContent>
             </Select>
-            <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span className="flex items-center gap-1.5 px-1 text-xs text-muted-foreground md:px-0">
               <KbdHint keys={['Alt', 'S']}>add</KbdHint>
               <span className="hidden lg:inline">&middot;</span>
               <span>the rate pre-fills and stays editable</span>
@@ -774,7 +907,7 @@ export function CollectDesk({
           {/* Totals and money                                               */}
           {/* -------------------------------------------------------------- */}
           <div className="grid gap-4 md:grid-cols-2">
-            <dl className="grid content-start gap-1.5 rounded-xl bg-muted/50 p-4 text-sm">
+            <dl className="grid content-start gap-1.5 rounded-2xl bg-muted/50 p-4 text-sm md:rounded-xl">
               <div className="flex justify-between">
                 <dt className="text-muted-foreground">Subtotal</dt>
                 <dd className="tabular-nums">{formatMoney(totals.subtotal)}</dd>
@@ -892,7 +1025,7 @@ export function CollectDesk({
                 <div
                   id="payment-mode"
                   role="group"
-                  className="flex items-stretch gap-1 rounded-lg bg-muted p-1"
+                  className="flex items-stretch gap-1 rounded-xl bg-muted p-1 md:rounded-lg"
                 >
                   {PAYMENT_MODES.map((option, index) => (
                     <button
@@ -901,7 +1034,7 @@ export function CollectDesk({
                       aria-pressed={mode === option}
                       onClick={() => setMode(option)}
                       className={cn(
-                        'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-sm transition-all focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:py-1.5',
+                        'flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-sm transition-all focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:rounded-md md:py-1.5',
                         mode === option
                           ? 'bg-background font-medium text-foreground shadow-sm'
                           : 'text-muted-foreground hover:text-foreground',
@@ -961,8 +1094,10 @@ export function CollectDesk({
             </div>
           </div>
 
-          <footer className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-4">
-            <span className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+          {/* Phone: docked above the tab bar so "Paid" is always under the
+              thumb, however long the bill. */}
+          <footer className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 -mx-4 -mb-4 flex items-center gap-2 rounded-b-2xl border-t border-border/60 bg-card/95 px-4 py-3 backdrop-blur md:static md:mx-0 md:mb-0 md:flex-wrap md:rounded-none md:bg-transparent md:px-0 md:pt-4 md:pb-0 md:backdrop-blur-none">
+            <span className="hidden flex-wrap items-center gap-x-4 gap-y-1.5 lg:flex">
               <KbdHint keys={['Alt', 'A']}>amount</KbdHint>
               <KbdHint keys={['Alt', '1-4']}>mode</KbdHint>
               <KbdHint keys={['Ctrl', 'Enter']}>take payment</KbdHint>
@@ -970,12 +1105,16 @@ export function CollectDesk({
             <Button
               type="button"
               variant="outline"
-              className="ml-auto"
+              className="md:ml-auto"
               onClick={() => selectVisit(null)}
             >
               Cancel
             </Button>
-            <SubmitButton pendingLabel="Taking payment..." disabled={!canSubmit}>
+            <SubmitButton
+              pendingLabel="Taking payment..."
+              disabled={!canSubmit}
+              className="flex-1 md:flex-none"
+            >
               Paid {formatMoney(amountValue)}
             </SubmitButton>
           </footer>

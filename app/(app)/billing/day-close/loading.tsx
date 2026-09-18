@@ -13,7 +13,7 @@ export default function Loading() {
       <HeaderSkeleton />
       <FilterSkeleton />
       <StatsSkeleton />
-      <div className="h-36 rounded-xl border border-border/60 bg-card shadow-sm" />
+      <div className="h-36 rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl" />
       <div className="grid gap-6 lg:grid-cols-3">
         <TableSkeleton rows={4} />
         <TableSkeleton rows={4} />

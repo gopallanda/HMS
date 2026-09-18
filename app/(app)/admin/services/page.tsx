@@ -41,7 +41,7 @@ export default async function ServicesPage() {
     return (
       <div className="grid gap-6">
         <PageHeader title="Price list" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           The price list could not be loaded: {error.message}
         </p>
       </div>

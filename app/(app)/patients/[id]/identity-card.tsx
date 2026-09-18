@@ -30,7 +30,7 @@ export type PatientIdentity = {
  */
 export function IdentityCard({ patient }: { patient: PatientIdentity }) {
   return (
-    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-xl border border-border/60 bg-card p-4 text-sm shadow-sm sm:grid-cols-3 xl:grid-cols-5">
+    <dl className="grid grid-cols-2 gap-x-4 gap-y-3 rounded-2xl border border-border/60 bg-card p-4 text-sm shadow-sm sm:grid-cols-3 xl:grid-cols-5 md:rounded-xl">
       <Fact icon={IdCardIcon} label="MRN">
         <span className="font-mono">{patient.mrn}</span>
       </Fact>

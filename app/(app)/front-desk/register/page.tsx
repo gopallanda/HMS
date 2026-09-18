@@ -70,7 +70,7 @@ export default async function RegisterPage({
     return (
       <div className="grid gap-6">
         <PageHeader title="Register patient" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           The desk could not be loaded: {failed.message}
         </p>
       </div>
@@ -137,7 +137,8 @@ export default async function RegisterPage({
         title="Register patient"
         description="Search first. One form: patient, doctor, fee and token together."
         actions={
-          <Button asChild variant="outline">
+          // The queue is a tab on a phone; here the search keeps the top.
+          <Button asChild variant="outline" className="max-md:hidden">
             <Link href="/front-desk/queue">Today&apos;s queue</Link>
           </Button>
         }
@@ -146,7 +147,7 @@ export default async function RegisterPage({
       {doctors.length === 0 ? (
         // Registration allocates a token in a doctor's queue and bills their
         // fee. Saying so here beats an empty dropdown three sections down.
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           No active doctors yet, so nobody can be registered.{' '}
           {session.access.permissions.has('staff.create') ? (
             <Link href="/admin/staff" className="font-medium underline underline-offset-4">

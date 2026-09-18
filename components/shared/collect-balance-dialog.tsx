@@ -169,7 +169,7 @@ export function CollectBalanceDialog({
               <div
                 id="balance-mode"
                 role="group"
-                className="flex items-stretch gap-1 rounded-lg bg-muted p-1"
+                className="flex items-stretch gap-1 rounded-xl bg-muted p-1 md:rounded-lg"
               >
                 {PAYMENT_MODES.map((option, index) => (
                   <button
@@ -178,7 +178,7 @@ export function CollectBalanceDialog({
                     aria-pressed={mode === option}
                     onClick={() => setMode(option)}
                     className={cn(
-                      'flex flex-1 items-center justify-center gap-1.5 rounded-md px-2 py-2 text-sm transition-all focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:py-1.5',
+                      'flex flex-1 items-center justify-center gap-1.5 rounded-lg px-2 py-2.5 text-sm transition-all md:rounded-md focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none md:py-1.5',
                       mode === option
                         ? 'bg-background font-medium text-foreground shadow-sm'
                         : 'text-muted-foreground hover:text-foreground',

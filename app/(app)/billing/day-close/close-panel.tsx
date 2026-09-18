@@ -68,9 +68,9 @@ export function ClosePanel({
     : null;
 
   return (
-    <section className="grid gap-4 rounded-xl border border-border/60 bg-card p-4 shadow-sm md:p-5">
+    <section className="grid gap-4 rounded-2xl border border-border/60 bg-card p-4 shadow-sm md:p-5 md:rounded-xl">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-sm font-semibold">Count the drawer</h2>
+        <h2 className="text-base font-semibold md:text-sm">Count the drawer</h2>
         {closure ? (
           <p className="text-xs text-muted-foreground">
             Closed {formatDateTime(closure.closed_at)}
@@ -95,7 +95,7 @@ export function ClosePanel({
       ) : null}
 
       {closure?.notes ? (
-        <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm">{closure.notes}</p>
+        <p className="rounded-xl bg-muted/50 px-3.5 py-2.5 text-sm md:rounded-lg md:px-3 md:py-2">{closure.notes}</p>
       ) : null}
 
       {canClose ? (
@@ -180,7 +180,8 @@ function Figure({
   return (
     <div
       className={cn(
-        'rounded-lg border border-border/60 px-3 py-2',
+        // A row on a phone (label left, figure right), a tile from `sm`.
+        'flex items-baseline justify-between gap-3 rounded-xl border border-border/60 px-3.5 py-3 sm:block sm:rounded-lg sm:px-3 sm:py-2',
         tone === 'due' && 'border-destructive/30 bg-destructive/5',
       )}
     >
@@ -189,7 +190,7 @@ function Figure({
       </dt>
       <dd
         className={cn(
-          'mt-0.5 text-xl leading-none font-bold tracking-tight tabular-nums',
+          'text-lg leading-none font-bold tracking-tight tabular-nums sm:mt-0.5 sm:text-xl',
           tone === 'due' && 'text-destructive',
           tone === 'settled' && 'text-success',
         )}

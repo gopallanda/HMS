@@ -106,7 +106,7 @@ export function InvoiceTable({
 
   if (invoices.length === 0) {
     return (
-      <div className="rounded-xl border border-border/60 bg-card shadow-sm">
+      <div className="rounded-2xl border border-border/60 bg-card shadow-sm md:rounded-xl">
         <EmptyState
           icon={ReceiptIcon}
           title="No invoices here"
@@ -121,59 +121,67 @@ export function InvoiceTable({
       {/* Below `lg` the nine columns become one card per invoice. The numbers
           stay right-aligned and tabular inside the card, so a column of totals
           is still a column of totals on a phone (CLAUDE.md 7). */}
-      <div className="grid gap-2 lg:hidden">
+      <div className="grid gap-2.5 lg:hidden">
         {invoices.map((invoice) => (
           <div
             key={invoice.id}
             className={cn(
-              'rounded-xl border border-border/60 bg-card p-3 shadow-sm',
+              'rounded-2xl border border-border/60 bg-card p-3.5 shadow-sm',
               invoice.status === 'void' && 'opacity-60',
             )}
           >
-            <div className="flex items-start justify-between gap-2">
+            <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
+                <Link
+                  href={`/patients/${invoice.patient_id}`}
+                  className="block truncate text-[15px] font-semibold underline-offset-4 hover:underline"
+                >
+                  {invoice.patient_name_snapshot}
+                </Link>
                 <p
                   className={cn(
-                    'truncate font-mono text-xs',
+                    'mt-0.5 truncate font-mono text-xs text-muted-foreground',
                     invoice.status === 'void' && 'line-through',
                   )}
                 >
                   {invoice.invoice_no}
                 </p>
-                <Link
-                  href={`/patients/${invoice.patient_id}`}
-                  className="mt-0.5 block truncate font-medium underline-offset-4 hover:underline"
-                >
-                  {invoice.patient_name_snapshot}
-                </Link>
-                <p className="truncate font-mono text-xs text-muted-foreground">
-                  {invoice.patient_mrn} &middot; token {invoice.token_no}
-                </p>
               </div>
-              <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]} className="shrink-0">
-                {INVOICE_STATUS_LABEL[invoice.status]}
-              </Badge>
+              <div className="grid shrink-0 justify-items-end gap-1">
+                <span className="text-base font-bold tabular-nums">
+                  {formatMoney(invoice.grand_total)}
+                </span>
+                <Badge variant={INVOICE_STATUS_VARIANT[invoice.status]}>
+                  {INVOICE_STATUS_LABEL[invoice.status]}
+                </Badge>
+              </div>
             </div>
 
-            <dl className="mt-2.5 grid grid-cols-3 gap-2 border-t border-border/60 pt-2.5 text-xs">
+            <dl className="mt-3 grid grid-cols-3 gap-2 rounded-xl bg-muted/50 px-3 py-2.5 text-xs">
               <div>
-                <dt className="text-muted-foreground">Total</dt>
-                <dd className="font-medium tabular-nums">{formatAmount(invoice.grand_total)}</dd>
+                <dt className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                  Paid
+                </dt>
+                <dd className="mt-0.5 font-medium tabular-nums">{formatAmount(invoice.paid_total)}</dd>
               </div>
               <div>
-                <dt className="text-muted-foreground">Paid</dt>
-                <dd className="tabular-nums">{formatAmount(invoice.paid_total)}</dd>
-              </div>
-              <div>
-                <dt className="text-muted-foreground">Balance</dt>
+                <dt className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                  Balance
+                </dt>
                 <dd
                   className={cn(
-                    'tabular-nums',
-                    invoice.balance > 0 ? 'font-medium text-destructive' : 'text-muted-foreground',
+                    'mt-0.5 tabular-nums',
+                    invoice.balance > 0 ? 'font-semibold text-destructive' : 'text-muted-foreground',
                   )}
                 >
                   {invoice.balance > 0 ? formatAmount(invoice.balance) : '-'}
                 </dd>
+              </div>
+              <div>
+                <dt className="text-[10px] font-semibold tracking-wider text-muted-foreground uppercase">
+                  Token
+                </dt>
+                <dd className="mt-0.5 font-medium tabular-nums">{invoice.token_no}</dd>
               </div>
             </dl>
 
@@ -181,7 +189,7 @@ export function InvoiceTable({
               <p className="mt-2 text-xs text-muted-foreground">{invoice.void_reason}</p>
             ) : null}
 
-            <div className="mt-2.5 flex items-center gap-2">
+            <div className="mt-3 flex items-center gap-2">
               <span className="text-xs text-muted-foreground tabular-nums">
                 {formatDateTime(invoice.invoice_date)}
               </span>
@@ -230,7 +238,7 @@ export function InvoiceTable({
         ))}
       </div>
 
-      <div className="hidden overflow-hidden rounded-xl border border-border/60 bg-card shadow-sm lg:block">
+      <div className="hidden overflow-hidden rounded-2xl border border-border/60 bg-card shadow-sm lg:block md:rounded-xl">
         <Table>
           <TableHeader>
             <TableRow>
@@ -379,7 +387,7 @@ export function InvoiceTable({
         </Table>
       </div>
 
-      <p className="text-xs text-muted-foreground">
+      <p className="hidden text-xs text-muted-foreground md:block">
         Invoices are never deleted. Voiding keeps the number, records the reason, returns the
         charges to the visit so it can be billed again, and reverses any payment against it.
         Collecting adds a payment to a bill that already exists; it never raises a second one.

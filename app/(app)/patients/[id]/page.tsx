@@ -1,4 +1,4 @@
-import { ArrowLeftIcon, TicketIcon } from 'lucide-react';
+import { ArrowLeftIcon, ChevronLeftIcon, TicketIcon } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
@@ -122,7 +122,7 @@ export default async function PatientRecordPage({
     return (
       <div className="grid gap-6">
         <PageHeader title="Patient record" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           This patient could not be loaded: {patientResult.error.message}
         </p>
       </div>
@@ -160,6 +160,13 @@ export default async function PatientRecordPage({
 
   return (
     <div className="grid gap-5">
+      <Link
+        href="/patients"
+        className="-mb-3 flex items-center gap-1 justify-self-start text-sm font-medium text-primary md:hidden"
+      >
+        <ChevronLeftIcon className="size-4.5" />
+        Patients
+      </Link>
       <PageHeader
         title={patient.full_name}
         description={[
@@ -169,7 +176,13 @@ export default async function PatientRecordPage({
         ].join(' · ')}
         actions={
           <>
-            <Button asChild variant="ghost" size="icon" aria-label="Back to patient search">
+            <Button
+              asChild
+              variant="ghost"
+              size="icon"
+              aria-label="Back to patient search"
+              className="max-md:hidden"
+            >
               <Link href="/patients">
                 <ArrowLeftIcon />
               </Link>
@@ -200,7 +213,7 @@ export default async function PatientRecordPage({
         What it loses is the buttons: no new visit, no corrections.
       */}
       {removed ? (
-        <p className="rounded-lg bg-warning/10 px-3 py-2.5 text-sm text-warning dark:bg-warning/15">
+        <p className="rounded-xl bg-warning/10 px-3.5 py-3 text-sm text-warning md:rounded-lg md:px-3 md:py-2.5 dark:bg-warning/15">
           <strong className="font-semibold">This record was removed</strong> on{' '}
           {formatDateTime(patient.deleted_at!)}. It no longer appears in search and cannot start a
           new visit. Everything below still happened and still counts.

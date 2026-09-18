@@ -5,7 +5,15 @@ import type { InvoicePayment } from './payments-dialog';
 import { Notice } from '@/components/shared/form-message';
 import { PageHeader } from '@/components/shared/page-header';
 import { Button } from '@/components/ui/button';
+import { DatePicker } from '@/components/ui/date-picker';
 import { Input } from '@/components/ui/input';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { INVOICE_STATUSES, INVOICE_STATUS_LABEL, type InvoiceStatus } from '@/lib/billing';
 import { requireSession } from '@/lib/auth/session';
 import { createClient } from '@/lib/supabase/server';
@@ -81,7 +89,7 @@ export default async function InvoicesPage({
     return (
       <div className="grid gap-6">
         <PageHeader title="Invoices" />
-        <p className="rounded-lg bg-destructive/10 px-3 py-2.5 text-sm text-destructive">
+        <p className="rounded-xl bg-destructive/10 px-3.5 py-3 text-sm text-destructive md:rounded-lg md:px-3 md:py-2.5">
           The invoice list could not be loaded: {error.message}
         </p>
       </div>
@@ -168,31 +176,33 @@ export default async function InvoicesPage({
 
       {/* A GET form: Enter in any field applies the filters, and the browser
           does the navigation. Nothing here needs JavaScript. */}
-      <form className="flex flex-wrap items-end gap-3 rounded-xl border border-border/60 bg-card p-3 shadow-sm md:p-4">
-        <label className="grid flex-1 gap-1.5 sm:flex-none">
+      <form className="grid grid-cols-2 items-end gap-3 rounded-2xl border border-border/60 bg-card p-3 shadow-sm md:flex md:flex-wrap md:rounded-xl md:p-4">
+        <div className="grid gap-1.5 md:flex-none">
           <span className="text-sm font-medium">Day</span>
-          <Input type="date" name="day" defaultValue={selectedDay} className="w-full sm:w-44" />
-        </label>
+          <DatePicker name="day" defaultValue={selectedDay} className="w-full md:w-44" />
+        </div>
 
-        <label className="grid flex-1 gap-1.5 sm:flex-none">
+        <div className="grid gap-1.5 md:flex-none">
           <span className="text-sm font-medium">Status</span>
-          {/* A native select, not the Radix one: this form is a plain GET and
-              submits without JavaScript, which a controlled listbox would not. */}
-          <select
-            name="status"
-            defaultValue={isStatus(status) ? status : ''}
-            className="h-10 rounded-lg border border-input bg-background px-3 text-sm transition-colors outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 md:h-8 md:px-2.5"
-          >
-            <option value="">All</option>
-            {INVOICE_STATUSES.map((option) => (
-              <option key={option} value={option}>
-                {INVOICE_STATUS_LABEL[option]}
-              </option>
-            ))}
-          </select>
-        </label>
+          {/* Radix renders a hidden native <select> for a named Select inside a
+              form, so this GET form still posts `status` like the plain one
+              did. "all" is not a status, which the page reads as no filter. */}
+          <Select name="status" defaultValue={isStatus(status) ? status : 'all'}>
+            <SelectTrigger className="w-full md:w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper">
+              <SelectItem value="all">All statuses</SelectItem>
+              {INVOICE_STATUSES.map((option) => (
+                <SelectItem key={option} value={option}>
+                  {INVOICE_STATUS_LABEL[option]}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
-        <label className="grid min-w-0 flex-1 gap-1.5">
+        <label className="col-span-2 grid min-w-0 flex-1 gap-1.5">
           <span className="text-sm font-medium">Invoice no, patient, MRN or visit</span>
           <Input
             name="q"
@@ -203,7 +213,7 @@ export default async function InvoicesPage({
           />
         </label>
 
-        <div className="flex items-center gap-2">
+        <div className="col-span-2 flex items-center gap-2 max-md:*:flex-1">
           <Button type="submit">Apply</Button>
           {search !== '' || isStatus(status) ? (
             <Button asChild variant="ghost">
@@ -213,7 +223,7 @@ export default async function InvoicesPage({
         </div>
       </form>
 
-      <p className="-mt-2 text-xs text-muted-foreground">
+      <p className="-mt-2 px-1 text-xs text-muted-foreground md:px-0">
         A search looks across every date; leave it empty to stay on one day.
       </p>
 

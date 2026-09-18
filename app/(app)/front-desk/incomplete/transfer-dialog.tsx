@@ -119,7 +119,7 @@ export function TransferDialog({
             hint="The department follows the doctor."
           >
             <Select value={doctorId} onValueChange={setDoctorId}>
-              <SelectTrigger id={`transfer-doctor-${visitId}`} className="h-10 w-full">
+              <SelectTrigger id={`transfer-doctor-${visitId}`} className="h-11 w-full">
                 <SelectValue placeholder="Choose a doctor" />
               </SelectTrigger>
               <SelectContent>

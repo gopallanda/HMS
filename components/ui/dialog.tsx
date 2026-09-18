@@ -61,17 +61,24 @@ function DialogContent({
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          "fixed top-1/2 left-1/2 z-50 grid w-full max-w-[calc(100%-2rem)] -translate-x-1/2 -translate-y-1/2 gap-4 rounded-xl bg-popover p-4 text-sm text-popover-foreground ring-1 ring-foreground/10 duration-100 outline-none sm:max-w-sm data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95",
+          // Phone: a sheet that rises from the bottom edge, where the thumb
+          // already is, and scrolls inside itself when the form is long.
+          // `sm` and up: the centred card the desk has always had.
+          "fixed inset-x-0 bottom-0 z-50 grid max-h-[92svh] w-full gap-4 overflow-y-auto overscroll-contain rounded-t-3xl bg-popover px-5 pt-7 pb-[calc(1.25rem+env(safe-area-inset-bottom))] text-sm text-popover-foreground shadow-2xl ring-1 ring-foreground/10 outline-none data-open:animate-in data-closed:animate-out max-sm:duration-250 max-sm:data-open:slide-in-from-bottom max-sm:data-closed:slide-out-to-bottom sm:inset-x-auto sm:top-1/2 sm:bottom-auto sm:left-1/2 sm:max-h-[calc(100svh-2rem)] sm:max-w-sm sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:p-4 sm:shadow-none sm:duration-100 sm:data-open:fade-in-0 sm:data-open:zoom-in-95 sm:data-closed:fade-out-0 sm:data-closed:zoom-out-95",
           className
         )}
         {...props}
       >
+        <span
+          aria-hidden
+          className="absolute top-2.5 left-1/2 h-1.5 w-10 -translate-x-1/2 rounded-full bg-muted-foreground/25 sm:hidden"
+        />
         {children}
         {showCloseButton && (
           <DialogPrimitive.Close data-slot="dialog-close" asChild>
             <Button
               variant="ghost"
-              className="absolute top-2 right-2"
+              className="absolute top-3 right-3 rounded-full bg-muted/70 sm:top-2 sm:right-2 sm:rounded-lg sm:bg-transparent"
               size="icon-sm"
             >
               <XIcon
@@ -107,7 +114,10 @@ function DialogFooter({
     <div
       data-slot="dialog-footer"
       className={cn(
-        "-mx-4 -mb-4 flex flex-col-reverse gap-2 rounded-b-xl border-t bg-muted/50 p-4 sm:flex-row sm:justify-end",
+        // Full-width stacked buttons on a phone, primary on top; a right-aligned
+        // row from `sm`. The bottom margin reaches through the sheet's
+        // safe-area padding so the tint meets the screen edge.
+        "-mx-5 -mb-[calc(1.25rem+env(safe-area-inset-bottom))] flex flex-col-reverse gap-2.5 border-t bg-muted/50 px-5 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] sm:-mx-4 sm:-mb-4 sm:flex-row sm:justify-end sm:gap-2 sm:rounded-b-xl sm:p-4 max-sm:[&_[data-slot=button]]:h-12 max-sm:[&_[data-slot=button]]:rounded-xl max-sm:[&_[data-slot=button]]:text-[15px]",
         className
       )}
       {...props}
@@ -130,7 +140,7 @@ function DialogTitle({
     <DialogPrimitive.Title
       data-slot="dialog-title"
       className={cn(
-        "font-heading text-base leading-none font-medium",
+        "pr-10 font-heading text-lg leading-tight font-semibold tracking-tight sm:pr-0 sm:text-base sm:leading-none sm:font-medium",
         className
       )}
       {...props}

@@ -42,7 +42,7 @@ function SheetContent({
   showCloseButton = true,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
-  side?: 'left' | 'right';
+  side?: 'left' | 'right' | 'bottom';
   showCloseButton?: boolean;
 }) {
   return (
@@ -51,14 +51,24 @@ function SheetContent({
       <DialogPrimitive.Content
         data-slot="sheet-content"
         className={cn(
-          'fixed inset-y-0 z-50 flex w-[17rem] max-w-[85vw] flex-col bg-sidebar text-sidebar-foreground shadow-xl duration-200 outline-none data-open:animate-in data-closed:animate-out',
-          side === 'left'
-            ? 'left-0 border-r data-open:slide-in-from-left data-closed:slide-out-to-left'
-            : 'right-0 border-l data-open:slide-in-from-right data-closed:slide-out-to-right',
+          'fixed z-50 flex flex-col shadow-xl duration-200 outline-none data-open:animate-in data-closed:animate-out',
+          side === 'bottom'
+            ? // The phone's menu: a card that rises from the tab bar, with a grab
+              // handle so it reads as something that can be pulled away.
+              'inset-x-0 bottom-0 max-h-[88svh] rounded-t-3xl border-t bg-background pb-[env(safe-area-inset-bottom)] text-foreground data-open:slide-in-from-bottom data-closed:slide-out-to-bottom'
+            : 'inset-y-0 w-[17rem] max-w-[85vw] bg-sidebar text-sidebar-foreground',
+          side === 'left' && 'left-0 border-r data-open:slide-in-from-left data-closed:slide-out-to-left',
+          side === 'right' && 'right-0 border-l data-open:slide-in-from-right data-closed:slide-out-to-right',
           className,
         )}
         {...props}
       >
+        {side === 'bottom' ? (
+          <span
+            aria-hidden
+            className="mx-auto mt-2.5 mb-1 h-1.5 w-10 shrink-0 rounded-full bg-muted-foreground/25"
+          />
+        ) : null}
         {children}
         {showCloseButton ? (
           <DialogPrimitive.Close className="absolute top-3 right-3 grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 focus-visible:ring-ring/50 focus-visible:outline-none">
