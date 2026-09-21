@@ -23,14 +23,20 @@ export function text(label: string, min = 1, max = 200) {
 /**
  * An optional line of text. Empty becomes null, never '' -- a column that can
  * hold both is a column with two kinds of empty in it.
+ *
+ * Absent is empty. A field the form did not render this time round -- the
+ * register desk hides the demographics once a patient is picked off the
+ * search -- is missing from the object the browser parses, while the server
+ * reads it with formData.get() and sees null. Accepting only one of the two
+ * made the same submission valid on the server and invalid in the browser.
  */
 export function optionalText(label: string, max = 200) {
   return z
     .string()
     .trim()
     .max(max, `${label} must be ${max} characters or fewer.`)
-    .transform((value) => (value === '' ? null : value))
-    .nullable();
+    .nullish()
+    .transform((value) => (value == null || value === '' ? null : value));
 }
 
 /** An unchecked checkbox is absent from FormData; a checked one is 'on'. */
@@ -105,13 +111,16 @@ export function percent(label: string) {
     });
 }
 
-/** Phone numbers are entered by hand and pasted from WhatsApp. Stay permissive. */
+/**
+ * Phone numbers are entered by hand and pasted from WhatsApp. Stay permissive.
+ * Absent is empty, for the same reason as optionalText().
+ */
 export function phone(label = 'Phone') {
   return z
     .string()
     .trim()
-    .transform((value) => (value === '' ? null : value))
-    .nullable()
+    .nullish()
+    .transform((value) => (value == null || value === '' ? null : value))
     .refine(
       (value) => value === null || /^[0-9+()\-\s]{6,20}$/.test(value),
       `${label} may only contain digits, spaces and + ( ) -.`,
