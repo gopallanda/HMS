@@ -22,6 +22,10 @@
  * services.unit, the service_unit enum and seed_starter_services come from
  * 20260901090000_service_units_and_starter_catalogue.sql.
  *
+ * record_failed_sign_in comes from
+ * 20260921090000_signin_throttle_and_payment_due_scope.sql, which also
+ * re-scoped visit_payment_due without changing its signature.
+ *
  * Day-close composition, 2026-09-09: day_close_report gains three columns
  * (detail, note, actor_name) and three buckets (patient, service, concession)
  * plus a `tax` total, from 20260909090000_day_close_composition.sql. Written
@@ -981,6 +985,20 @@ export type Database = {
           last_visit_at: string | null;
           visit_count: number;
         }[];
+      };
+      /**
+       * Counts one failed sign-in under a row lock and locks the account at the
+       * ceiling. Service role only -- there is no session when it runs.
+       * 20260921090000.
+       */
+      record_failed_sign_in: {
+        Args: {
+          p_account_id: string;
+          p_window_minutes?: number;
+          p_max_failures?: number;
+          p_cooldown_minutes?: number;
+        };
+        Returns: undefined;
       };
       /**
        * The resting state of the patients screen: who this hospital has seen

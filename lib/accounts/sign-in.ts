@@ -1,5 +1,6 @@
 import 'server-only';
 
+import { reportError } from '@/lib/report-error';
 import { createAdminClient } from '@/lib/supabase/admin';
 
 /**
@@ -111,40 +112,34 @@ export function isLockedOut(account: ResolvedAccount, now: Date = new Date()): b
 /**
  * Count a failed attempt, and lock the account when there have been too many.
  *
- * The window slides forward rather than accumulating for ever: five wrong
- * guesses spread over a fortnight is somebody who mistypes, not somebody
- * attacking, and treating the two the same would lock the hospital's
- * receptionist out on a Monday morning for reasons nobody can reconstruct.
+ * ONE ROUND TRIP, and the arithmetic happens in the database under a row lock.
+ * This used to read the counter, add one in JavaScript and write the result
+ * back -- which counts correctly only if the guesses arrive one at a time.
+ * Fifty parallel guesses each read the same zero, each computed one, and each
+ * wrote one, so locked_until was never set and the ceiling below was a number
+ * in a comment rather than a control.
+ *
+ * The three constants are passed rather than duplicated in SQL: they are
+ * exported from this module and read by the sign-in action for its message,
+ * so this file stays the single place they are written down.
  */
 export async function recordFailedSignIn(accountId: string): Promise<void> {
   const admin = createAdminClient();
-  const now = new Date();
 
-  const { data: account } = await admin
-    .from('staff_accounts')
-    .select('failed_sign_ins, first_failed_at')
-    .eq('id', accountId)
-    .maybeSingle();
+  const { error } = await admin.rpc('record_failed_sign_in', {
+    p_account_id: accountId,
+    p_window_minutes: FAILURE_WINDOW_MINUTES,
+    p_max_failures: MAX_FAILED_SIGN_INS,
+    p_cooldown_minutes: COOLDOWN_MINUTES,
+  });
 
-  if (!account) return;
-
-  const windowStart = new Date(now.getTime() - FAILURE_WINDOW_MINUTES * 60_000);
-  const withinWindow =
-    account.first_failed_at !== null && new Date(account.first_failed_at) > windowStart;
-
-  const failures = withinWindow ? account.failed_sign_ins + 1 : 1;
-
-  await admin
-    .from('staff_accounts')
-    .update({
-      failed_sign_ins: failures,
-      first_failed_at: withinWindow ? account.first_failed_at : now.toISOString(),
-      locked_until:
-        failures >= MAX_FAILED_SIGN_INS
-          ? new Date(now.getTime() + COOLDOWN_MINUTES * 60_000).toISOString()
-          : null,
-    })
-    .eq('id', accountId);
+  // Never thrown to the caller. A throttle that cannot record a failure must
+  // not also refuse the sign-in attempt -- the person at the counter typed the
+  // wrong password, and that is the answer they need. It is worth an operator
+  // knowing about, so it goes to the log.
+  if (error) {
+    reportError('recordFailedSignIn', error, { extra: { account_id: accountId } });
+  }
 }
 
 /** Clears the counters and stamps the sign-in. */

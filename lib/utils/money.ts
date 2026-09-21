@@ -25,9 +25,18 @@ export function sumMoney(amounts: number[]): number {
   return fromPaise(amounts.reduce((acc, a) => acc + toPaise(a), 0));
 }
 
-/** qty * unitPrice, rounded to paise. */
+/**
+ * qty * unitPrice, rounded to paise.
+ *
+ * The Math.round is not decoration: charge_items.qty is numeric(10,2), so a
+ * fractional quantity -- half a day of a bed charge, 1.5 of a consumable --
+ * makes the product a fraction of a paisa. Postgres settles it with
+ * `round(qty * unit_price, 2)` in the check constraint and in collect_payment,
+ * and a preview that rounds differently from the bill is a preview that
+ * eventually contradicts it.
+ */
 export function lineAmount(qty: number, unitPrice: number): number {
-  return fromPaise(qty * toPaise(unitPrice));
+  return fromPaise(Math.round(qty * toPaise(unitPrice)));
 }
 
 /** Tax on an amount at a percentage rate, rounded to paise. */

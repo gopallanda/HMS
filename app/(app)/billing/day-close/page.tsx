@@ -19,17 +19,10 @@ import { cn } from '@/lib/cn';
 import { dayCloseReport, groupDayClose, type DayCloseRow } from '@/lib/rpc/billing';
 import { SERVICE_CATEGORY_LABEL, type ServiceCategory } from '@/lib/services';
 import { createClient } from '@/lib/supabase/server';
-import { formatDate, todayIst } from '@/lib/utils/dates';
+import { formatDate, shiftIstDay, todayIst } from '@/lib/utils/dates';
 import { formatAmount, formatMoney } from '@/lib/utils/money';
 
 export const metadata = { title: 'Day close' };
-
-/** One IST day either side, for the arrows. */
-function shiftDay(day: string, days: number): string {
-  const [year, month, date] = day.split('-').map(Number);
-  const shifted = new Date(Date.UTC(year, month - 1, date + days));
-  return shifted.toISOString().slice(0, 10);
-}
 
 /**
  * Day close.
@@ -149,7 +142,7 @@ export default async function DayClosePage({
           answering a query about last month types the date. */}
       <form className="flex items-end gap-2 rounded-2xl border border-border/60 bg-card p-2.5 shadow-sm md:flex-wrap md:rounded-xl md:p-3">
         <Button asChild variant="outline" size="icon" aria-label="Previous day" className="shrink-0">
-          <Link href={`/billing/day-close?day=${shiftDay(selectedDay, -1)}`}>
+          <Link href={`/billing/day-close?day=${shiftIstDay(selectedDay, -1)}`}>
             <ChevronLeftIcon />
           </Link>
         </Button>
@@ -171,7 +164,7 @@ export default async function DayClosePage({
           </Button>
         ) : (
           <Button asChild variant="outline" size="icon" aria-label="Next day" className="shrink-0">
-            <Link href={`/billing/day-close?day=${shiftDay(selectedDay, 1)}`}>
+            <Link href={`/billing/day-close?day=${shiftIstDay(selectedDay, 1)}`}>
               <ChevronRightIcon />
             </Link>
           </Button>

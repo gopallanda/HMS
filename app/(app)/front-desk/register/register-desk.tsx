@@ -276,7 +276,15 @@ export function RegisterDesk({
 
   const [chosen, setChosen] = useState<DeskPatient | null>(initialPatient);
 
-  const [gender, setGender] = useState<Gender>('female');
+  /**
+   * NO DEFAULT, deliberately. This started as useState<Gender>('female') and
+   * a hidden input that always posted, so the field was marked required, was
+   * validated by the schema, and could not fail: every patient a clerk did not
+   * explicitly tap was recorded female. Gender is a clinical field on a
+   * patient record, and a wrong one entered silently is worse than one more
+   * tap on the screen that decides adoption.
+   */
+  const [gender, setGender] = useState<Gender | ''>('');
   const [doctorId, setDoctorId] = useState('');
   const [departmentPick, setDepartmentPick] = useState<string | null>(null);
   const [fee, setFee] = useState('');
@@ -296,12 +304,41 @@ export function RegisterDesk({
   // in typing, so a keystroke repaints one input, not the whole form.
   const [nameTyped, setNameTyped] = useState('');
   const [phoneTyped, setPhoneTyped] = useState('');
-  const typingTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  function typed(setter: (value: string) => void, value: string) {
-    clearTimeout(typingTimer.current);
-    typingTimer.current = setTimeout(() => setter(value.trim()), TYPING_PAUSE_MS);
+  /**
+   * ONE TIMER PER FIELD. They shared a single ref, which meant the first
+   * keystroke in the phone box cancelled the name's pending update and vice
+   * versa: type a name and start the mobile number inside the pause and the
+   * name search ran on a stale prefix, or never ran at all. The row it would
+   * have shown is the only thing standing between a returning patient and a
+   * second MRN (CLAUDE.md 3.3), so losing it quietly is the expensive half of
+   * the bug -- nothing on screen says the search did not happen.
+   */
+  const nameTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const phoneTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  function typed(
+    timer: React.RefObject<ReturnType<typeof setTimeout> | undefined>,
+    setter: (value: string) => void,
+    value: string,
+  ) {
+    clearTimeout(timer.current);
+    timer.current = setTimeout(() => setter(value.trim()), TYPING_PAUSE_MS);
   }
+
+  // Both timers die with the component: a fire after unmount is a setState on
+  // nothing, and on this screen the unmount is the success panel replacing the
+  // form.
+  useEffect(() => {
+    // The REFS are captured, not their contents: the timer to cancel is
+    // whichever one is pending at unmount, not whichever was pending when the
+    // effect ran. Captured this way round exhaustive-deps is satisfied too --
+    // its warning is about refs holding DOM nodes.
+    const timers = [nameTimer, phoneTimer];
+    return () => {
+      for (const timer of timers) clearTimeout(timer.current);
+    };
+  }, []);
 
   const matching = chosen === null;
   const typedPhone = phoneKey(phoneTyped);
@@ -480,7 +517,7 @@ export function RegisterDesk({
     setNameTyped('');
     setPhoneTyped('');
     setChosen(null);
-    setGender('female');
+    setGender('');
     setDoctorId('');
     setDepartmentPick(null);
     setFee('');
@@ -624,7 +661,7 @@ export function RegisterDesk({
                 data-step
                 autoFocus
                 onChange={(event) => {
-                  typed(setNameTyped, event.target.value);
+                  typed(nameTimer, setNameTyped, event.target.value);
                   clearError('full_name');
                 }}
                 onKeyDown={(event) => {
@@ -657,7 +694,7 @@ export function RegisterDesk({
                 type="tel"
                 inputMode="tel"
                 onChange={(event) => {
-                  typed(setPhoneTyped, event.target.value);
+                  typed(phoneTimer, setPhoneTyped, event.target.value);
                   clearError('phone');
                 }}
                 placeholder="98450 11223"
@@ -721,6 +758,10 @@ export function RegisterDesk({
                 id="gender"
                 role="radiogroup"
                 aria-label="Gender"
+                // focusFirst() calls .focus() on this element by id when the
+                // schema rejects an unanswered gender. A plain div ignores
+                // that, and the clerk would be sent to a field with no cursor.
+                tabIndex={-1}
                 className="grid grid-cols-3 gap-1 rounded-xl bg-muted/70 p-1 md:rounded-lg"
               >
                 {GENDERS.map((option) => (
@@ -729,7 +770,10 @@ export function RegisterDesk({
                     type="button"
                     role="radio"
                     aria-checked={gender === option}
-                    onClick={() => setGender(option)}
+                    onClick={() => {
+                      setGender(option);
+                      clearError('gender');
+                    }}
                     className={cn(
                       'h-9 min-w-0 truncate rounded-lg px-1 text-sm font-medium transition focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none md:h-8 md:rounded-md',
                       gender === option
