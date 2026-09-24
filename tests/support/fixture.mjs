@@ -229,6 +229,151 @@ export async function anyAuthUser(client) {
 }
 
 /**
+ * Run something as a SIGNED-IN caller instead of as the service role.
+ *
+ * WHY THIS HAD TO EXIST
+ *
+ * Every other helper here runs with no JWT at all, and a surprising number of
+ * rules are written to apply only when there IS one: rpc_hospital_id() lets a
+ * claimless caller name any tenant, assert_billing() and assert_front_desk()
+ * return early when app_role() is null, and register_patient_visit accepts a
+ * p_fee that disagrees with the doctor's staff row only for callers with no
+ * session (20260923090100). All of those exemptions are correct -- the seed and
+ * these tests are trusted by definition -- but they also mean the service-role
+ * path cannot test the controls, because it is the path the controls exempt.
+ *
+ * HOW: app_hospital_id(), app_role() and auth.uid() all read auth.jwt(), which
+ * is current_setting('request.jwt.claims'). Setting it with the local flag
+ * makes it transaction-scoped, so it cannot leak into the next query on this
+ * connection whether the body commits or throws.
+ *
+ * `set local role authenticated` goes with it, and the pair is the point. The
+ * fixture connects as the owner, and an owner BYPASSES row level security -- so
+ * claims alone would prove what the FUNCTIONS enforce while silently skipping
+ * every policy. A helper that half-simulates a session is worse than none,
+ * because the tests it passes read as coverage of the policies. Both halves, or
+ * it is not a session.
+ *
+ * SECURITY DEFINER functions still work from here: they run as their owner
+ * regardless, which is exactly the arrangement the money RPCs rely on.
+ */
+export async function asSession(client, { userId, role = 'front_desk' }, run) {
+  const claims = JSON.stringify({
+    sub: userId,
+    role: 'authenticated',
+    app_metadata: { hospital_id: FIXTURE.hospitalId, role },
+  });
+
+  await client.query('begin');
+  try {
+    await client.query(`select set_config('request.jwt.claims', $1::text, true)`, [claims]);
+    await client.query('set local role authenticated');
+    const result = await run(client);
+    await client.query('commit');
+    return result;
+  } catch (error) {
+    await client.query('rollback');
+    throw error;
+  }
+}
+
+/**
+ * A role in the fixture hospital holding exactly these permission keys, and a
+ * staff row on it wired to an auth user.
+ *
+ * `legacy_role` is left at its default, which is the whole point: that default
+ * is `'nurse'`, `saveRole` never writes the column for a custom role, and
+ * provisionStaffAccount copies it onto the membership and therefore onto the
+ * JWT. So this is precisely the shape a hospital gets when it invents a role at
+ * /admin/roles -- which is what 20260923090200 had to stop being refused.
+ *
+ * Returns the staff id. The caller signs in through asSession with
+ * `role: 'nurse'` to complete the simulation.
+ */
+/** A seeded system role's id, by code. */
+export async function roleIdByCode(client, code) {
+  const result = await client.query(
+    `select id from public.roles
+      where hospital_id = $1 and code = $2 and deleted_at is null`,
+    [FIXTURE.hospitalId, code],
+  );
+  return result.rows[0]?.id ?? null;
+}
+
+export async function customRole(client, { code, name, permissions }) {
+  // roles and role_permissions deliberately survive wipe(): seed_system_roles()
+  // is idempotent and setUp() re-runs it, so the fixture's roles are reused
+  // between runs like a real tenant's are. A plain insert would therefore fail
+  // on the second run, and ON CONFLICT cannot be used either -- the unique index
+  // is on (hospital_id, lower(code)), partial on deleted_at.
+  const existing = await client.query(
+    `select id from public.roles
+      where hospital_id = $1 and lower(code) = lower($2) and deleted_at is null`,
+    [FIXTURE.hospitalId, code],
+  );
+
+  let roleId = existing.rows[0]?.id;
+  if (!roleId) {
+    const created = await client.query(
+      `insert into public.roles (hospital_id, code, name, is_system, can_login)
+       values ($1, $2, $3, false, true)
+       returning id`,
+      [FIXTURE.hospitalId, code, name],
+    );
+    roleId = created.rows[0].id;
+  }
+
+  // Replaced rather than topped up, so a test gets EXACTLY the keys it asked
+  // for even on a re-run that found the role already there.
+  await client.query('delete from public.role_permissions where role_id = $1', [roleId]);
+
+  if (permissions.length > 0) {
+    await client.query(
+      `insert into public.role_permissions (hospital_id, role_id, permission_key)
+       select $1, $2, k from unnest($3::text[]) k`,
+      [FIXTURE.hospitalId, roleId, permissions],
+    );
+  }
+
+  return roleId;
+}
+
+/**
+ * A staff row wired to an auth user, whose role can be re-pointed per test.
+ *
+ * One row rather than one per role, because `anyAuthUser` yields a single login
+ * and staff is unique on (hospital_id, user_id) -- so two staff rows for two
+ * custom roles cannot coexist. Re-pointing role_id is also closer to what a
+ * hospital does: the person stays, the role changes.
+ *
+ * staff.role is NOT written. It is derived from role_id by trigger, and for a
+ * custom role it derives to 'nurse' -- the legacy default that this whole
+ * exercise is about.
+ */
+export async function customStaff(client, { userId, roleId, fullName = 'Custom Role Person' }) {
+  const existing = await client.query(
+    'select id from public.staff where hospital_id = $1 and user_id = $2',
+    [FIXTURE.hospitalId, userId],
+  );
+
+  if (existing.rows[0]) {
+    await client.query('update public.staff set role_id = $1 where id = $2', [
+      roleId,
+      existing.rows[0].id,
+    ]);
+    return existing.rows[0].id;
+  }
+
+  const created = await client.query(
+    `insert into public.staff (hospital_id, user_id, full_name, role_id, department_id)
+     values ($1, $2, $3, $4, $5)
+     returning id`,
+    [FIXTURE.hospitalId, userId, fullName, roleId, FIXTURE.departmentId],
+  );
+  return created.rows[0].id;
+}
+
+/**
  * Bill a visit. Mirrors what the Server Action sends, plus the two arguments
  * that exist only for callers with no JWT (the seed, and this).
  */

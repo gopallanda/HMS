@@ -9,6 +9,7 @@ import { reportActionError } from '@/lib/report-error';
 import { cancelVisitSchema } from '@/lib/schemas/visit';
 import { describeDatabaseError } from '@/lib/supabase/errors';
 import { createClient } from '@/lib/supabase/server';
+import { formatMoney } from '@/lib/utils/money';
 
 /**
  * Front-desk actions that belong to the MODULE rather than to one screen.
@@ -31,6 +32,20 @@ import { createClient } from '@/lib/supabase/server';
  *
  * Everything that decides whether the cancellation is ALLOWED -- the status,
  * the money, the void -- is in cancel_visit(), in one transaction.
+ *
+ * ON THE MONEY (20260923090000)
+ *
+ * queue.cancel alone is enough to cancel a visit and LEAVE a payment where it
+ * is, because that moves no money: the invoice goes on recording cash that is
+ * still in the drawer. That is the ordinary walk-out and it is the whole reason
+ * the settlement argument exists -- registration collects the fee in the same
+ * transaction that creates the visit, so every normally registered visit has a
+ * paid invoice, and before this the desk could never complete a cancellation at
+ * all.
+ *
+ * REFUNDING is a different act and needs billing.void, checked here. The
+ * dialog hides the option from anybody without it, and that is decoration; this
+ * is the boundary.
  */
 export async function cancelVisitAction(
   _previous: ActionState,
@@ -42,12 +57,28 @@ export async function cancelVisitAction(
   const parsed = cancelVisitSchema.safeParse({
     visit_id: formData.get('visit_id'),
     reason: formData.get('reason'),
+    money: formData.get('money'),
   });
   if (!parsed.success) return invalid(parsed.error);
 
+  if (parsed.data.money === 'refund') {
+    const refundGate = await checkPermission('billing.void');
+    if (!refundGate.ok) {
+      return failure(
+        'You are not allowed to refund a payment and void its bill. Cancel the visit ' +
+          'keeping the payment, or ask the billing counter to refund it.',
+      );
+    }
+  }
+
   const supabase = await createClient();
 
-  const { data, error } = await cancelVisit(supabase, parsed.data.visit_id, parsed.data.reason);
+  const { data, error } = await cancelVisit(
+    supabase,
+    parsed.data.visit_id,
+    parsed.data.reason,
+    parsed.data.money,
+  );
 
   if (error) {
     await reportActionError('cancelVisitAction', error);
@@ -57,9 +88,33 @@ export async function cancelVisitAction(
 
   refresh();
 
-  return success(
-    data.invoices_voided > 0
-      ? `${data.visit_no} cancelled. ${data.invoices_voided === 1 ? 'Its unpaid invoice was' : `${data.invoices_voided} unpaid invoices were`} voided; token ${data.token_no} is retired.`
-      : `${data.visit_no} cancelled. Token ${data.token_no} is retired and will not be reissued.`,
-  );
+  return success(cancellationMessage(data));
+}
+
+/**
+ * What the toast says, and it has to say what happened to the money.
+ *
+ * A clerk who has just cancelled a visit somebody paid for needs to read back
+ * that the payment was kept -- that sentence is the difference between a
+ * decision and a thing the software did.
+ */
+function cancellationMessage(result: {
+  visit_no: string;
+  token_no: number;
+  invoices_voided: number;
+  payments_retained: number;
+}): string {
+  const parts = [`${result.visit_no} cancelled.`];
+
+  if (result.payments_retained > 0) {
+    parts.push(`${formatMoney(result.payments_retained)} already collected was kept.`);
+  }
+  if (result.invoices_voided === 1) {
+    parts.push('Its invoice was voided.');
+  } else if (result.invoices_voided > 1) {
+    parts.push(`${result.invoices_voided} invoices were voided.`);
+  }
+
+  parts.push(`Token ${result.token_no} is retired and will not be reissued.`);
+  return parts.join(' ');
 }

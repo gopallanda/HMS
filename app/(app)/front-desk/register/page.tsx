@@ -163,7 +163,7 @@ export default async function RegisterPage({
         doctors={doctors}
         departments={departments}
         initialPatient={initialPatient}
-        canEditFee={session.access.permissions.has('billing.collect')}
+        canDiscount={session.access.permissions.has('billing.discount')}
         canDefer={session.access.permissions.has('billing.defer')}
       />
     </div>

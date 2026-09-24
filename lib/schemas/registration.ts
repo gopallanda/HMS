@@ -12,6 +12,9 @@
  *   1. A doctor is required. Always, no exception at the desk.
  *   2. A payment mode is required -- unless the deferral path was used.
  *   3. A deferral requires a typed reason.
+ *   4. The fee is the doctor's own and is not a field anybody types over. A
+ *      reduction is a CONCESSION: an amount, a reason, and billing.discount
+ *      (20260923090100).
  *
  * What is deliberately NOT a rule: a phone number already on file. A phone
  * number identifies a household, not a person, and Indian families share one
@@ -54,8 +57,28 @@ export const registrationSchema = z
     doctor_id: z.uuid('Choose a doctor.'),
     department_id: optionalId,
 
+    /**
+     * DISPLAY ONLY, and parsed here purely so the concession below can be
+     * checked against it.
+     *
+     * The action never sends it: register_patient_visit bills the doctor's own
+     * consultation_fee and refuses a signed-in caller that disagrees
+     * (20260923090100). It used to be an editable field gated on
+     * billing.collect -- which every front_desk role holds, so the gate could
+     * never refuse anybody and the price of a consultation was free text for
+     * every receptionist, with nothing recording that a reduction had happened.
+     */
     fee: money('Consultation fee'),
     payment_mode: z.string().trim().nullish().transform((value) => value ?? ''),
+
+    /**
+     * A concession, applied after tax to the invoice, with a reason -- the same
+     * shape the billing counter uses. This is the ONE way the amount asked for
+     * at the desk goes below the doctor's fee, and billing.discount is checked
+     * in the action.
+     */
+    discount: money('Concession'),
+    discount_reason: z.string().trim().nullish().transform((value) => value ?? ''),
 
     deferred: z
       .union([z.boolean(), z.string(), z.undefined(), z.null()])
@@ -167,6 +190,38 @@ export const registrationSchema = z
       }
     }
 
+    // ---- The concession ----------------------------------------------------
+    //
+    // Checked here rather than only in the RPC because both halves of it are on
+    // this form: a clerk who has typed 400 off a 300 rupee fee should be told
+    // so before the round trip, and a reason is the whole difference between a
+    // concession and a hole (20260902090300).
+    let discount = 0;
+    let discountReason: string | null = null;
+
+    if (value.discount > 0) {
+      if (value.discount > value.fee) {
+        failed = true;
+        ctx.addIssue({
+          code: 'custom',
+          path: ['discount'],
+          message: 'A concession cannot be more than the consultation fee.',
+        });
+      }
+      if (value.discount_reason.length < MIN_REASON) {
+        failed = true;
+        ctx.addIssue({
+          code: 'custom',
+          path: ['discount_reason'],
+          message: 'Say why this concession is being given.',
+        });
+      }
+      if (!failed) {
+        discount = value.discount;
+        discountReason = value.discount_reason;
+      }
+    }
+
     if (failed) return z.NEVER;
 
     return {
@@ -180,6 +235,8 @@ export const registrationSchema = z
       payment_mode: mode,
       deferred: value.deferred,
       defer_reason: reason,
+      discount,
+      discount_reason: discountReason,
     };
   });
 

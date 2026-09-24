@@ -68,6 +68,20 @@ export function violates(error: DatabaseError, constraint: string): boolean {
   return `${error.message} ${error.details ?? ''}`.includes(constraint);
 }
 
+/**
+ * The message plus its hint, when the hint adds something.
+ *
+ * Postgres `raise ... using hint = '...'` is where this schema puts the "and
+ * here is what to do about it" half -- which is the half worth showing, and the
+ * half a bare `error.message` drops on the floor.
+ */
+function withHint(error: DatabaseError): string {
+  const message = error.message || 'The database rejected that change.';
+  const hint = error.hint?.trim();
+  if (!hint || message.includes(hint)) return message;
+  return `${message} ${hint}`;
+}
+
 export function describeDatabaseError(error: DatabaseError): string {
   const haystack = `${error.message} ${error.details ?? ''}`;
 
@@ -87,8 +101,26 @@ export function describeDatabaseError(error: DatabaseError): string {
     case '23514':
       return 'That value is outside the allowed range.';
     case '42501':
-      // RLS denied the write, or the JWT has no hospital claim.
-      return 'You do not have permission to do that in this hospital.';
+      /**
+       * TWO VERY DIFFERENT THINGS share this code, and collapsing them was
+       * hiding the more useful one.
+       *
+       * A POLICY denial says "new row violates row-level security policy for
+       * table ..." or "permission denied for table ...", which names a table a
+       * receptionist has never heard of. That one needs the generic sentence.
+       *
+       * An `assert_billing()` / `assert_front_desk()` / `assert_clinical()`
+       * raise does not: since 20260923090200 those say which capability is
+       * missing and their hint names Administration -> Roles, because the fix is
+       * almost always that somebody's custom role is short a permission. That is
+       * the sentence an administrator needs to read, and returning the generic
+       * line instead turned a fixable misconfiguration back into "it just does
+       * not work" -- the exact failure that migration exists to remove.
+       */
+      if (/row-level security|permission denied for/i.test(haystack)) {
+        return 'You do not have permission to do that in this hospital.';
+      }
+      return withHint(error);
     case 'PGRST116':
       return 'That record no longer exists.';
     default:

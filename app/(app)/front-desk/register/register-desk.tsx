@@ -34,7 +34,7 @@ import { cn } from '@/lib/cn';
 import { ageGender, GENDERS, GENDER_LABEL, type Gender } from '@/lib/patients';
 import type { PatientSearchResult } from '@/lib/rpc/patients';
 import { registrationSchema } from '@/lib/schemas/registration';
-import { formatMoney } from '@/lib/utils/money';
+import { formatMoney, parseMoney } from '@/lib/utils/money';
 
 /**
  * The register desk.
@@ -121,7 +121,8 @@ const FOCUS_FOR: Record<string, string> = {
   doctor_id: 'doctor',
   payment_mode: 'payment-mode',
   defer_reason: 'defer_reason',
-  fee: 'fee-input',
+  discount: 'discount',
+  discount_reason: 'discount_reason',
 };
 
 /** The selected doctor card, else the first one, else the dropdown. */
@@ -244,14 +245,23 @@ export function RegisterDesk({
   doctors,
   departments,
   initialPatient = null,
-  canEditFee,
+  canDiscount,
   canDefer,
 }: {
   doctors: DoctorOption[];
   departments: DepartmentOption[];
   initialPatient?: DeskPatient | null;
-  /** billing.collect. Without it the fee is shown but not editable. */
-  canEditFee: boolean;
+  /**
+   * billing.discount. Whether a CONCESSION is on offer (20260923090100).
+   *
+   * This replaced canEditFee, which was billing.collect -- the permission a
+   * register desk exists to hold, so it refused nobody and the fee was free
+   * text for every receptionist with no record that anything had been reduced.
+   * The fee is now never editable here; a reduction is an amount and a reason
+   * that land on invoices.discount_amount, and front_desk does not hold this
+   * key by default.
+   */
+  canDiscount: boolean;
   /** billing.defer. Without it the "cannot pay now" link is not rendered. */
   canDefer: boolean;
 }) {
@@ -287,10 +297,12 @@ export function RegisterDesk({
   const [gender, setGender] = useState<Gender | ''>('');
   const [doctorId, setDoctorId] = useState('');
   const [departmentPick, setDepartmentPick] = useState<string | null>(null);
-  const [fee, setFee] = useState('');
-  const [feeTouched, setFeeTouched] = useState(false);
   const [payMode, setPayMode] = useState<PaymentMode | ''>('cash');
   const [deferring, setDeferring] = useState(false);
+  /** A concession, opened by a link. Empty on every ordinary registration. */
+  const [discounting, setDiscounting] = useState(false);
+  const [discount, setDiscount] = useState('');
+  const [discountReason, setDiscountReason] = useState('');
 
   /** Answered in the browser, before the round trip. Null once submitted. */
   const [clientErrors, setClientErrors] = useState<FieldErrors | null>(null);
@@ -421,8 +433,17 @@ export function RegisterDesk({
 
   const doctorCards = visible.length <= DOCTOR_CARD_LIMIT;
 
-  // The fee follows whichever doctor is selected until somebody types over it.
-  const effectiveFee = feeTouched ? fee : doctor ? String(doctor.consultation_fee) : '';
+  /**
+   * The fee is the selected doctor's, and nothing on this screen overrides it
+   * (20260923090100). register_patient_visit refuses a signed-in caller that
+   * sends anything else, so a field that could disagree with this would only
+   * ever produce a refusal at the end of a filled-in form.
+   */
+  const doctorFee = doctor ? doctor.consultation_fee : 0;
+
+  /** What the clerk is actually taking, once a concession is applied. */
+  const concession = discounting ? Math.min(parseMoney(discount) ?? 0, doctorFee) : 0;
+  const collecting = Math.max(doctorFee - concession, 0);
 
   const done = result && result.visit_id !== dismissed ? result : undefined;
 
@@ -520,10 +541,11 @@ export function RegisterDesk({
     setGender('');
     setDoctorId('');
     setDepartmentPick(null);
-    setFee('');
-    setFeeTouched(false);
     setPayMode('cash');
     setDeferring(false);
+    setDiscounting(false);
+    setDiscount('');
+    setDiscountReason('');
     setClientErrors(null);
     formRef.current?.reset();
     refocus.current = true;
@@ -604,7 +626,16 @@ export function RegisterDesk({
         name="department_id"
         value={departmentId === NO_DEPARTMENT ? '' : departmentId}
       />
-      <input type="hidden" name="fee" value={effectiveFee} />
+      {/* The fee is the doctor's own and is posted only so the schema can
+          check the concession against it; the action never forwards it and the
+          RPC refuses a signed-in caller that disagrees (20260923090100). */}
+      <input type="hidden" name="fee" value={doctorFee ? String(doctorFee) : ''} />
+      <input type="hidden" name="discount" value={discounting ? discount : ''} />
+      <input
+        type="hidden"
+        name="discount_reason"
+        value={discounting ? discountReason : ''}
+      />
       <input type="hidden" name="payment_mode" value={deferring ? '' : payMode} />
       <input type="hidden" name="deferred" value={deferring ? 'true' : ''} />
 
@@ -960,29 +991,26 @@ export function RegisterDesk({
             />
 
             <div className="grid grid-cols-1 items-start gap-x-6 gap-y-3 sm:grid-cols-12 md:gap-y-4">
+              {/* Read-only for everybody, and not a disabled input pretending
+                  it might one day be editable: the fee IS the doctor's fee.
+                  Anything less is the concession below, which says how much and
+                  why (20260923090100). */}
               <Field
                 label="Consultation fee"
-                htmlFor="fee-input"
-                error={errorFor('fee')}
+                htmlFor="fee-display"
                 hint={
-                  canEditFee
-                    ? "Prefilled from the doctor's own fee."
-                    : 'Set from the doctor’s fee. You may not change it.'
+                  doctor
+                    ? `${doctor.full_name}'s own fee.`
+                    : 'Choose a doctor to see their fee.'
                 }
                 className="sm:col-span-4"
               >
-                <Input
-                  id="fee-input"
-                  inputMode="decimal"
-                  value={effectiveFee}
-                  disabled={!canEditFee || !doctor}
-                  onChange={(event) => {
-                    setFeeTouched(true);
-                    setFee(event.target.value);
-                  }}
-                  className="h-11 text-right text-lg font-semibold tabular-nums md:h-10 md:text-sm md:font-normal"
-                  aria-invalid={errorFor('fee') !== undefined}
-                />
+                <output
+                  id="fee-display"
+                  className="flex h-11 items-center justify-end rounded-lg border border-border/60 bg-muted/40 px-3 text-lg font-semibold tabular-nums md:h-10 md:text-sm md:font-medium"
+                >
+                  {doctor ? formatMoney(doctorFee) : '—'}
+                </output>
               </Field>
 
               <Field
@@ -1055,6 +1083,84 @@ export function RegisterDesk({
                 </button>
               )
             ) : null}
+
+            {/* ---- A concession ------------------------------------------- */}
+            {/* The one way the amount asked for goes below the doctor's fee,
+                and it costs a reason. Behind a link, like the deferral, so the
+                fast path is exactly as fast as it was: the ninety per cent who
+                simply pay never see this (20260923090100). */}
+            {canDiscount ? (
+              discounting ? (
+                <div className="grid gap-3 rounded-xl border border-border/60 bg-muted/30 p-3 sm:grid-cols-12 sm:gap-x-6">
+                  <Field
+                    label="Concession"
+                    htmlFor="discount"
+                    error={errorFor('discount')}
+                    hint={
+                      concession > 0
+                        ? `${formatMoney(collecting)} to collect.`
+                        : 'Taken off the bill, after tax.'
+                    }
+                    className="sm:col-span-4"
+                  >
+                    <Input
+                      id="discount"
+                      inputMode="decimal"
+                      value={discount}
+                      autoFocus
+                      onChange={(event) => {
+                        setDiscount(event.target.value);
+                        clearError('discount');
+                      }}
+                      className="h-11 text-right text-lg font-semibold tabular-nums md:h-10 md:text-sm md:font-normal"
+                      aria-invalid={errorFor('discount') !== undefined}
+                    />
+                  </Field>
+
+                  <Field
+                    label="Why is it being given?"
+                    htmlFor="discount_reason"
+                    required
+                    error={errorFor('discount_reason')}
+                    hint="Prints on the bill and is recorded against your name."
+                    className="sm:col-span-8"
+                  >
+                    <div className="flex gap-2">
+                      <Input
+                        id="discount_reason"
+                        value={discountReason}
+                        maxLength={200}
+                        placeholder="Staff family concession"
+                        onChange={(event) => {
+                          setDiscountReason(event.target.value);
+                          clearError('discount_reason');
+                        }}
+                        aria-invalid={errorFor('discount_reason') !== undefined}
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => {
+                          setDiscounting(false);
+                          setDiscount('');
+                          setDiscountReason('');
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </div>
+                  </Field>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setDiscounting(true)}
+                  className="justify-self-start py-1 text-sm font-medium text-muted-foreground underline underline-offset-4 hover:text-foreground md:py-0 md:text-xs"
+                >
+                  Give a concession
+                </button>
+              )
+            ) : null}
           </section>
 
           {/* ---- Footer ------------------------------------------------------ */}
@@ -1084,7 +1190,7 @@ export function RegisterDesk({
                     Collecting{' '}
                   </span>
                   <strong className="block truncate text-lg leading-tight font-bold text-foreground tabular-nums sm:inline sm:text-sm sm:font-semibold">
-                    {formatMoney(Number(effectiveFee) || 0)}
+                    {formatMoney(collecting)}
                   </strong>
                 </>
               )}

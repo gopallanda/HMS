@@ -38,12 +38,27 @@ export type RegistrationPayload = {
   } | null;
   doctorId: string;
   departmentId: string | null;
-  /** Null falls back to the doctor's own consultation_fee on the staff row. */
+  /**
+   * Always null from the app, and the type keeps the null so that stays
+   * obvious at every call site.
+   *
+   * The consultation is billed at the doctor's own consultation_fee, and
+   * register_patient_visit REFUSES a signed-in caller that passes anything
+   * else (20260923090100). p_fee survives only for the service-role callers
+   * that have no session to check a permission against -- seed.sql and the
+   * tests. A reduction at the desk is `discount`.
+   */
   fee: number | null;
   /** Null exactly when `deferred` is true. */
   paymentMode: PaymentMode | null;
   deferred: boolean;
   deferReason: string | null;
+  /**
+   * A concession on the consultation, after tax, on the invoice. Zero on almost
+   * every registration. Requires `discountReason` and billing.discount.
+   */
+  discount: number;
+  discountReason: string | null;
 };
 
 export async function registerPatientVisit(supabase: Client, payload: RegistrationPayload) {
@@ -61,5 +76,7 @@ export async function registerPatientVisit(supabase: Client, payload: Registrati
     p_defer_reason: payload.deferReason,
     p_visit_id: payload.visitId,
     p_invoice_id: payload.invoiceId,
+    p_discount: payload.discount,
+    p_discount_reason: payload.discountReason,
   });
 }

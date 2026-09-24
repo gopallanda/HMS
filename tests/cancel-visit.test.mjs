@@ -9,6 +9,12 @@
  *   reissued. And if any money has already been collected the cancellation is
  *   REFUSED outright -- a queue button does not quietly reverse a payment.
  *
+ * That last claim is now conditional rather than absolute: 20260923090000 added
+ * p_money, because the desk holding queue.cancel could otherwise never complete
+ * a cancellation at all -- registration collects the fee in the same
+ * transaction that creates the visit. Omitting p_money still refuses, which is
+ * what this file tests; cancel-visit-settlement.test.mjs covers the two answers.
+ *
  * Why this file exists: visit_status has had `cancelled` since the first
  * migration and nothing in the product could set it. A patient who walked out
  * left a token in the queue for the rest of the day.
@@ -137,7 +143,7 @@ describe('cancel_visit', { skip, timeout: 180_000 }, () => {
     );
   });
 
-  test('a visit with money against it is refused, not silently reversed', async (t) => {
+  test('a visit with money against it is refused when nothing says what to do with it', async (t) => {
     if (actor === null) {
       t.skip('no auth user on this project, so no payment can be attributed');
       return;
@@ -154,11 +160,14 @@ describe('cancel_visit', { skip, timeout: 180_000 }, () => {
     ).rows[0];
     assert.equal(invoice.status, 'paid');
 
+    // p_money omitted, which is what every caller written before 20260923090000
+    // sends. The quiet default must never be the one that moves cash, so this
+    // still refuses -- the settlement paths are in cancel-visit-settlement.
     await assert.rejects(
       () => cancel(visit.visitId, 'Patient changed their mind after paying'),
       (error) => {
         assert.match(error.message, /already been collected/);
-        assert.match(String(error.hint ?? ''), /Reverse the payment|void the invoice/i);
+        assert.match(String(error.hint ?? ''), /keeps that payment or refunds it/i);
         return true;
       },
     );

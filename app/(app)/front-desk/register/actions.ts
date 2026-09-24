@@ -52,23 +52,36 @@ export async function registerAction(
     payment_mode: formData.get('payment_mode'),
     deferred: formData.get('deferred'),
     defer_reason: formData.get('defer_reason'),
+    discount: formData.get('discount'),
+    discount_reason: formData.get('discount_reason'),
   });
   if (!parsed.success) return invalid(parsed.error);
 
   const input = parsed.data;
 
   /**
-   * The two permissions the FORM offers but does not decide.
+   * The two money decisions the FORM offers but does not decide.
    *
-   * Editing the fee and deferring payment are both money decisions, and both
-   * are hidden in the UI from anybody without the permission -- but a POST
-   * arrives without passing through the UI, so this is where it is settled
-   * (CLAUDE.md 3.6).
+   * Both are hidden in the UI from anybody without the permission, and that is
+   * decoration: a POST arrives without passing through the components that hid
+   * them, so this is where each one is settled (CLAUDE.md 3.6).
    *
-   * Deferral is refused outright. An edited fee is not: refusing it would
-   * leave a clerk staring at a form they cannot submit for a reason they
-   * cannot see, so the doctor's own fee is used instead and the RPC recomputes
-   * it from the staff row.
+   * WHAT CHANGED HERE (20260923090100). There used to be a third line:
+   *
+   *     const collect = await checkPermission('billing.collect');
+   *     const fee = collect.ok ? input.fee : null;
+   *
+   * guarding an editable fee. billing.collect is the permission a register desk
+   * exists to hold -- every seeded front_desk role has it -- so that check
+   * could never refuse anybody, and the price of a consultation was a free-text
+   * field for every receptionist. A 300 rupee fee keyed as 100 produced an
+   * invoice saying 100, a payment saying 100, and no record anywhere that a
+   * concession had been given. The fee is no longer sent at all: the RPC bills
+   * the doctor's own fee and refuses a signed-in caller that disagrees.
+   *
+   * A reduction now has the shape the billing counter already uses -- an
+   * amount, a reason, invoices.discount_amount -- and needs billing.discount,
+   * which front_desk does not hold by default and cashier does.
    */
   if (input.deferred) {
     const defer = await checkPermission('billing.defer');
@@ -79,8 +92,15 @@ export async function registerAction(
     }
   }
 
-  const collect = await checkPermission('billing.collect');
-  const fee = collect.ok ? input.fee : null;
+  if (input.discount > 0) {
+    const discountGate = await checkPermission('billing.discount');
+    if (!discountGate.ok) {
+      return failure(
+        'You are not allowed to give a concession on a bill. Register at the full fee, ' +
+          'or ask the billing counter.',
+      );
+    }
+  }
 
   const supabase = await createClient();
 
@@ -91,11 +111,14 @@ export async function registerAction(
     patient: input.patient,
     doctorId: input.doctor_id,
     departmentId: input.department_id,
-    // null lets the function fall back to the doctor's consultation_fee.
-    fee,
+    // Always null: the function bills the doctor's own consultation_fee and
+    // refuses a signed-in caller that passes anything else.
+    fee: null,
     paymentMode: input.payment_mode,
     deferred: input.deferred,
     deferReason: input.defer_reason,
+    discount: input.discount,
+    discountReason: input.discount_reason,
   });
 
   if (error) {

@@ -52,22 +52,42 @@ const EMPTY: PermissionSet = new Set<Permission>();
 /**
  * The fallback for a login with NO staff record in the active hospital.
  *
- * Not a hypothetical: a founder provisioned before staff records existed has a
- * membership and a hospital and nothing else. An administrator falls back to
- * every permission -- which grants them nothing they did not already hold,
- * since is_hospital_admin() already opens every write policy in the database
- * -- and everyone else falls back to none, which sends them to /access-denied
- * with something to show an administrator.
+ * SAME RULE AS resolveAccess BELOW, and that is the whole point of this
+ * version: super_admin falls back to every permission, `admin` does not.
+ *
+ * It used to include `admin`, justified by the founder who was provisioned
+ * before staff records existed. That justification is gone --
+ * provision_hospital has seeded the founder a staff row carrying the admin
+ * role since 20260828090100, and staff.role_id is NOT NULL with a backfill
+ * that fails the migration rather than ship a row without one, so a founder
+ * resolves through my_access() like everybody else and never reaches here.
+ *
+ * What it left behind was a contradiction with its own sibling. The seeded
+ * MANAGER role carries legacy_role 'admin' so that RLS lets it write staff and
+ * departments -- which is exactly why resolveAccess refuses to treat `admin`
+ * as an override, in a comment that spells out that widening it "would hand
+ * every manager settings.manage and roles.manage -- the two things the Manager
+ * role exists to exclude". Granting them here, one screen up, on any request
+ * where my_access() happens to come back null, is the same widening arrived at
+ * by accident.
+ *
+ * So both functions now answer it the same way, and `admin` with no staff
+ * record gets nothing: /access-denied with something to show an administrator,
+ * which is the fail-closed answer. A tenant that genuinely strands its only
+ * administrator in that state is repaired the way it always was -- a
+ * service-role write, or scripts/backfill-founder-accounts.mjs -- and NOT by
+ * the app quietly handing out settings.manage to whoever turns up without a
+ * staff row.
  */
 export function fallbackAccess(membershipRole: string | null): AccessContext {
-  const admin = membershipRole === 'super_admin' || membershipRole === 'admin';
+  const platformAdmin = membershipRole === 'super_admin';
   return {
     staffId: null,
     staffName: null,
     roleId: null,
-    roleCode: admin ? 'admin' : null,
+    roleCode: platformAdmin ? 'admin' : null,
     roleName: null,
-    permissions: admin ? toPermissionSet(PERMISSIONS) : EMPTY,
+    permissions: platformAdmin ? toPermissionSet(PERMISSIONS) : EMPTY,
     canLogin: true,
     hasAccount: false,
     accountDisabled: false,

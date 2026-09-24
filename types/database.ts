@@ -50,6 +50,12 @@
  * same way. patient_mix_visits is internal (no grant to authenticated) and is
  * deliberately not listed.
  *
+ * Audit remediation, 2026-09-23: cancel_visit.p_money and its
+ * payments_retained, and register_patient_visit's p_discount /
+ * p_discount_reason, from 20260923090000 and 20260923090100. Written from the
+ * migrations BEFORE they were pushed -- check them against
+ * pg_get_function_arguments once db:push has run.
+ *
  * EmploymentType and ShiftStatus are unions over CHECK constraints rather than
  * Postgres enums, so they are absent from Enums below on purpose: generated
  * output would type those columns as plain `string`, and narrowing them here
@@ -1040,6 +1046,12 @@ export type Database = {
           p_visit_id?: string | null;
           /** Client-generated, so a resubmitted form bills once. */
           p_invoice_id?: string | null;
+          /**
+           * A concession on the consultation, applied after tax to the invoice.
+           * Requires a reason, and billing.discount in the action. 20260923090100.
+           */
+          p_discount?: number | null;
+          p_discount_reason?: string | null;
         };
         Returns: {
           patient_id: string;
@@ -1154,6 +1166,11 @@ export type Database = {
           p_reason: string;
           /** Service-role callers only; a session takes its tenant from the JWT. */
           p_hospital_id?: string | null;
+          /**
+           * What happens to money already collected (20260923090000). Only
+           * consulted when there is some; null refuses, as it always did.
+           */
+          p_money?: 'retain' | 'refund' | null;
         };
         Returns: {
           visit_id: string;
@@ -1161,6 +1178,8 @@ export type Database = {
           token_no: number;
           status: VisitStatus;
           invoices_voided: number;
+          /** Collected and kept: 0 unless p_money was 'retain'. */
+          payments_retained: number;
           reason: string;
         };
       };

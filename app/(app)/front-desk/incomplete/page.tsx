@@ -88,6 +88,9 @@ export default async function IncompleteVisitsPage() {
   const doctors: TransferDoctor[] = doctorResult.data ?? [];
   const canManage = session.access.permissions.has('queue.manage');
   const canCancel = session.access.permissions.has('queue.cancel');
+  // billing.void. Whether cancelling also offers to refund a payment; without
+  // it the payment simply stays where it is (20260923090000).
+  const canRefund = session.access.permissions.has('billing.void');
 
   return (
     <div className="grid gap-5">
@@ -160,6 +163,7 @@ export default async function IncompleteVisitsPage() {
                         visitNo={visit.visit_no}
                         patientName={visit.patient_name}
                         tokenNo={visit.token_no}
+                        canRefund={canRefund}
                       />
                     ) : null}
                   </MobileActions>
@@ -235,6 +239,7 @@ export default async function IncompleteVisitsPage() {
                             visitNo={visit.visit_no}
                             patientName={visit.patient_name}
                             tokenNo={visit.token_no}
+                            canRefund={canRefund}
                           />
                         ) : null}
                         {!canManage && !canCancel ? (

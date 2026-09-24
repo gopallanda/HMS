@@ -130,6 +130,7 @@ export function QueueBoard({
   dues,
   canCollect,
   canCancel,
+  canRefund,
 }: {
   entries: QueueEntry[];
   hospitalId: string;
@@ -146,6 +147,12 @@ export function QueueBoard({
    * somebody, cancelling takes them off the board and voids their bill.
    */
   canCancel: boolean;
+  /**
+   * billing.void. Whether cancelling offers to REFUND a payment as well as to
+   * keep it. Without it the desk still cancels -- the payment simply stays
+   * where it is (20260923090000).
+   */
+  canRefund: boolean;
 }) {
   const router = useRouter();
   const [collecting, setCollecting] = useState<QueueDue | null>(null);
@@ -349,6 +356,7 @@ export function QueueBoard({
                         visitNo={entry.visit_no}
                         patientName={entry.patient_name}
                         tokenNo={entry.token_no}
+                        canRefund={canRefund}
                       />
                     ) : null}
                   </div>
@@ -471,6 +479,7 @@ export function QueueBoard({
                         visitNo={entry.visit_no}
                         patientName={entry.patient_name}
                         tokenNo={entry.token_no}
+                        canRefund={canRefund}
                       />
                     ) : null}
                   </div>

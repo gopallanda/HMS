@@ -950,6 +950,11 @@ $$;
 --     one still owing, one cleared. Without this second half the only
 --     deferred row on the screen is the one nobody ever collected, and the
 --     button that clears it has nothing to be tried on.
+--   * a CONCESSION (20260923090100): the line at the doctor's full fee with a
+--     named reduction beside it, which is what the register desk does now
+--     instead of typing a smaller number into the fee box
+--   * a paid visit CANCELLED KEEPING THE MONEY (20260923090000), the ordinary
+--     walk-out and the one the front desk could not complete before
 --
 -- Guarded on "has this hospital already registered somebody this way today",
 -- for the same reason the queue block above is: the screens show TODAY, so a
@@ -1173,6 +1178,63 @@ begin
 
   raise notice 'seed: payment on % reversed and re-collected in cash',
     v_result ->> 'invoice_no';
+
+  -- 7. Registered with a CONCESSION (20260923090100). The consultation line is
+  --    the doctor's full fee and the reduction is a named concession beside it,
+  --    so the bill can still answer "what does a consultation cost here" and
+  --    the integrity report can answer "how much are we giving away". Before
+  --    that migration the only route was typing a smaller number into the fee
+  --    field, which produced a bill that looked like a cheap doctor.
+  v_result := public.register_patient_visit(
+    p_hospital_id     => v_hospital,
+    p_patient         => jsonb_build_object(
+                           'full_name', 'Yashoda Amma',
+                           'dob',       '1948-02-19',
+                           'gender',    'female',
+                           'phone',     '+91 99001 45527',
+                           'address',   '9 Temple Road, Basavanagudi, Bengaluru 560004'
+                         ),
+    p_doctor_id       => v_doctor_b,
+    p_payment_mode    => 'cash',
+    p_discount        => 100,
+    p_discount_reason => 'Senior citizen, regular patient of twenty years',
+    p_actor_id        => v_actor
+  );
+
+  raise notice 'seed: % raised with a 100 concession, % collected',
+    v_result ->> 'invoice_no', v_result ->> 'grand_total';
+
+  -- 8. Paid, then walked out, and the hospital KEPT the fee (20260923090000).
+  --    The ordinary walk-out, and the case the front desk could not complete
+  --    at all before that migration: registration collects in the same
+  --    transaction that creates the visit, so every visit has a paid invoice,
+  --    and cancel_visit refused every one of them while telling a clerk with no
+  --    billing.void to fix it at the counter. `retain` leaves the invoice
+  --    exactly as it is -- the money is still in the drawer and the receipt
+  --    still says so -- and only the board is cleared.
+  v_result := public.register_patient_visit(
+    p_hospital_id  => v_hospital,
+    p_patient      => jsonb_build_object(
+                        'full_name', 'Nagaraj Shetty',
+                        'dob',       '1971-11-30',
+                        'gender',    'male',
+                        'phone',     '+91 90080 21194',
+                        'address',   '4 Cross, Vijayanagar, Bengaluru 560040'
+                      ),
+    p_doctor_id    => v_doctor_b,
+    p_payment_mode => 'cash',
+    p_actor_id     => v_actor
+  );
+
+  v_result := public.cancel_visit(
+    p_visit_id    => (v_result ->> 'visit_id')::uuid,
+    p_reason      => 'Waited past closing and left; fee kept, told to come back Monday',
+    p_hospital_id => v_hospital,
+    p_money       => 'retain'
+  );
+
+  raise notice 'seed: % cancelled keeping % already collected',
+    v_result ->> 'visit_no', v_result ->> 'payments_retained';
 end;
 $$;
 

@@ -1179,3 +1179,264 @@ visits and the demo report reads sensibly (e.g. Orthopaedics 1 of 7 came back,
   connection when the IPv6 host resolves.
 - No department filter yet; doctors are grouped by department instead.
 - Merging duplicate patient records (two MRNs for one person inflate New).
+
+## Audit remediation, 2026-09-23 — two money controls and a permission seam
+
+Found by reading the auth boundary, every Server Action and the money RPCs
+against `CLAUDE.md`. Three findings were fixed; the rest are under "Still open".
+
+### 1. The consultation fee was an ungated discount channel — `20260923090100`
+
+`register_patient_visit` billed whatever `p_fee` it was given, checking only
+that it was not negative, and the app's gate on that field was
+`billing.collect` — the permission a register desk exists to hold. Every seeded
+`front_desk` role has it, so the gate refused nobody: the price of a
+consultation was free text for every receptionist, and ₹700 keyed as ₹100 left
+an invoice saying 100, a payment saying 100, and no record that anything had
+been reduced.
+
+This is the hole `20260902090300` was written to close — its header says so —
+and it built `discount_amount` / `discount_reason`, wired them into
+`collect_payment`, gated them on `billing.discount`, and left the price field
+itself open at both desks. The audited path existed beside the unaudited one.
+
+**Now:** a signed-in caller may not pass a `p_fee` that disagrees with the
+doctor's `consultation_fee` (42501). A reduction goes through `p_discount` +
+`p_discount_reason`, so it prints on the bill, totals on the day close and
+appears by name in `cash_integrity_report`. The register screen's fee field is
+read-only for everybody; a "Give a concession" link shown only with
+`billing.discount` reveals an amount and a reason. Service-role callers
+(`auth.uid()` null — seed, tests) keep the override, or applying this would
+break every seeded registration.
+
+**Trade-off accepted:** `20260902090300` deliberately withheld concessions from
+this screen ("a discount is a billing-counter conversation"). That reasoning
+assumed the fee field was not itself a discount channel. It was. `front_desk`
+does not hold `billing.discount`, so the desk now registers at the full fee or
+sends the patient to the counter — a real change to what a receptionist can do,
+and the point.
+
+### 2. The front desk could never cancel a visit — `20260923090000`
+
+`cancel_visit` refused any visit with a live payment and told the user to
+"reverse the payment or void the invoice at the billing counter first".
+Registration collects the fee in the same transaction that creates the visit, so
+every normally registered visit has a paid invoice — and `front_desk` is seeded
+`queue.cancel` but not `billing.void`. The one role holding the permission could
+never complete the act. A patient who paid and walked out left a `waiting` row
+on the doctor's board that the desk could not clear, and the waiting count
+beside each doctor was wrong for the rest of the day.
+
+**Now:** `p_money` — `retain` cancels and leaves the paid invoice exactly as it
+is (no money moves, so it needs no billing permission: the front desk's path and
+the common one), `refund` voids through `void_invoice` and reverses the payment
+(gated on `billing.void` in `cancelVisitAction`), and omitting it still refuses
+exactly as before, because the quiet default must never be the one that moves
+cash. Per invoice, not per visit: a bill with nothing collected on it is voided
+either way. The choice and the amount retained go to `audit_log`.
+
+A retained **partial** payment leaves a balance on a cancelled visit, and it
+keeps showing on `/billing/dues`. Deliberate: somebody part-paid and left, the
+hospital is owed the rest, and that screen's whole job is to say so. Writing it
+off is `void_invoice` with a reason, not a side effect of clearing a queue. A
+`written_off` status would be a money-table shape change (CLAUDE.md 10).
+
+### 3. `fallbackAccess` granted `admin` everything
+
+`lib/rbac/resolve.ts` gave `membershipRole === 'admin'` every permission when
+`my_access()` returned null. Twenty lines below, `resolveAccess` refuses to do
+that, in a comment spelling out why: the seeded **Manager** role carries
+`legacy_role 'admin'` so RLS lets it write staff, and widening the override
+"would hand every manager settings.manage and roles.manage — the two things the
+Manager role exists to exclude". The fallback was the same widening arrived at
+by accident.
+
+Narrowed to `super_admin`, matching its sibling. Safe for founders: since
+`20260828090100`, `provision_hospital` seeds the founder a staff row with the
+admin role and `staff.role_id` is NOT NULL with a backfill that fails the
+migration rather than ship a row without one — so a founder resolves through
+`my_access()` and never reaches the fallback. Not reachable as a live exploit
+either (no code path leaves a Manager with a signed-in session and no staff
+row); this is defence in depth, and two functions no longer contradict each
+other.
+
+### New test capability — `asSession()`
+
+Every fixture helper ran as the service role, and a surprising number of rules
+apply **only** when there is a JWT: `rpc_hospital_id` lets a claimless caller
+name any tenant, `assert_billing` / `assert_front_desk` return early when
+`app_role()` is null, and the fee lock above exempts sessionless callers. The
+service-role path could not test the controls, because it is the path the
+controls exempt. `tests/support/fixture.mjs` now has `asSession()`, which sets
+`request.jwt.claims` transaction-locally so `auth.uid()` and `app_hospital_id()`
+answer. It does not put RLS in play (the fixture connects as owner), which is
+fine — CLAUDE.md 5 puts the fine-grained rules in the functions.
+
+**Verified:** both migrations applied to the hosted project through
+`npm run db:push`; `npm test` 50/50 against it, including 8 new cases in
+`tests/audit-remediation.test.mjs` (fee refusal leaves nothing behind; fee
+accepted whether passed or implied; concession reduces the bill while the LINE
+stays the full fee; concession with no reason or over the fee refused;
+service-role override intact; retain / refund / retain-on-unpaid / bad
+settlement). `types/database.ts` updated by hand. `tsc`, `eslint` and
+`next build` clean.
+
+## Still open — from the same audit, not fixed here
+
+- ~~**Custom roles are broken for money and clinical work.**~~ Fixed by
+  `20260923090200` — see "Custom roles" below. What remains is narrower: a
+  custom role still cannot be a visit's DOCTOR, which needs a `can_consult`
+  flag on `public.roles`.
+- **`close_day` is a write gated by `reports.view`.** Re-closing overwrites
+  `declared_cash`, `system_cash` and `variance`. Wants `reports.close_day`.
+- **Password reset is silently dead without `RESEND_API_KEY`**, and `MAIL_FROM`
+  defaults to Resend's sandbox sender, which will not deliver to staff mailboxes
+  until a domain is verified. Wants a configuration indicator on
+  `/admin/settings`.
+- **`contact_email` is globally unique**, which contradicts "a user may belong
+  to multiple hospitals" and the premise that staff have no work mailboxes.
+  Scope it to `(hospital_id, lower(contact_email))`.
+- **Username allocation is read-then-insert** with only a per-hospital unique
+  index, so two tenants can concurrently take one stem; `resolveUsername` then
+  `.limit(1)`s and one of those people can never sign in.
+- **"Deactivate" does not revoke the login** (`my_access()` ignores
+  `staff.is_active`). Disclosed in the dialog copy, but offboarding is two
+  unlinked destructive actions.
+- **The `x-hms-*` headers are written on every authenticated request and read by
+  nothing.**
+- **Registration bills the first active consultation service by `created_at`**,
+  so "Consultation — Specialist" vs "— General" is decided by row age.
+- **Realtime auth is pinned at subscribe time**; untested across a token refresh
+  on a full shift, and the "Live" badge cannot tell a dead socket from a quiet
+  morning.
+- **The two new seed blocks are unexercised.** `db:seed` was not run: the desk
+  demo block returns early when today already has a deferred registration, so
+  blocks 7 and 8 only run on a fresh day or a wiped demo tenant.
+
+## Custom roles, 2026-09-23 — `20260923090200_permissions_not_role_names`
+
+The largest of the audit findings, and the one that made `/admin/roles` a
+feature that looked like it worked.
+
+### The chain
+
+`saveRole` creates a custom role and deliberately leaves `roles.legacy_role` at
+its inert `'nurse'` default. `provisionStaffAccount` copies that onto
+`memberships.role`. The access token hook puts it on the JWT. `app_role()` and
+`has_role()` read it. So every custom role a hospital invents was a **nurse** as
+far as Postgres was concerned, whatever its permissions said — and the database's
+coarse net was still keyed entirely on those names.
+
+Wrong in both directions at once:
+
+- **Refused what it was granted.** Create "Billing executive", tick
+  `billing.read` and `billing.collect`, assign somebody. The nav shows the
+  screen, the proxy allows the route, `requirePermission()` passes — then
+  `invoices_select_billing` returns nothing and `assert_billing()` raises "Only
+  billing staff can raise invoices and take payments." The read failure was
+  **silent**: an empty table reads as a hospital with no invoices in it.
+- **Allowed what it was not.** `consultations_select_clinical` and
+  `assert_clinical()` both named `nurse`, so *every* custom role satisfied the
+  clinical check — including one made for housekeeping or a store keeper. Only
+  the app was stopping them.
+
+`lib/roles.ts` had already been cleaned up for this ("The role sets this file
+used to carry … went in block 7. Each of them had a twin `assert_*()` in
+Postgres"). The twins were never done. This is that.
+
+### What changed
+
+`has_permission()` already existed (20260908090000) and had already argued this
+exact case for `reports.integrity`. This finishes it:
+
+- **`has_any_permission(text[])`** — one array probe against
+  `role_permissions(role_id, permission_key)` rather than N `has_permission()`
+  calls, because these run inside policies. Neither takes a row-dependent
+  argument, so the planner evaluates them once per query — cheaper than the
+  `has_role()` checks they replace, which re-read the JWT per row.
+- **`can_bill()` / `can_front_desk()` / `can_clinical()`** — coarse capabilities
+  so a policy and the assert guarding the same act cannot drift. Coarse on
+  purpose: "may this person touch money at all", not "may they void". The
+  precise key is the Server Action's job (CLAUDE.md 5).
+- **The three `assert_*()` gates** rewritten, each keeping its
+  `app_role() is null → return` exit, which is load-bearing for the seed and
+  every test.
+- **Nineteen policies** rewritten: invoices, payments, consultations, patients,
+  visits, hospitals, departments ×2, staff ×2, services ×2, roles ×2,
+  role_permissions ×2, staff_shifts ×3, staff_accounts — plus the three
+  `branding` bucket policies, because a custom role with `settings.manage` could
+  edit every field on Hospital settings and not replace the logo on the invoice.
+
+`is_hospital_admin()` is kept as an OR beside every new test, so an admin or a
+Manager keeps everything they had whatever their permissions say.
+
+### Two places narrow, both deliberate
+
+1. The clinical checks, as above.
+2. A membership with **no staff record**, for any role but admin/super_admin.
+   Permissions resolve through `staff → roles → role_permissions`, so a
+   `front_desk` claim with no staff row now holds nothing where it used to pass
+   on the name alone. Same answer `lib/rbac/resolve.ts` gives, and provisioning
+   cannot produce the state — `provisionStaffAccount` writes the staff row
+   before the membership, and `provision_hospital` gives a founder both. It is
+   reachable only by writing a membership by hand.
+
+`has_permission()`'s third branch — everything for an `is_hospital_admin()`
+login with no staff record — was dropped rather than narrowed: `super_admin` is
+already unconditional in the first branch, and `fallbackAccess` was narrowed to
+`super_admin` earlier the same day. That migration's own header set the rule:
+"Two implementations of one rule must agree."
+
+### A refusal you can act on — `lib/supabase/errors.ts`
+
+`describeDatabaseError` replaced **every** 42501 with "You do not have
+permission to do that in this hospital." Two very different things share that
+code: a policy denial (message names a table a receptionist has never heard of —
+generic sentence is right) and an `assert_*()` raise, which now says which
+capability is missing and hints at Administration → Roles. Collapsing them
+turned a fixable misconfiguration back into "it just does not work", which is
+the failure this migration exists to remove. Policy denials are now detected by
+message (`row-level security` / `permission denied for`) and everything else
+passes through, with `withHint()` appending the hint Postgres carried.
+
+### Still not fixed, and why
+
+A custom role **cannot be a visit's doctor**. `create_visit` checks
+`v_doctor.role <> 'doctor'` and `chargesConsultationFee` keys on the role code,
+so a hospital that creates "Senior Consultant" gets somebody who can never take
+a queue or carry a fee. That needs a flag on `public.roles` saying a role
+consults, which CLAUDE.md 3.6 and `lib/schemas/staff.ts` both defer ("Block 4
+gives that its own flag"). It is a feature, not this bug. The
+`has_role('doctor')` **ownership** narrowing in `save_consultation` /
+`set_visit_status` / the prescription path is left on the membership role for the
+same reason, and is vacuous for a custom role anyway since one cannot own a
+queue.
+
+`memberships`, `number_series` and `audit_log` policies are left on
+`is_hospital_admin()`: no permission key claims those tables. The first is
+platform bookkeeping written by the service role; the other two are raw reads
+that `reports.view` and `reports.integrity` reach through SECURITY DEFINER
+functions.
+
+### Verified
+
+Migration applied to the hosted project (no `insufficient_privilege` warning, so
+the storage policies took). `npm test` **59/59**, including 9 new cases in
+`tests/custom-roles.test.mjs`. `tsc`, `eslint` and `next build` clean.
+
+These are genuine regression tests, not tests that pass either way — each of the
+four positive cases fails against the pre-migration predicates (billing RPC
+raised, invoice select returned zero rows, department insert refused), and the
+clinical case asserts zero rows where the old policy returned one.
+
+`asSession()` gained `set local role authenticated` alongside the claims. The
+fixture connects as the owner, and an owner **bypasses RLS** — so claims alone
+would have proved what the functions enforce while silently skipping every
+policy, and the tests would have read as coverage they were not. Both halves, or
+it is not a session. Also added: `customRole()`, `customStaff()` and
+`roleIdByCode()`; note that `roles` and `role_permissions` deliberately survive
+`wipe()`, so `customRole()` replaces a role's keys rather than topping them up.
+
+`tests/audit-remediation.test.mjs` now attaches its actor to a `front_desk`
+staff row in `before`, because narrowing 2 above means a membership claim alone
+no longer satisfies `assert_front_desk()`.

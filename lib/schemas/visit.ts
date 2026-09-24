@@ -18,6 +18,23 @@ import { text } from '@/lib/schemas/form';
 export const cancelVisitSchema = z.object({
   visit_id: z.uuid('That visit is no longer valid.'),
   reason: text('Reason', 5, 200),
+  /**
+   * What happens to money already collected (20260923090000).
+   *
+   * Defaults to `retain` when the field is absent, which is the answer that
+   * moves no money: the paid invoice is left alone and goes on recording cash
+   * that is still in the drawer. `refund` voids the invoice and reverses the
+   * payment, and the action checks billing.void before it is honoured -- a
+   * POST arrives without passing through the dialog that hid the option
+   * (CLAUDE.md 3.6).
+   *
+   * Never defaulted to `refund`. A field somebody forgot to send must not be
+   * the one that hands money back.
+   */
+  money: z
+    .enum(['retain', 'refund'])
+    .nullish()
+    .transform((value) => value ?? 'retain'),
 });
 
 export type CancelVisitInput = z.infer<typeof cancelVisitSchema>;
